@@ -110,6 +110,10 @@ sudo certbot --nginx -d agenda.tudominio.cl
 
 ## Respaldos
 
+Un administrador puede descargar en cualquier momento una copia completa de la base de datos con el botón **Respaldo** (arriba, junto a Usuarios). El archivo `agenda-respaldo-AAAA-MM-DD-HH-MM.db` es un SQLite que se abre con cualquier visor (por ejemplo DB Browser for SQLite) y sirve para restaurar: se copia como `agenda.db` en la carpeta de datos con la app detenida. Guárdalo fuera del servidor (Drive, OneDrive, un disco externo); lo ideal es bajar uno al cerrar cada día.
+
+En un servidor propio también puedes automatizarlo:
+
 Toda la información está en `data/agenda.db`. Respáldala a diario, por ejemplo con cron:
 
 ```bash

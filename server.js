@@ -5,6 +5,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const os = require("os");
 const db = require("./db");
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -340,6 +341,18 @@ const rutas = [
       ON CONFLICT(codigo) DO UPDATE SET nombre=@nombre, equipo=@equipo, fonasa_total=@fonasa_total,
       fonasa_bonif=@fonasa_bonif, particular=@particular, activo=@activo`).run(a);
     return [200, { ok: true }];
+  }],
+
+  // ----- respaldo: copia completa y consistente de la base de datos -----
+  ["GET", /^\/api\/respaldo$/, "admin", async () => {
+    const tmp = path.join(os.tmpdir(), `respaldo-${process.pid}-${Date.now()}.db`);
+    try {
+      db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+      const datos = fs.readFileSync(tmp);
+      const sello = ahoraCaja().replace(/[: ]/g, "-").slice(0, 16);
+      return ["RAW", datos, { "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="agenda-respaldo-${sello}.db"`, "Content-Length": datos.length }];
+    } finally { fs.rm(tmp, { force: true }, () => {}); }
   }],
 
   ["GET", /^\/api\/usuarios$/, "admin", async () =>
