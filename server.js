@@ -208,6 +208,14 @@ const rutas = [
     return [200, plainAll(db.prepare(`${SELECT_CITA} WHERE c.fecha = ? ORDER BY c.hora`).all(fecha))];
   }],
 
+  // Resumen del mes para el calendario: citas y minutos ocupados por día y equipo
+  ["GET", /^\/api\/citas\/mes$/, "sesion", async (req, u, url) => {
+    const mes = url.searchParams.get("mes") || "";
+    if (!/^\d{4}-\d{2}$/.test(mes)) fallo(400, "Falta el mes.");
+    return [200, plainAll(db.prepare(`SELECT fecha, equipo, COUNT(*) AS n, SUM(duracion) AS minutos FROM citas
+      WHERE fecha LIKE ? AND estado != 'cancelado' GROUP BY fecha, equipo`).all(mes + "-%"))];
+  }],
+
   ["GET", /^\/api\/buscar$/, "sesion", async (req, u, url) => {
     const q = txt(url.searchParams.get("q"), 60).replace(/[%_]/g, "");
     if (q.length < 2) return [200, []];
