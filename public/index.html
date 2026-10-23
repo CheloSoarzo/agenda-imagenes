@@ -40,13 +40,40 @@
     </div>
   </div>
 
-  <div class="summary" id="summary"></div>
-  <div class="notice" id="notice" hidden></div>
-
-  <div class="board">
-    <div class="grid" id="grid"></div>
+  <div class="layout">
+    <aside class="side">
+      <div class="field">
+        <label for="agenda-sel">Agenda</label>
+        <select id="agenda-sel">
+          <option value="tc">TC · Tomografía</option>
+          <option value="rx">RX · Rayos X</option>
+          <option value="eco">ECO · Ecografía</option>
+          <option value="todas">Todas las agendas</option>
+        </select>
+      </div>
+      <div class="ocupacion" id="ocupacion" title="Minutos agendados sobre el horario de atención del día">
+        <div class="oc-top"><span>Ocupación del día</span><b id="oc-pct">0%</b></div>
+        <div class="oc-bar"><i id="oc-fill"></i></div>
+      </div>
+      <div class="minical" id="minical">
+        <div class="mc-head">
+          <button type="button" class="btn icon sm" id="mc-prev" aria-label="Mes anterior">‹</button>
+          <b id="mc-titulo"></b>
+          <button type="button" class="btn icon sm" id="mc-next" aria-label="Mes siguiente">›</button>
+        </div>
+        <div class="mc-grid" id="mc-grid"></div>
+        <p class="meta mc-ley"><span class="mc-dot"></span> Días con citas en esta agenda</p>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="summary" id="summary"></div>
+      <div class="notice" id="notice" hidden></div>
+      <div class="board">
+        <div class="grid" id="grid"></div>
+      </div>
+      <div class="empty" id="empty"></div>
+    </main>
   </div>
-  <div class="empty" id="empty"></div>
 </div>
 
 <!-- Panel de cita -->
@@ -252,12 +279,21 @@ async function api(url,opts={}){
   return j;
 }
 
+/* ---------- agenda seleccionada ---------- */
+let agendaSel="tc";
+try{const g=localStorage.getItem("agenda-sel");if(["tc","rx","eco","todas"].includes(g))agendaSel=g}catch(e){}
+const visibles=()=>agendaSel==="todas"?EQUIPOS:EQUIPOS.filter(e=>e.id===agendaSel);
+const delAgenda=c=>agendaSel==="todas"||c.equipo===agendaSel;
+
 /* ---------- grilla ---------- */
 function buildGrid(){
   const g=$("#grid"); g.innerHTML="";
   const rows=(END-START)/STEP;
+  const vis=visibles();
+  g.style.gridTemplateColumns=`58px repeat(${vis.length}, minmax(150px,1fr))`;
+  g.classList.toggle("una",vis.length===1);
   g.appendChild(Object.assign(document.createElement("div"),{className:"corner"}));
-  for(const eq of EQUIPOS){
+  for(const eq of vis){
     const h=document.createElement("div"); h.className="colhead "+eq.id;
     h.innerHTML=`<span class="name">${eq.nombre} <span style="font-weight:500;color:var(--muted);letter-spacing:0;font-size:12px">${eq.largo}</span></span><span class="count" id="cnt-${eq.id}">0</span>`;
     g.appendChild(h);
@@ -265,7 +301,7 @@ function buildGrid(){
   const times=document.createElement("div"); times.className="times"; times.style.height=rows*ROW+"px";
   for(let m=START+60;m<END;m+=60){const t=document.createElement("div");t.className="tlabel";t.style.top=((m-START)/STEP)*ROW+"px";t.textContent=toHora(m);times.appendChild(t)}
   g.appendChild(times);
-  for(const eq of EQUIPOS){
+  for(const eq of vis){
     const c=document.createElement("div"); c.className="col"; c.id="col-"+eq.id;
     for(let i=0;i<rows;i++){
       const m=START+i*STEP; const b=document.createElement("button");
@@ -283,7 +319,7 @@ function render(){
   $("#fecha").value=dia;
   document.querySelectorAll(".appt,.nowline").forEach(e=>e.remove());
   const activos=citas.filter(c=>c.estado!=="cancelado");
-  for(const eq of EQUIPOS){
+  for(const eq of visibles()){
     const col=$("#col-"+eq.id);
     const lista=citas.filter(c=>c.equipo===eq.id);
     // carriles: las citas que se cruzan se muestran lado a lado
@@ -323,14 +359,21 @@ function render(){
   }
   if(dia===isoDate(new Date())){
     const now=new Date(), m=now.getHours()*60+now.getMinutes();
-    if(m>=START&&m<END) for(const eq of EQUIPOS){const l=document.createElement("div");l.className="nowline";l.style.top=(m-START)/STEP*ROW+"px";$("#col-"+eq.id).appendChild(l)}
+    if(m>=START&&m<END) for(const eq of visibles()){const l=document.createElement("div");l.className="nowline";l.style.top=(m-START)/STEP*ROW+"px";$("#col-"+eq.id).appendChild(l)}
   }
   const s=$("#summary"); s.innerHTML="";
   const chip=(color,label,n)=>{const c=document.createElement("span");c.className="chip";c.innerHTML=`<span class="dot" style="background:${color}"></span><span></span><b></b>`;c.children[1].textContent=label;c.children[2].textContent=n;s.appendChild(c)};
-  chip("var(--fg)","Total del día",activos.length);
+  const mias=citas.filter(delAgenda), misActivas=mias.filter(c=>c.estado!=="cancelado");
+  chip("var(--fg)",agendaSel==="todas"?"Total del día":"Citas "+EQUIPOS.find(e=>e.id===agendaSel).nombre,misActivas.length);
   const col={agendado:"muted",confirmado:"accent",llego:"warn",atendido:"ok",ausente:"bad"};
-  for(const e of ESTADOS.filter(e=>e.id!=="cancelado")){const n=citas.filter(c=>c.estado===e.id).length;if(n)chip(`var(--${col[e.id]})`,e.n,n)}
-  $("#empty").textContent=!canWrite?"Tu usuario es solo de lectura.":citas.length?"Toca una cita para editarla o cambiar su estado.":"No hay citas este día. Toca un horario libre en la columna del equipo para agendar.";
+  for(const e of ESTADOS.filter(e=>e.id!=="cancelado")){const n=mias.filter(c=>c.estado===e.id).length;if(n)chip(`var(--${col[e.id]})`,e.n,n)}
+  // ocupación: minutos agendados / minutos de atención de las agendas visibles
+  const ocup=misActivas.reduce((t,c)=>t+(Number(c.duracion)||15),0), cap=(END-START)*visibles().length;
+  const pct=Math.min(100,Math.round(ocup*100/cap));
+  $("#oc-pct").textContent=pct+"%"; $("#oc-fill").style.width=pct+"%";
+  $("#oc-fill").className=pct>=85?"alto":pct>=50?"medio":"";
+  renderCal();
+  $("#empty").textContent=!canWrite?"Tu usuario es solo de lectura.":(mias.length?"Toca una cita para editarla o cambiar su estado.":"No hay citas en esta agenda este día. Toca un horario libre para agendar.");
 }
 
 /* ---------- datos ---------- */
@@ -340,10 +383,51 @@ async function cargar(){
   try{
     const r=await api("/api/citas?fecha="+d);
     if(pedido!==cargando||d!==dia) return;
-    citas=r; notice(""); render();
+    citas=r; notice(""); render(); cargarMes();
   }catch(e){if(e.message!=="sesion")notice("No se pudo actualizar la agenda: "+e.message)}
 }
-function setDia(d){dia=d;history.replaceState(null,"","#"+d);citas=[];render();cargar()}
+function setDia(d){dia=d;history.replaceState(null,"","#"+d);if(d.slice(0,7)!==calMes){calMes=d.slice(0,7);mesData={};cargarMes()}citas=[];render();cargar()}
+
+/* ---------- calendario del mes ---------- */
+let calMes=dia.slice(0,7), mesData={}, pidiendoMes=0;
+async function cargarMes(){
+  const pedido=++pidiendoMes, m=calMes;
+  try{
+    const filas=await api("/api/citas/mes?mes="+m);
+    if(pedido!==pidiendoMes||m!==calMes) return;
+    mesData={};
+    for(const f of filas){(mesData[f.fecha]=mesData[f.fecha]||{})[f.equipo]=f.n}
+    renderCal();
+  }catch(e){}
+}
+function renderCal(){
+  const [y,mo]=calMes.split("-").map(Number);
+  const primero=new Date(y,mo-1,1), diasMes=new Date(y,mo,0).getDate();
+  $("#mc-titulo").textContent=primero.toLocaleDateString("es-CL",{month:"long",year:"numeric"}).replace(/^./,c=>c.toUpperCase());
+  const g=$("#mc-grid"); g.innerHTML="";
+  for(const d of ["Lu","Ma","Mi","Ju","Vi","Sá","Do"]){const h=document.createElement("span");h.className="mc-dow";h.textContent=d;g.appendChild(h)}
+  const desfase=(primero.getDay()+6)%7, hoy=isoDate(new Date());
+  for(let i=0;i<desfase;i++) g.appendChild(document.createElement("span"));
+  for(let d=1;d<=diasMes;d++){
+    const f=`${calMes}-${pad(d)}`, info=mesData[f]||{};
+    const n=visibles().reduce((t,e)=>t+(info[e.id]||0),0);
+    const b=document.createElement("button"); b.type="button"; b.textContent=d;
+    b.className="mc-day"+(n?" con":"")+(f===hoy?" hoy":"")+(f===dia?" sel":"");
+    b.setAttribute("aria-label",parseISO(f).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})+(n?`, ${n} citas`:", sin citas"));
+    if(n) b.title=n+(n===1?" cita":" citas");
+    if(f===dia) b.setAttribute("aria-current","date");
+    b.addEventListener("click",()=>setDia(f));
+    g.appendChild(b);
+  }
+}
+const moverMes=k=>{const [y,m]=calMes.split("-").map(Number);const d=new Date(y,m-1+k,1);calMes=`${d.getFullYear()}-${pad(d.getMonth()+1)}`;mesData={};renderCal();cargarMes()};
+$("#mc-prev").addEventListener("click",()=>moverMes(-1));
+$("#mc-next").addEventListener("click",()=>moverMes(1));
+$("#agenda-sel").value=agendaSel;
+$("#agenda-sel").addEventListener("change",e=>{
+  agendaSel=e.target.value; try{localStorage.setItem("agenda-sel",agendaSel)}catch(_){}
+  buildGrid(); render();
+});
 setInterval(()=>{if(document.visibilityState==="visible"&&$("#scrim").hidden)cargar()},15000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")cargar()});
 
@@ -834,7 +918,7 @@ $("#prev").addEventListener("click",()=>shift(-1));
 $("#next").addEventListener("click",()=>shift(1));
 $("#hoy").addEventListener("click",()=>setDia(isoDate(new Date())));
 $("#fecha").addEventListener("change",e=>{if(e.target.value)setDia(e.target.value)});
-$("#nueva").addEventListener("click",()=>{const n=new Date();const m=Math.min(Math.max(Math.ceil((n.getHours()*60+n.getMinutes())/STEP)*STEP,START),END-STEP);openForm(null,{equipo:"tc",hora:toHora(m)})});
+$("#nueva").addEventListener("click",()=>{const n=new Date();const m=Math.min(Math.max(Math.ceil((n.getHours()*60+n.getMinutes())/STEP)*STEP,START),END-STEP);openForm(null,{equipo:agendaSel==="todas"?"tc":agendaSel,hora:toHora(m)})});
 $("#salir").addEventListener("click",async()=>{await fetch("/api/logout",{method:"POST"});location.href="/login"});
 setInterval(()=>{if(dia===isoDate(new Date()))render()},60000);
 
