@@ -1,0 +1,708 @@
+{
+ "version": 2,
+ "fuente": "FONASA, Libro Arancel MLE 2026 (Modalidad Libre Elección), grupo 04 Imagenología, subgrupos 01 (radiología simple), 03 (tomografía computarizada) y 04 (ultrasonografía). Nivel 2.",
+ "url": "https://www.fonasa.gob.cl/wp-content/uploads/sites/3/2026/03/1-Libro-Arancel-MLE-2026.pdf",
+ "nota": "En el libro, cada nivel tiene las columnas TOTAL y BENEF; BENEF es lo que paga el beneficiario (copago). La bonificación Fonasa es TOTAL - BENEF y es igual en los tres niveles. Las prestaciones marcadas 'nivel único' tienen un solo valor en el libro.",
+ "prestaciones": [
+  {
+   "codigo": "0401001",
+   "nombre": "Radiografía de las glándulas salivales 'sialografía'",
+   "equipo": "rx",
+   "fonasa_total": 33850,
+   "fonasa_bonif": 13020
+  },
+  {
+   "codigo": "0401002",
+   "nombre": "Radiografía de partes blandas, laringe lateral, cavum rinofaríngeo (rinofarinx)",
+   "equipo": "rx",
+   "fonasa_total": 12650,
+   "fonasa_bonif": 4870
+  },
+  {
+   "codigo": "0401004",
+   "nombre": "Radiografía de tórax, proyección complementaria (oblicuas, selectivas u otras)",
+   "equipo": "rx",
+   "fonasa_total": 11650,
+   "fonasa_bonif": 4480
+  },
+  {
+   "codigo": "0401008",
+   "nombre": "Radiografía de tórax frontal o lateral con equipo móvil fuera del departamento de rayos",
+   "equipo": "rx",
+   "fonasa_total": 16470,
+   "fonasa_bonif": 6340
+  },
+  {
+   "codigo": "0401009",
+   "nombre": "Radiografía de tórax simple frontal o lateral",
+   "equipo": "rx",
+   "fonasa_total": 14370,
+   "fonasa_bonif": 5530
+  },
+  {
+   "codigo": "0401070",
+   "nombre": "Radiografía de tórax frontal y lateral",
+   "equipo": "rx",
+   "fonasa_total": 25910,
+   "fonasa_bonif": 9970
+  },
+  {
+   "codigo": "0401010",
+   "nombre": "Mamografía bilateral",
+   "equipo": "rx",
+   "fonasa_total": 30550,
+   "fonasa_bonif": 11750
+  },
+  {
+   "codigo": "0401110",
+   "nombre": "Mamografía unilateral",
+   "equipo": "rx",
+   "fonasa_total": 17940,
+   "fonasa_bonif": 6900
+  },
+  {
+   "codigo": "0401130",
+   "nombre": "Mamografía proyección complementaria (axilar u otras)",
+   "equipo": "rx",
+   "fonasa_total": 6550,
+   "fonasa_bonif": 2520
+  },
+  {
+   "codigo": "0401011",
+   "nombre": "Marcación preoperatoria de lesiones de la mama",
+   "equipo": "rx",
+   "fonasa_total": 41940,
+   "fonasa_bonif": 16130
+  },
+  {
+   "codigo": "0401012",
+   "nombre": "Radiografía de mama, pieza operatoria",
+   "equipo": "rx",
+   "fonasa_total": 12310,
+   "fonasa_bonif": 4740
+  },
+  {
+   "codigo": "0401013",
+   "nombre": "Radiografía de abdomen simple",
+   "equipo": "rx",
+   "fonasa_total": 13170,
+   "fonasa_bonif": 5070
+  },
+  {
+   "codigo": "0401014",
+   "nombre": "Radiografía de abdomen simple, proyección complementaria (lateral y/o oblicua)",
+   "equipo": "rx",
+   "fonasa_total": 9490,
+   "fonasa_bonif": 3650
+  },
+  {
+   "codigo": "0401015",
+   "nombre": "Colangiografía intra o postoperatoria (por sonda T, o similar)",
+   "equipo": "rx",
+   "fonasa_total": 30710,
+   "fonasa_bonif": 11810
+  },
+  {
+   "codigo": "0401018",
+   "nombre": "Enema baritado del colon (incluye llene y control post-vaciamiento)",
+   "equipo": "rx",
+   "fonasa_total": 62910,
+   "fonasa_bonif": 24200
+  },
+  {
+   "codigo": "0401019",
+   "nombre": "Enema baritado del colon o intestino delgado, doble contraste",
+   "equipo": "rx",
+   "fonasa_total": 60720,
+   "fonasa_bonif": 23360
+  },
+  {
+   "codigo": "0401020",
+   "nombre": "Esofagograma (incluye pesquisa de cuerpo extraño) (proc. aut.)",
+   "equipo": "rx",
+   "fonasa_total": 28810,
+   "fonasa_bonif": 11080
+  },
+  {
+   "codigo": "0401021",
+   "nombre": "Radiografía de esófago, estómago y duodeno, relleno y/o doble contraste",
+   "equipo": "rx",
+   "fonasa_total": 53420,
+   "fonasa_bonif": 20550
+  },
+  {
+   "codigo": "0401022",
+   "nombre": "Estudio radiológico de deglución faríngea",
+   "equipo": "rx",
+   "fonasa_total": 24010,
+   "fonasa_bonif": 9240
+  },
+  {
+   "codigo": "0401023",
+   "nombre": "Estudio radiológico del intestino delgado",
+   "equipo": "rx",
+   "fonasa_total": 44460,
+   "fonasa_bonif": 17100
+  },
+  {
+   "codigo": "0401024",
+   "nombre": "Radiografía de esófago, estómago y duodeno, simple en niños",
+   "equipo": "rx",
+   "fonasa_total": 44280,
+   "fonasa_bonif": 17030
+  },
+  {
+   "codigo": "0401073",
+   "nombre": "Videofluoroscopia para estudio de deglución (nivel único)",
+   "equipo": "rx",
+   "fonasa_total": 121310,
+   "fonasa_bonif": 60660
+  },
+  {
+   "codigo": "0401027",
+   "nombre": "Pielografía de eliminación o descendente: incluye renal y vesical simples previas, 3 placas post inyección de medio de contraste, controles de pie y cistografía pre y post miccional",
+   "equipo": "rx",
+   "fonasa_total": 56580,
+   "fonasa_bonif": 21760
+  },
+  {
+   "codigo": "0401028",
+   "nombre": "Radiografía renal simple (proc. aut.)",
+   "equipo": "rx",
+   "fonasa_total": 12120,
+   "fonasa_bonif": 4660
+  },
+  {
+   "codigo": "0401029",
+   "nombre": "Radiografía vesical simple o perivesical (proc. aut.)",
+   "equipo": "rx",
+   "fonasa_total": 10440,
+   "fonasa_bonif": 4020
+  },
+  {
+   "codigo": "0401031",
+   "nombre": "Radiografía de cavidades perinasales, órbitas, articulaciones temporomandibulares, huesos propios de la nariz, malar, maxilar, arco cigomático y cara",
+   "equipo": "rx",
+   "fonasa_total": 14260,
+   "fonasa_bonif": 5490
+  },
+  {
+   "codigo": "0401032",
+   "nombre": "Radiografía de cráneo frontal y lateral",
+   "equipo": "rx",
+   "fonasa_total": 14910,
+   "fonasa_bonif": 5740
+  },
+  {
+   "codigo": "0401033",
+   "nombre": "Radiografía de cráneo proyección especial de base de cráneo (Towne)",
+   "equipo": "rx",
+   "fonasa_total": 10450,
+   "fonasa_bonif": 4020
+  },
+  {
+   "codigo": "0401035",
+   "nombre": "Radiografía de oído, unilateral o bilateral",
+   "equipo": "rx",
+   "fonasa_total": 18040,
+   "fonasa_bonif": 6940
+  },
+  {
+   "codigo": "0401040",
+   "nombre": "Radiografía de silla turca frontal y lateral",
+   "equipo": "rx",
+   "fonasa_total": 16670,
+   "fonasa_bonif": 6410
+  },
+  {
+   "codigo": "0401042",
+   "nombre": "Radiografía de columna cervical o atlas-axis (frontal y lateral)",
+   "equipo": "rx",
+   "fonasa_total": 14370,
+   "fonasa_bonif": 5530
+  },
+  {
+   "codigo": "0401043",
+   "nombre": "Radiografía de columna cervical (frontal, lateral y oblicuas)",
+   "equipo": "rx",
+   "fonasa_total": 24180,
+   "fonasa_bonif": 9300
+  },
+  {
+   "codigo": "0401044",
+   "nombre": "Radiografía de columna cervical flexión y extensión (dinámicas)",
+   "equipo": "rx",
+   "fonasa_total": 13560,
+   "fonasa_bonif": 5220
+  },
+  {
+   "codigo": "0401045",
+   "nombre": "Radiografía de columna dorsal o dorsolumbar localizada, parrilla costal (frontal y lateral)",
+   "equipo": "rx",
+   "fonasa_total": 16730,
+   "fonasa_bonif": 6440
+  },
+  {
+   "codigo": "0401046",
+   "nombre": "Radiografía columna lumbar o lumbosacra (frontal, lateral y focalizada en el 5° espacio)",
+   "equipo": "rx",
+   "fonasa_total": 24770,
+   "fonasa_bonif": 9530
+  },
+  {
+   "codigo": "0401047",
+   "nombre": "Radiografía columna lumbar o lumbosacra flexión y extensión (dinámicas)",
+   "equipo": "rx",
+   "fonasa_total": 20140,
+   "fonasa_bonif": 7750
+  },
+  {
+   "codigo": "0401048",
+   "nombre": "Radiografía columna lumbar o lumbosacra, oblicuas adicionales",
+   "equipo": "rx",
+   "fonasa_total": 13560,
+   "fonasa_bonif": 5220
+  },
+  {
+   "codigo": "0401049",
+   "nombre": "Radiografía de columna total, panorámica con folio graduado frontal o lateral",
+   "equipo": "rx",
+   "fonasa_total": 18530,
+   "fonasa_bonif": 7130
+  },
+  {
+   "codigo": "0401051",
+   "nombre": "Radiografía de pelvis, cadera o coxofemoral",
+   "equipo": "rx",
+   "fonasa_total": 11010,
+   "fonasa_bonif": 4240
+  },
+  {
+   "codigo": "0401151",
+   "nombre": "Radiografía de pelvis, cadera o coxofemoral de RN, lactante o niño menor de 6 años",
+   "equipo": "rx",
+   "fonasa_total": 10500,
+   "fonasa_bonif": 4040
+  },
+  {
+   "codigo": "0401052",
+   "nombre": "Radiografía de pelvis, cadera o coxofemoral, proyecciones especiales; (rotación interna, abducción, lateral, lawenstein u otras)",
+   "equipo": "rx",
+   "fonasa_total": 10040,
+   "fonasa_bonif": 3860
+  },
+  {
+   "codigo": "0401053",
+   "nombre": "Radiografía de sacrocoxis o articulaciones sacroilíacas",
+   "equipo": "rx",
+   "fonasa_total": 15110,
+   "fonasa_bonif": 5810
+  },
+  {
+   "codigo": "0401054",
+   "nombre": "Radiografía de brazo, antebrazo, codo, muñeca, mano, dedos, pie (frontal y lateral)",
+   "equipo": "rx",
+   "fonasa_total": 12530,
+   "fonasa_bonif": 4820
+  },
+  {
+   "codigo": "0401055",
+   "nombre": "Radiografía de clavícula",
+   "equipo": "rx",
+   "fonasa_total": 14660,
+   "fonasa_bonif": 5640
+  },
+  {
+   "codigo": "0401056",
+   "nombre": "Radiografía edad ósea: carpo y mano",
+   "equipo": "rx",
+   "fonasa_total": 10450,
+   "fonasa_bonif": 4020
+  },
+  {
+   "codigo": "0401057",
+   "nombre": "Radiografía edad ósea : rodilla frontal",
+   "equipo": "rx",
+   "fonasa_total": 10910,
+   "fonasa_bonif": 4200
+  },
+  {
+   "codigo": "0401058",
+   "nombre": "Estudio radiológico de escafoides",
+   "equipo": "rx",
+   "fonasa_total": 16390,
+   "fonasa_bonif": 6310
+  },
+  {
+   "codigo": "0401059",
+   "nombre": "Estudio radiológico de muñeca o tobillo frontal lateral y oblicuas",
+   "equipo": "rx",
+   "fonasa_total": 14170,
+   "fonasa_bonif": 5450
+  },
+  {
+   "codigo": "0401060",
+   "nombre": "Radiografía de hombro, fémur, rodilla, pierna, costilla o esternón frontal y lateral",
+   "equipo": "rx",
+   "fonasa_total": 14820,
+   "fonasa_bonif": 5700
+  },
+  {
+   "codigo": "0401062",
+   "nombre": "Radiografía de proyecciones especiales oblicuas u otras en hombro, brazo, codo, rodilla, rótulas, sesamoideos, axial de ambas rótulas o similares",
+   "equipo": "rx",
+   "fonasa_total": 10310,
+   "fonasa_bonif": 3970
+  },
+  {
+   "codigo": "0401063",
+   "nombre": "Radiografía de túnel intercondíleo o radio-carpiano",
+   "equipo": "rx",
+   "fonasa_total": 10040,
+   "fonasa_bonif": 3860
+  },
+  {
+   "codigo": "0401064",
+   "nombre": "Apoyo fluoroscópico a procedimientos intraoperatorios y/o biopsia (no incluye el proc.)",
+   "equipo": "rx",
+   "fonasa_total": 12180,
+   "fonasa_bonif": 4690
+  },
+  {
+   "codigo": "0403001",
+   "nombre": "Tomografía computarizada de cráneo encefálica",
+   "equipo": "tc",
+   "fonasa_total": 90620,
+   "fonasa_bonif": 34860
+  },
+  {
+   "codigo": "0403002",
+   "nombre": "Tomografía computarizada de hipotálamo-hipófisis",
+   "equipo": "tc",
+   "fonasa_total": 95370,
+   "fonasa_bonif": 36680
+  },
+  {
+   "codigo": "0403003",
+   "nombre": "Tomografía computarizada de fosa posterior",
+   "equipo": "tc",
+   "fonasa_total": 81910,
+   "fonasa_bonif": 31510
+  },
+  {
+   "codigo": "0403006",
+   "nombre": "Tomografía computarizada de temporal-oído",
+   "equipo": "tc",
+   "fonasa_total": 78650,
+   "fonasa_bonif": 30250
+  },
+  {
+   "codigo": "0403007",
+   "nombre": "Tomografía computarizada de órbitas maxilofacial",
+   "equipo": "tc",
+   "fonasa_total": 105170,
+   "fonasa_bonif": 40450
+  },
+  {
+   "codigo": "0403008",
+   "nombre": "Tomografía computarizada de columna cervical",
+   "equipo": "tc",
+   "fonasa_total": 115210,
+   "fonasa_bonif": 44310
+  },
+  {
+   "codigo": "0403018",
+   "nombre": "Tomografía computarizada de columna dorsal. Incluye mínimo 6 espacios",
+   "equipo": "tc",
+   "fonasa_total": 100950,
+   "fonasa_bonif": 38830
+  },
+  {
+   "codigo": "0403019",
+   "nombre": "Tomografía computarizada de columna lumbar",
+   "equipo": "tc",
+   "fonasa_total": 100950,
+   "fonasa_bonif": 38830
+  },
+  {
+   "codigo": "0403012",
+   "nombre": "Tomografía computarizada de cuello, partes blandas",
+   "equipo": "tc",
+   "fonasa_total": 85140,
+   "fonasa_bonif": 32750
+  },
+  {
+   "codigo": "0403013",
+   "nombre": "Tomografía computarizada de tórax. Incluye además: esternón, clavículas, articulación acromioclavicular, escápula, costillas, articulación esternoclavicular. Incluye todo el tórax o cada segmento o articulación. Incluye bilateralidad",
+   "equipo": "tc",
+   "fonasa_total": 134470,
+   "fonasa_bonif": 51720
+  },
+  {
+   "codigo": "0403014",
+   "nombre": "Tomografía computarizada de abdomen (hígado, vías y vesícula biliar, páncreas, bazo, suprarrenales y riñones)",
+   "equipo": "tc",
+   "fonasa_total": 80960,
+   "fonasa_bonif": 31140
+  },
+  {
+   "codigo": "0403016",
+   "nombre": "Tomografía computarizada de pelvis (además incluye sacro, coxis, caderas, huesos pélvicos, articulaciones sacro ilíacas). Bilateral",
+   "equipo": "tc",
+   "fonasa_total": 83030,
+   "fonasa_bonif": 31940
+  },
+  {
+   "codigo": "0403020",
+   "nombre": "Tomografía computarizada de abdomen y pelvis",
+   "equipo": "tc",
+   "fonasa_total": 132150,
+   "fonasa_bonif": 50830
+  },
+  {
+   "codigo": "0403021",
+   "nombre": "Tomografía computarizada pielografía",
+   "equipo": "tc",
+   "fonasa_total": 34800,
+   "fonasa_bonif": 13390
+  },
+  {
+   "codigo": "0403022",
+   "nombre": "Tomografía computarizada urografía",
+   "equipo": "tc",
+   "fonasa_total": 77740,
+   "fonasa_bonif": 29900
+  },
+  {
+   "codigo": "0403023",
+   "nombre": "Tomografía computarizada de colonoscopía virtual. No incluye instalación de sonda",
+   "equipo": "tc",
+   "fonasa_total": 66370,
+   "fonasa_bonif": 25530
+  },
+  {
+   "codigo": "0403024",
+   "nombre": "Tomografía computarizada planificación radioterapia",
+   "equipo": "tc",
+   "fonasa_total": 90050,
+   "fonasa_bonif": 34640
+  },
+  {
+   "codigo": "0403025",
+   "nombre": "Tomografía computarizada de calcio coronario",
+   "equipo": "tc",
+   "fonasa_total": 44380,
+   "fonasa_bonif": 17070
+  },
+  {
+   "codigo": "0403104",
+   "nombre": "Tomografía computarizada angio de cuello",
+   "equipo": "tc",
+   "fonasa_total": 90260,
+   "fonasa_bonif": 34720
+  },
+  {
+   "codigo": "0403105",
+   "nombre": "Tomografía computarizada angio de pelvis",
+   "equipo": "tc",
+   "fonasa_total": 65820,
+   "fonasa_bonif": 25320
+  },
+  {
+   "codigo": "0403106",
+   "nombre": "Tomografía computarizada de angio cardíaco. Mínimo 64 cortes",
+   "equipo": "tc",
+   "fonasa_total": 86280,
+   "fonasa_bonif": 33190
+  },
+  {
+   "codigo": "0403017",
+   "nombre": "Tomografía computarizada musculoesquelética por zona anatómica. Por cada segmento o articulación: muslo, pierna, rodillas, antebrazo, codo, muñeca, mano, hombro, pie, tobillo u otros. Bilateral sólo para rodillas",
+   "equipo": "tc",
+   "fonasa_total": 72490,
+   "fonasa_bonif": 27880
+  },
+  {
+   "codigo": "0403101",
+   "nombre": "Tomografía computarizada angio de encéfalo",
+   "equipo": "tc",
+   "fonasa_total": 109840,
+   "fonasa_bonif": 42250
+  },
+  {
+   "codigo": "0403102",
+   "nombre": "Tomografía computarizada angio de tórax",
+   "equipo": "tc",
+   "fonasa_total": 165360,
+   "fonasa_bonif": 63600
+  },
+  {
+   "codigo": "0403103",
+   "nombre": "Tomografía computarizada angio de abdomen",
+   "equipo": "tc",
+   "fonasa_total": 153100,
+   "fonasa_bonif": 58890
+  },
+  {
+   "codigo": "0403107",
+   "nombre": "Tomografía computarizada angio de extremidades inferiores (bilateral)",
+   "equipo": "tc",
+   "fonasa_total": 124930,
+   "fonasa_bonif": 48050
+  },
+  {
+   "codigo": "0403108",
+   "nombre": "Tomografía computarizada angio de extremidad superior (unilateral)",
+   "equipo": "tc",
+   "fonasa_total": 127990,
+   "fonasa_bonif": 49230
+  },
+  {
+   "codigo": "0404002",
+   "nombre": "Ecografía obstétrica",
+   "equipo": "eco",
+   "fonasa_total": 11350,
+   "fonasa_bonif": 4370
+  },
+  {
+   "codigo": "0404003",
+   "nombre": "Ecografía abdominal (incluye hígado, vía biliar, vesícula, páncreas, riñones, bazo, retroperitoneo y grandes vasos)",
+   "equipo": "eco",
+   "fonasa_total": 35840,
+   "fonasa_bonif": 13790
+  },
+  {
+   "codigo": "0404004",
+   "nombre": "Ecografía como apoyo a cirugía, o a procedimiento (de tórax, muscular, partes blandas, etc.)",
+   "equipo": "eco",
+   "fonasa_total": 22150,
+   "fonasa_bonif": 8520
+  },
+  {
+   "codigo": "0404005",
+   "nombre": "Ecografía transvaginal o transrectal",
+   "equipo": "eco",
+   "fonasa_total": 20020,
+   "fonasa_bonif": 7700
+  },
+  {
+   "codigo": "0404006",
+   "nombre": "Ecografía ginecológica, pelviana femenina u obstétrica con estudio fetal",
+   "equipo": "eco",
+   "fonasa_total": 19070,
+   "fonasa_bonif": 7340
+  },
+  {
+   "codigo": "0404007",
+   "nombre": "Ecografía transvaginal para seguimiento de ovulación, procedimiento completo (6-8 sesiones)",
+   "equipo": "eco",
+   "fonasa_total": 27830,
+   "fonasa_bonif": 10710
+  },
+  {
+   "codigo": "0404008",
+   "nombre": "Ecografía para seguimiento de ovulación, procedimiento completo (6 a 8 sesiones)",
+   "equipo": "eco",
+   "fonasa_total": 31170,
+   "fonasa_bonif": 11990
+  },
+  {
+   "codigo": "0404009",
+   "nombre": "Ecografía pélvica masculina (incluye vejiga y próstata)",
+   "equipo": "eco",
+   "fonasa_total": 19930,
+   "fonasa_bonif": 7670
+  },
+  {
+   "codigo": "0404010",
+   "nombre": "Ecografía renal (bilateral), o de bazo",
+   "equipo": "eco",
+   "fonasa_total": 24840,
+   "fonasa_bonif": 9560
+  },
+  {
+   "codigo": "0404011",
+   "nombre": "Ecografía encefálica (RN o lactante)",
+   "equipo": "eco",
+   "fonasa_total": 26820,
+   "fonasa_bonif": 10320
+  },
+  {
+   "codigo": "0404012",
+   "nombre": "Ecografía mamaria bilateral (incluye doppler)",
+   "equipo": "eco",
+   "fonasa_total": 24970,
+   "fonasa_bonif": 9610
+  },
+  {
+   "codigo": "0404013",
+   "nombre": "Ecografía ocular, unilateral o bilateral",
+   "equipo": "eco",
+   "fonasa_total": 28980,
+   "fonasa_bonif": 11150
+  },
+  {
+   "codigo": "0404014",
+   "nombre": "Ecografía testicular (unilateral o bilateral) (incluye doppler)",
+   "equipo": "eco",
+   "fonasa_total": 24650,
+   "fonasa_bonif": 9480
+  },
+  {
+   "codigo": "0404015",
+   "nombre": "Ecografía tiroidea (incluye doppler)",
+   "equipo": "eco",
+   "fonasa_total": 24970,
+   "fonasa_bonif": 9610
+  },
+  {
+   "codigo": "0404016",
+   "nombre": "Ecografía partes blandas o musculoesquelética (cada zona anatómica)",
+   "equipo": "eco",
+   "fonasa_total": 24970,
+   "fonasa_bonif": 9610
+  },
+  {
+   "codigo": "0404118",
+   "nombre": "Ecografía vascular (arterial y venosa) periférica (bilateral)",
+   "equipo": "eco",
+   "fonasa_total": 81950,
+   "fonasa_bonif": 31520
+  },
+  {
+   "codigo": "0404119",
+   "nombre": "Ecografía doppler de vasos del cuello",
+   "equipo": "eco",
+   "fonasa_total": 77390,
+   "fonasa_bonif": 29770
+  },
+  {
+   "codigo": "0404120",
+   "nombre": "Ecografía transcraneana",
+   "equipo": "eco",
+   "fonasa_total": 81950,
+   "fonasa_bonif": 31520
+  },
+  {
+   "codigo": "0404121",
+   "nombre": "Ecografía abdominal o de vasos testiculares",
+   "equipo": "eco",
+   "fonasa_total": 84450,
+   "fonasa_bonif": 32480
+  },
+  {
+   "codigo": "0404122",
+   "nombre": "Ecografía doppler de vasos placentarios",
+   "equipo": "eco",
+   "fonasa_total": 81950,
+   "fonasa_bonif": 31520
+  },
+  {
+   "codigo": "0404218",
+   "nombre": "Elastografía hepática (nivel único)",
+   "equipo": "eco",
+   "fonasa_total": 199030,
+   "fonasa_bonif": 99520
+  }
+ ]
+}

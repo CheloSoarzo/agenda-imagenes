@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Agenda de Imágenes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span>Agenda por equipo</span>
+      <h1 id="dayname" class="dayname">—</h1>
+    </div>
+    <div class="daynav">
+      <button class="btn icon" id="prev" aria-label="Día anterior">‹</button>
+      <input type="date" id="fecha" aria-label="Fecha">
+      <button class="btn icon" id="next" aria-label="Día siguiente">›</button>
+      <button class="btn" id="hoy">Hoy</button>
+      <button class="btn primary" id="nueva">Nueva cita</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="search">
+      <input id="buscar" type="search" placeholder="Buscar paciente por nombre o RUT" autocomplete="off" aria-label="Buscar paciente">
+      <div class="results" id="results" hidden></div>
+    </div>
+    <div class="userbar">
+      <span>Sesión: <b id="me">—</b></span>
+      <button class="linkbtn" id="btnCaja">Caja</button>
+      <button class="linkbtn" id="btnAranceles">Aranceles</button>
+      <button class="linkbtn" id="btnUsuarios" hidden>Usuarios</button>
+      <button class="linkbtn" id="btnClave">Cambiar clave</button>
+      <button class="linkbtn" id="salir">Salir</button>
+    </div>
+  </div>
+
+  <div class="summary" id="summary"></div>
+  <div class="notice" id="notice" hidden></div>
+
+  <div class="board">
+    <div class="grid" id="grid"></div>
+  </div>
+  <div class="empty" id="empty"></div>
+</div>
+
+<!-- Panel de cita -->
+<div class="scrim" id="scrim" hidden>
+  <form class="panel" id="form" novalidate>
+    <h2 id="ftitle">Nueva cita</h2>
+    <div class="field"><label for="f-paciente">Paciente</label><input id="f-paciente" required autocomplete="off" placeholder="Nombre y apellido"></div>
+    <div class="row2">
+      <div class="field"><label for="f-rut">RUT</label><input id="f-rut" autocomplete="off" placeholder="12.345.678-9"></div>
+      <div class="field"><label for="f-tel">Teléfono</label><input id="f-tel" type="tel" autocomplete="off" placeholder="+56 9 …"></div>
+    </div>
+    <div class="field"><label>Equipo</label><div class="seg" id="f-equipo"></div></div>
+    <div class="row2">
+      <div class="field"><label for="f-prevision">Previsión</label>
+        <select id="f-prevision"><option value="">—</option><option>Fonasa</option><option>Isapre</option><option>Particular</option><option>Convenio</option></select></div>
+      <div class="field"><label for="f-medico">Médico solicitante</label><input id="f-medico" autocomplete="off"></div>
+    </div>
+    <div class="field"><label for="f-codigo">Prestación (código Fonasa)</label><select id="f-codigo"></select></div>
+    <div class="field"><label for="f-examen">Examen</label><input id="f-examen" list="examenes" autocomplete="off" placeholder="Ej. TC de tórax con contraste"></div>
+    <datalist id="examenes"></datalist>
+    <div class="cobro" id="cobro">
+      <div class="row3">
+        <div class="field"><label for="f-valor">Valor</label><input id="f-valor" inputmode="numeric" autocomplete="off" placeholder="$0"></div>
+        <div class="field"><label for="f-bonif">Bonificación</label><input id="f-bonif" inputmode="numeric" autocomplete="off" placeholder="$0"></div>
+        <div class="field"><label for="f-copago">Copago paciente</label><output id="f-copago" class="money">$0</output></div>
+      </div>
+      <div class="meta" id="f-preciohint"></div>
+    </div>
+    <div class="row3">
+      <div class="field"><label for="f-fecha">Fecha</label><input id="f-fecha" type="date"></div>
+      <div class="field"><label for="f-hora">Hora</label><input id="f-hora" type="time" step="300"></div>
+      <div class="field"><label for="f-dur">Duración</label>
+        <select id="f-dur"><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></div>
+    </div>
+    <div class="field"><label>Estado</label><div class="seg" id="f-estado"></div></div>
+    <div class="field"><label for="f-notas">Notas</label><textarea id="f-notas" placeholder="Preparación, ayuno, creatinina, alergia a contraste…"></textarea></div>
+    <div class="pago" id="pago" hidden>
+      <strong class="pago-tit">Pago</strong>
+      <div id="pago-hecho" hidden>
+        <div id="pago-info"></div>
+        <div class="anular" id="anular-box" hidden>
+          <div class="field"><label for="anular-motivo">Motivo de la anulación</label><input id="anular-motivo" autocomplete="off" placeholder="Ej. se cobró el examen equivocado"></div>
+        </div>
+        <button type="button" class="btn danger" id="anular" hidden>Anular pago</button>
+      </div>
+      <div id="pago-form">
+        <div class="row2">
+          <div class="field"><label for="p-medio">Medio de pago</label>
+            <select id="p-medio"><option value="">Elige…</option><option>Efectivo</option><option>Débito</option><option>Crédito</option><option>Transferencia</option></select></div>
+          <div class="field" id="p-folio-f"><label for="p-folio">Folio bono Fonasa</label><input id="p-folio" autocomplete="off" inputmode="numeric"></div>
+        </div>
+        <button type="button" class="btn pay" id="cobrar">Guardar y cobrar</button>
+      </div>
+    </div>
+    <div class="meta" id="fmeta"></div>
+    <div class="msg" id="fmsg"></div>
+    <div class="actions">
+      <button type="button" class="btn danger" id="borrar" hidden>Eliminar</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="cancelar">Cancelar</button>
+      <button type="submit" class="btn primary" id="guardar">Guardar</button>
+    </div>
+  </form>
+</div>
+
+<!-- Panel de usuarios -->
+<div class="scrim" id="uscrim" hidden>
+  <div class="panel">
+    <h2>Usuarios</h2>
+    <div class="ulist" id="ulist"></div>
+    <hr class="div">
+    <form id="uform" novalidate style="display:flex;flex-direction:column;gap:10px">
+      <strong>Agregar usuario</strong>
+      <div class="row2">
+        <div class="field"><label for="u-nombre">Nombre</label><input id="u-nombre" autocomplete="off"></div>
+        <div class="field"><label for="u-usuario">Usuario</label><input id="u-usuario" autocomplete="off" autocapitalize="none"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="u-clave">Clave</label><input id="u-clave" type="text" autocomplete="new-password" placeholder="Mínimo 8 caracteres"></div>
+        <div class="field"><label for="u-rol">Rol</label>
+          <select id="u-rol"><option value="recepcion">Recepción</option><option value="admin">Administrador</option><option value="lectura">Solo lectura</option></select></div>
+      </div>
+      <div class="msg" id="umsg"></div>
+      <div class="actions"><span class="spacer"></span><button type="button" class="btn" id="ucerrar">Cerrar</button><button class="btn primary" type="submit">Agregar</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Panel de clave -->
+<div class="scrim" id="cscrim" hidden>
+  <form class="panel" id="cform" novalidate>
+    <h2>Cambiar mi clave</h2>
+    <div class="field"><label for="c-clave">Nueva clave</label><input id="c-clave" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres"></div>
+    <div class="field"><label for="c-clave2">Repite la clave</label><input id="c-clave2" type="password" autocomplete="new-password"></div>
+    <div class="msg" id="cmsg"></div>
+    <div class="actions"><span class="spacer"></span><button type="button" class="btn" id="ccerrar">Cancelar</button><button class="btn primary" type="submit">Guardar clave</button></div>
+  </form>
+</div>
+
+<!-- Panel de caja -->
+<div class="scrim" id="kscrim" hidden>
+  <div class="panel wide" id="caja">
+    <div class="caja-head">
+      <h2>Caja del día</h2>
+      <div class="caja-ctrl">
+        <input type="date" id="k-fecha" aria-label="Día de caja">
+        <span class="pill" id="k-estado"></span>
+      </div>
+    </div>
+    <div class="tiles" id="k-tiles"></div>
+    <div class="caja-grid">
+      <div><h3>Por medio de pago</h3><div class="tbl" id="k-medio"></div></div>
+      <div><h3>Por previsión</h3><div class="tbl" id="k-prev"></div></div>
+      <div><h3>Por equipo</h3><div class="tbl" id="k-equipo"></div></div>
+    </div>
+    <h3>Pagos del día</h3>
+    <div class="tblwrap"><table class="pagos" id="k-pagos"></table></div>
+    <div class="cierre" id="k-cierre"></div>
+    <div class="msg" id="kmsg"></div>
+    <div class="actions noprint">
+      <button type="button" class="btn" id="k-pdf">Descargar PDF</button>
+      <button type="button" class="btn" id="k-xlsx">Descargar Excel</button>
+      <button type="button" class="btn" id="k-print">Imprimir</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="kcerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Panel de aranceles -->
+<div class="scrim" id="ascrim" hidden>
+  <div class="panel wide">
+    <h2>Aranceles</h2>
+    <p class="meta">Valores Fonasa MLE nivel 2 (valor total y bonificación). El copago se calcula solo. El precio particular es el que cobra el centro a pacientes sin previsión; si lo dejas en 0 se usa el valor Fonasa.</p>
+    <form id="aform" class="aform" novalidate>
+      <div class="row3">
+        <div class="field"><label for="a-codigo">Código</label><input id="a-codigo" autocomplete="off" inputmode="numeric" placeholder="0403001"></div>
+        <div class="field"><label for="a-equipo">Equipo</label><select id="a-equipo"><option value="tc">TC</option><option value="rx">RX</option><option value="eco">ECO</option></select></div>
+        <div class="field"><label for="a-activo">Estado</label><select id="a-activo"><option value="1">Activa</option><option value="0">Inactiva</option></select></div>
+      </div>
+      <div class="field"><label for="a-nombre">Nombre</label><input id="a-nombre" autocomplete="off"></div>
+      <div class="row3">
+        <div class="field"><label for="a-total">Valor Fonasa N2</label><input id="a-total" inputmode="numeric" autocomplete="off"></div>
+        <div class="field"><label for="a-bonif">Bonificación N2</label><input id="a-bonif" inputmode="numeric" autocomplete="off"></div>
+        <div class="field"><label for="a-part">Precio particular</label><input id="a-part" inputmode="numeric" autocomplete="off"></div>
+      </div>
+      <div class="msg" id="amsg"></div>
+      <div class="actions"><button type="button" class="btn" id="a-nuevo">Limpiar</button><span class="spacer"></span><button class="btn primary" type="submit" id="a-guardar">Guardar prestación</button></div>
+    </form>
+    <details class="importar" id="importar">
+      <summary>Cargar varias prestaciones de una vez</summary>
+      <p class="meta">Pega filas desde Excel, una por prestación, con estas columnas en orden: código, nombre, equipo (TC, RX o ECO), valor Fonasa N2, bonificación N2 y, opcional, precio particular. Si el código ya existe, se actualizan sus valores.</p>
+      <textarea id="imp-texto" placeholder="0403001	Tomografía computarizada de cráneo encefálica	TC	95000	57000	150000"></textarea>
+      <div class="actions"><span class="meta" id="imp-msg"></span><span class="spacer"></span><button type="button" class="btn" id="imp-btn">Cargar filas</button></div>
+    </details>
+    <div class="afilter">
+      <input id="a-buscar" type="search" placeholder="Buscar por código o nombre" aria-label="Buscar prestación">
+      <div class="seg" id="a-filtro"></div>
+    </div>
+    <div class="tblwrap"><table class="pagos" id="a-tabla"></table></div>
+    <div class="actions"><span class="spacer"></span><button type="button" class="btn" id="acerrar">Cerrar</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const EQUIPOS=[{id:"tc",nombre:"TC",largo:"Tomografía"},{id:"rx",nombre:"RX",largo:"Rayos X"},{id:"eco",nombre:"ECO",largo:"Ecografía"}];
+const ESTADOS=[{id:"agendado",n:"Agendado"},{id:"confirmado",n:"Confirmado"},{id:"llego",n:"Llegó"},{id:"atendido",n:"Atendido"},{id:"ausente",n:"No asistió"},{id:"cancelado",n:"Cancelado"}];
+const ROLES={admin:"Administrador",recepcion:"Recepción",lectura:"Solo lectura"};
+const EXAMENES={tc:["TC de cerebro","TC de tórax","TC de abdomen y pelvis","TC de columna lumbar","AngioTC","TC de cavidades paranasales"],
+  rx:["RX de tórax AP y lateral","RX de columna lumbar","RX de rodilla","RX de cadera","RX de mano","RX de pelvis"],
+  eco:["Eco abdominal","Eco pelviana","Eco tiroidea","Eco mamaria","Eco obstétrica","Eco partes blandas","Eco renal"]};
+const DUR_DEF={tc:20,rx:10,eco:20};
+const START=8*60, END=21*60, STEP=15, ROW=34;
+
+const $=s=>document.querySelector(s);
+const pad=n=>String(n).padStart(2,"0");
+const toMin=h=>{const [a,b]=h.split(":").map(Number);return a*60+b};
+const toHora=m=>pad(Math.floor(m/60))+":"+pad(m%60);
+const isoDate=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const parseISO=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
+const fmtFecha=s=>parseISO(s).toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit",year:"numeric"});
+
+let dia=isoDate(new Date());
+{const h=location.hash.slice(1); if(/^\d{4}-\d{2}-\d{2}$/.test(h)) dia=h;}
+let ARANCEL=[];
+const $$=n=>"$"+Math.round(n||0).toLocaleString("es-CL");
+const pesos=v=>Number(String(v||"").replace(/\D/g,""))||0;
+let citas=[], yo=null, canWrite=true, editId=null, equipoSel="tc", estadoSel="agendado";
+
+function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>el.hidden=true,2200)}
+function notice(t){const el=$("#notice");el.textContent=t||"";el.hidden=!t}
+
+async function api(url,opts={}){
+  const r=await fetch(url,{...opts,headers:{"Content-Type":"application/json"},body:opts.body?JSON.stringify(opts.body):undefined});
+  if(r.status===401){location.href="/login";throw new Error("sesion")}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||"Ocurrió un error en el servidor.");
+  return j;
+}
+
+/* ---------- grilla ---------- */
+function buildGrid(){
+  const g=$("#grid"); g.innerHTML="";
+  const rows=(END-START)/STEP;
+  g.appendChild(Object.assign(document.createElement("div"),{className:"corner"}));
+  for(const eq of EQUIPOS){
+    const h=document.createElement("div"); h.className="colhead "+eq.id;
+    h.innerHTML=`<span class="name">${eq.nombre} <span style="font-weight:500;color:var(--muted);letter-spacing:0;font-size:12px">${eq.largo}</span></span><span class="count" id="cnt-${eq.id}">0</span>`;
+    g.appendChild(h);
+  }
+  const times=document.createElement("div"); times.className="times"; times.style.height=rows*ROW+"px";
+  for(let m=START+60;m<END;m+=60){const t=document.createElement("div");t.className="tlabel";t.style.top=((m-START)/STEP)*ROW+"px";t.textContent=toHora(m);times.appendChild(t)}
+  g.appendChild(times);
+  for(const eq of EQUIPOS){
+    const c=document.createElement("div"); c.className="col"; c.id="col-"+eq.id;
+    for(let i=0;i<rows;i++){
+      const m=START+i*STEP; const b=document.createElement("button");
+      b.type="button"; b.className="slot"+(((m+STEP)%60===0)?" hour":"");
+      b.setAttribute("aria-label",`Agendar ${eq.nombre} a las ${toHora(m)}`);
+      b.addEventListener("click",()=>{if(canWrite)openForm(null,{equipo:eq.id,hora:toHora(m)})});
+      c.appendChild(b);
+    }
+    g.appendChild(c);
+  }
+}
+
+function render(){
+  $("#dayname").textContent=parseISO(dia).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"});
+  $("#fecha").value=dia;
+  document.querySelectorAll(".appt,.nowline").forEach(e=>e.remove());
+  const activos=citas.filter(c=>c.estado!=="cancelado");
+  for(const eq of EQUIPOS){
+    const col=$("#col-"+eq.id);
+    const lista=citas.filter(c=>c.equipo===eq.id);
+    // carriles: las citas que se cruzan se muestran lado a lado
+    const visibles=lista.filter(c=>c.estado!=="cancelado").sort((a,b)=>a.hora.localeCompare(b.hora));
+    const carril=new Map(), anchoGrupo=new Map(); let grupo=[], finGrupo=-1;
+    const cerrar=()=>{const n=Math.max(1,...grupo.map(c=>carril.get(c.id)+1));grupo.forEach(c=>anchoGrupo.set(c.id,n));grupo=[]};
+    const finesCarril=[];
+    for(const c of visibles){
+      const ini=toMin(c.hora), fin=ini+(Number(c.duracion)||15);
+      if(ini>=finGrupo){cerrar();finesCarril.length=0}
+      let k=finesCarril.findIndex(f=>f<=ini); if(k<0){k=finesCarril.length;finesCarril.push(fin)}else finesCarril[k]=fin;
+      carril.set(c.id,k); grupo.push(c); finGrupo=Math.max(finGrupo,fin);
+    }
+    cerrar();
+    $("#cnt-"+eq.id).textContent=lista.filter(c=>c.estado!=="cancelado").length+" citas";
+    for(const c of lista){
+      const ini=toMin(c.hora), dur=Number(c.duracion)||15;
+      if(ini+dur<=START||ini>=END) continue;
+      const clash=c.estado!=="cancelado"&&activos.some(o=>o.id!==c.id&&o.equipo===c.equipo&&toMin(o.hora)<ini+dur&&ini<toMin(o.hora)+(Number(o.duracion)||15));
+      const el=document.createElement("button"); el.type="button";
+      el.className=`appt ${eq.id} s-${c.estado}`+(clash?" clash":"");
+      el.style.top=((Math.max(ini,START)-START)/STEP*ROW+1)+"px";
+      el.style.height=Math.max(dur/STEP*ROW-3,24)+"px";
+      const n=anchoGrupo.get(c.id)||1, k=carril.get(c.id)||0;
+      if(n>1){el.style.left=`calc(4px + (100% - 8px) * ${k}/${n})`;el.style.right=`calc(4px + (100% - 8px) * ${n-k-1}/${n})`}
+      const est=ESTADOS.find(e=>e.id===c.estado)||ESTADOS[0];
+      el.innerHTML=`<span class="l1"><span class="h"></span><span class="p"></span></span><span class="e"></span><span class="st st-${est.id}"></span>`;
+      el.querySelector(".h").textContent=c.hora;
+      el.querySelector(".p").textContent=c.paciente;
+      el.querySelector(".e").textContent=c.examen||"";
+      el.querySelector(".st").textContent=est.n+(c.pago_id?" · pagado":"")+(clash?" · se superpone":"");
+      if(c.pago_id) el.classList.add("paid");
+      el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}`;
+      el.addEventListener("click",()=>openForm(c));
+      col.appendChild(el);
+    }
+  }
+  if(dia===isoDate(new Date())){
+    const now=new Date(), m=now.getHours()*60+now.getMinutes();
+    if(m>=START&&m<END) for(const eq of EQUIPOS){const l=document.createElement("div");l.className="nowline";l.style.top=(m-START)/STEP*ROW+"px";$("#col-"+eq.id).appendChild(l)}
+  }
+  const s=$("#summary"); s.innerHTML="";
+  const chip=(color,label,n)=>{const c=document.createElement("span");c.className="chip";c.innerHTML=`<span class="dot" style="background:${color}"></span><span></span><b></b>`;c.children[1].textContent=label;c.children[2].textContent=n;s.appendChild(c)};
+  chip("var(--fg)","Total del día",activos.length);
+  const col={agendado:"muted",confirmado:"accent",llego:"warn",atendido:"ok",ausente:"bad"};
+  for(const e of ESTADOS.filter(e=>e.id!=="cancelado")){const n=citas.filter(c=>c.estado===e.id).length;if(n)chip(`var(--${col[e.id]})`,e.n,n)}
+  $("#empty").textContent=!canWrite?"Tu usuario es solo de lectura.":citas.length?"Toca una cita para editarla o cambiar su estado.":"No hay citas este día. Toca un horario libre en la columna del equipo para agendar.";
+}
+
+/* ---------- datos ---------- */
+let cargando=0;
+async function cargar(){
+  const pedido=++cargando, d=dia;
+  try{
+    const r=await api("/api/citas?fecha="+d);
+    if(pedido!==cargando||d!==dia) return;
+    citas=r; notice(""); render();
+  }catch(e){if(e.message!=="sesion")notice("No se pudo actualizar la agenda: "+e.message)}
+}
+function setDia(d){dia=d;history.replaceState(null,"","#"+d);citas=[];render();cargar()}
+setInterval(()=>{if(document.visibilityState==="visible"&&$("#scrim").hidden)cargar()},15000);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")cargar()});
+
+/* ---------- formulario de cita ---------- */
+function segButtons(cont,items,sel,onPick){
+  cont.innerHTML="";
+  for(const it of items){const b=document.createElement("button");b.type="button";b.textContent=it.n||it.nombre;b.setAttribute("aria-pressed",String(it.id===sel));
+    b.addEventListener("click",()=>{onPick(it.id);[...cont.children].forEach(x=>x.setAttribute("aria-pressed",String(x===b)))});cont.appendChild(b)}
+}
+function setEquipo(id,changeDur){
+  equipoSel=id;
+  $("#examenes").innerHTML="";
+  for(const e of EXAMENES[id]){const o=document.createElement("option");o.value=e;$("#examenes").appendChild(o)}
+  if(changeDur) $("#f-dur").value=String(DUR_DEF[id]);
+  llenarCodigos(id,$("#f-codigo").value);
+}
+function llenarCodigos(eq,sel){
+  const s=$("#f-codigo"); s.innerHTML="";
+  const o0=document.createElement("option");o0.value="";o0.textContent="— Sin código / otro examen —";s.appendChild(o0);
+  for(const a of ARANCEL.filter(a=>a.equipo===eq&&(a.activo||a.codigo===sel))){
+    const o=document.createElement("option");o.value=a.codigo;o.textContent=`${a.codigo} · ${a.nombre}`;s.appendChild(o)}
+  if(sel&&![...s.options].some(o=>o.value===sel)){const o=document.createElement("option");o.value=sel;o.textContent=sel+" (no está en el arancel)";s.appendChild(o)}
+  s.value=sel||"";
+}
+let citaPagada=false;
+// Calcula valor, bonificación y copago según la prestación y la previsión
+function recalcular(reset){
+  const a=ARANCEL.find(x=>x.codigo===$("#f-codigo").value), prev=$("#f-prevision").value;
+  const v=$("#f-valor"), b=$("#f-bonif"), hint=$("#f-preciohint");
+  let lockV=false, lockB=false, h="";
+  if(prev==="Fonasa"&&a){v.value=$$(a.fonasa_total);b.value=$$(a.fonasa_bonif);lockV=lockB=true;h="Arancel Fonasa MLE nivel 2 · código "+a.codigo}
+  else if(prev==="Fonasa"){if(reset){v.value="";b.value=""}h="Este examen no está en el arancel: ingresa valor y bonificación, o agrégalo en Aranceles."}
+  else if(prev==="Particular"){if(reset&&a)v.value=$$(a.particular||a.fonasa_total);b.value=$$(0);lockB=true;h=a?(a.particular?"Precio particular del centro":"Sin precio particular definido: se usa el valor Fonasa"):"Ingresa el valor del examen."}
+  else{if(reset&&a){v.value=$$(a.particular||a.fonasa_total);b.value=""}h=prev?"Ingresa la bonificación que cubre el bono de "+prev+".":"Elige la previsión para calcular el copago."}
+  const disabled=!canWrite||citaPagada;
+  v.readOnly=lockV||disabled; b.readOnly=lockB||disabled;
+  const val=pesos(v.value), bon=pesos(b.value);
+  $("#f-copago").value=$$(Math.max(0,val-bon));
+  $("#f-copago").classList.toggle("bad",bon>val);
+  hint.textContent=bon>val?"La bonificación no puede ser mayor que el valor.":h;
+  $("#p-folio-f").hidden=!(prev==="Fonasa"&&bon>0);
+  $("#cobrar").textContent=val?`Guardar y cobrar ${$$(Math.max(0,val-bon))}`:"Guardar y cobrar";
+  $("#p-medio").disabled=disabled||(val>0&&val-bon===0);
+  if(val>0&&val-bon===0)$("#p-medio").value="";
+}
+$("#f-codigo").addEventListener("change",()=>{const a=ARANCEL.find(x=>x.codigo===$("#f-codigo").value);if(a)$("#f-examen").value=a.nombre;recalcular(true)});
+$("#f-prevision").addEventListener("change",()=>recalcular(true));
+for(const id of ["#f-valor","#f-bonif"]){
+  $(id).addEventListener("input",()=>recalcular(false));
+  $(id).addEventListener("blur",e=>{if(e.target.value)e.target.value=$$(pesos(e.target.value))});
+}
+async function cargarAranceles(){try{ARANCEL=await api("/api/aranceles")}catch(e){}}
+function openForm(c,preset={}){
+  editId=c?c.id:null;
+  $("#ftitle").textContent=c?"Editar cita":"Nueva cita";
+  $("#f-paciente").value=c?.paciente||preset.paciente||""; $("#f-rut").value=c?.rut||preset.rut||""; $("#f-tel").value=c?.telefono||preset.telefono||"";
+  $("#f-examen").value=c?.examen||""; $("#f-fecha").value=c?.fecha||dia;
+  $("#f-hora").value=c?.hora||preset.hora||"09:00";
+  $("#f-prevision").value=c?.prevision||preset.prevision||""; $("#f-medico").value=c?.medico||""; $("#f-notas").value=c?.notas||"";
+  $("#f-codigo").value="";
+  const eq=c?.equipo||preset.equipo||"tc"; setEquipo(eq,!c); if(c) $("#f-dur").value=String(c.duracion||15);
+  llenarCodigos(eq,c?.codigo||"");
+  $("#f-valor").value=c?.valor?$$(c.valor):""; $("#f-bonif").value=c?.valor?$$(c.bonificacion):"";
+  citaPagada=!!c?.pago_id;
+  $("#p-medio").value=""; $("#p-folio").value="";
+  $("#anular-box").hidden=true; $("#anular-motivo").value="";
+  segButtons($("#f-equipo"),EQUIPOS,eq,id=>setEquipo(id,!editId));
+  estadoSel=c?.estado||"agendado"; segButtons($("#f-estado"),ESTADOS,estadoSel,id=>estadoSel=id);
+  const del=$("#borrar"); del.hidden=!c||!canWrite; del.classList.remove("armed"); del.textContent="Eliminar";
+  $("#fmeta").textContent=c?`Creada por ${c.creado_por_nombre||"—"}${c.actualizado_por_nombre?` · última edición: ${c.actualizado_por_nombre}`:""}`:"";
+  $("#fmsg").textContent=canWrite?"":"Tu usuario es solo de lectura."; $("#fmsg").className="msg";
+  [...$("#form").elements].forEach(el=>{if(el.id!=="cancelar")el.disabled=!canWrite});
+  for(const id of ["#f-codigo","#f-prevision"]) $(id).disabled=!canWrite||citaPagada;
+  $("#pago").hidden=!canWrite&&!citaPagada;
+  $("#pago-hecho").hidden=!citaPagada; $("#pago-form").hidden=citaPagada;
+  if(citaPagada){
+    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_medio}${c.pago_folio?" · bono "+c.pago_folio:""} · ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar el examen o los valores, anula el pago.`;
+    $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
+  }
+  recalcular(false);
+  $("#scrim").hidden=false; setTimeout(()=>$("#f-paciente").focus(),30);
+}
+function closeForm(){$("#scrim").hidden=true;editId=null}
+$("#cancelar").addEventListener("click",closeForm);
+const SCRIMS=["scrim","uscrim","cscrim","kscrim","ascrim"];
+for(const id of SCRIMS) $("#"+id).addEventListener("click",e=>{if(e.target.id===id)$("#"+id).hidden=true});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")for(const id of SCRIMS)$("#"+id).hidden=true});
+
+function datosForm(){
+  return {paciente:$("#f-paciente").value.trim(),rut:$("#f-rut").value.trim(),telefono:$("#f-tel").value.trim(),
+    equipo:equipoSel,examen:$("#f-examen").value.trim(),fecha:$("#f-fecha").value,hora:$("#f-hora").value,
+    duracion:Number($("#f-dur").value),prevision:$("#f-prevision").value,medico:$("#f-medico").value.trim(),
+    estado:estadoSel,notas:$("#f-notas").value.trim(),codigo:$("#f-codigo").value,
+    valor:pesos($("#f-valor").value),bonificacion:pesos($("#f-bonif").value)};
+}
+function validarForm(data){
+  if(!data.paciente) return "Escribe el nombre del paciente.";
+  if(!data.fecha||!data.hora) return "Elige fecha y hora.";
+  if(data.bonificacion>data.valor) return "La bonificación no puede ser mayor que el valor.";
+  return "";
+}
+async function guardarCita(data){
+  const c=await api(editId?"/api/citas/"+editId:"/api/citas",{method:editId?"PUT":"POST",body:data});
+  editId=c.id; return c;
+}
+$("#form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const msg=$("#fmsg"), data=datosForm(), err=validarForm(data);
+  if(err){msg.className="msg err";msg.textContent=err;return}
+  const btn=$("#guardar"); btn.disabled=true;
+  try{
+    const eraEdicion=!!editId; await guardarCita(data); closeForm(); toast(eraEdicion?"Cita actualizada":"Cita agendada");
+    if(data.fecha!==dia) setDia(data.fecha); else cargar();
+  }catch(err){msg.className="msg err";msg.textContent=err.message}
+  finally{btn.disabled=false}
+});
+
+$("#cobrar").addEventListener("click",async()=>{
+  const msg=$("#fmsg"), data=datosForm(); msg.className="msg err";
+  let err=validarForm(data);
+  const copago=data.valor-data.bonificacion;
+  if(!err&&!data.valor) err="Elige la prestación o ingresa el valor del examen.";
+  if(!err&&!data.prevision) err="Elige la previsión del paciente.";
+  if(!err&&copago>0&&!$("#p-medio").value) err="Elige el medio de pago.";
+  if(!err&&data.prevision==="Fonasa"&&data.bonificacion>0&&!$("#p-folio").value.trim()) err="Ingresa el folio del bono Fonasa.";
+  if(err){msg.textContent=err;return}
+  const btn=$("#cobrar"); btn.disabled=true;
+  try{
+    const c=await guardarCita(data);
+    await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{medio:$("#p-medio").value,folio_bono:$("#p-folio").value.trim()}});
+    closeForm(); toast(copago>0?`Pago registrado: ${$$(copago)}`:"Atención registrada sin copago");
+    if(data.fecha!==dia) setDia(data.fecha); else cargar();
+  }catch(e){msg.textContent=e.message}
+  finally{btn.disabled=false}
+});
+
+$("#anular").addEventListener("click",async()=>{
+  const b=$("#anular"), box=$("#anular-box");
+  if(box.hidden){box.hidden=false;b.classList.add("armed");b.textContent="Confirmar anulación";$("#anular-motivo").focus();return}
+  const c=citas.find(x=>x.id===editId);
+  try{
+    await api(`/api/pagos/${c.pago_id}/anular`,{method:"POST",body:{motivo:$("#anular-motivo").value}});
+    toast("Pago anulado"); await cargar(); openForm(citas.find(x=>x.id===c.id));
+  }catch(e){$("#fmsg").className="msg err";$("#fmsg").textContent=e.message}
+});
+
+$("#borrar").addEventListener("click",async()=>{
+  const b=$("#borrar");
+  if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="Confirmar eliminación";return}
+  try{await api("/api/citas/"+editId,{method:"DELETE"});closeForm();toast("Cita eliminada");cargar()}
+  catch(err){$("#fmsg").className="msg err";$("#fmsg").textContent=err.message}
+});
+
+/* ---------- búsqueda de pacientes ---------- */
+let tBuscar;
+$("#buscar").addEventListener("input",e=>{
+  clearTimeout(tBuscar);
+  const q=e.target.value.trim(), box=$("#results");
+  if(q.length<2){box.hidden=true;return}
+  tBuscar=setTimeout(async()=>{
+    try{
+      const r=await api("/api/buscar?q="+encodeURIComponent(q));
+      box.innerHTML="";
+      if(!r.length){box.innerHTML='<div class="r-empty">Sin coincidencias.</div>'}
+      for(const c of r){
+        const b=document.createElement("button");b.type="button";
+        b.innerHTML='<span><b></b><br><span class="meta"></span></span><span class="r-meta"></span>';
+        b.querySelector("b").textContent=c.paciente;
+        b.querySelector(".meta").textContent=[c.rut,c.examen].filter(Boolean).join(" · ");
+        b.querySelector(".r-meta").textContent=fmtFecha(c.fecha)+" "+c.hora;
+        b.addEventListener("click",()=>{box.hidden=true;$("#buscar").value="";setDia(c.fecha);openForm(c)});
+        box.appendChild(b);
+      }
+      box.hidden=false;
+    }catch(err){}
+  },250);
+});
+document.addEventListener("click",e=>{if(!e.target.closest(".search"))$("#results").hidden=true});
+
+/* ---------- usuarios ---------- */
+async function cargarUsuarios(){
+  const list=$("#ulist"); list.innerHTML="";
+  try{
+    for(const u of await api("/api/usuarios")){
+      const row=document.createElement("div"); row.className="urow"+(u.activo?"":" off");
+      row.innerHTML='<div class="who"><b></b><span class="meta"></span></div>';
+      row.querySelector("b").textContent=u.nombre;
+      row.querySelector(".meta").textContent=u.usuario+(u.activo?"":" · desactivado");
+      const sel=document.createElement("select"); sel.setAttribute("aria-label","Rol de "+u.nombre);
+      for(const [k,v] of Object.entries(ROLES)){const o=document.createElement("option");o.value=k;o.textContent=v;o.selected=k===u.rol;sel.appendChild(o)}
+      sel.disabled=u.id===yo.id;
+      sel.addEventListener("change",async()=>{try{await api("/api/usuarios/"+u.id,{method:"PUT",body:{rol:sel.value}});toast("Rol actualizado")}catch(e){toast(e.message);cargarUsuarios()}});
+      row.appendChild(sel);
+      if(u.id!==yo.id){
+        const t=document.createElement("button");t.type="button";t.className="linkbtn";t.textContent=u.activo?"Desactivar":"Activar";
+        t.addEventListener("click",async()=>{try{await api("/api/usuarios/"+u.id,{method:"PUT",body:{activo:!u.activo}});cargarUsuarios()}catch(e){toast(e.message)}});
+        const k=document.createElement("button");k.type="button";k.className="linkbtn";k.textContent="Nueva clave";
+        k.addEventListener("click",async()=>{
+          const nueva=Array.from(crypto.getRandomValues(new Uint8Array(6)),x=>"abcdefghjkmnpqrstuvwxyz23456789"[x%31]).join("")+"-"+Math.floor(10+Math.random()*90);
+          try{await api("/api/usuarios/"+u.id,{method:"PUT",body:{clave:nueva}});
+            $("#umsg").className="msg";$("#umsg").textContent=`Nueva clave de ${u.usuario}: ${nueva}  (anótala, no se volverá a mostrar)`}catch(e){toast(e.message)}
+        });
+        row.append(k,t);
+      }
+      list.appendChild(row);
+    }
+  }catch(e){list.textContent=e.message}
+}
+$("#btnUsuarios").addEventListener("click",()=>{$("#umsg").textContent="";$("#uscrim").hidden=false;cargarUsuarios()});
+$("#ucerrar").addEventListener("click",()=>$("#uscrim").hidden=true);
+$("#uform").addEventListener("submit",async e=>{
+  e.preventDefault(); const m=$("#umsg");
+  try{
+    await api("/api/usuarios",{method:"POST",body:{nombre:$("#u-nombre").value,usuario:$("#u-usuario").value,clave:$("#u-clave").value,rol:$("#u-rol").value}});
+    m.className="msg";m.textContent=`Usuario ${$("#u-usuario").value.trim().toLowerCase()} creado.`;
+    $("#u-nombre").value="";$("#u-usuario").value="";$("#u-clave").value="";cargarUsuarios();
+  }catch(err){m.className="msg err";m.textContent=err.message}
+});
+
+/* ---------- mi clave ---------- */
+$("#btnClave").addEventListener("click",()=>{$("#c-clave").value="";$("#c-clave2").value="";$("#cmsg").textContent="";$("#cscrim").hidden=false;setTimeout(()=>$("#c-clave").focus(),30)});
+$("#ccerrar").addEventListener("click",()=>$("#cscrim").hidden=true);
+$("#cform").addEventListener("submit",async e=>{
+  e.preventDefault(); const m=$("#cmsg"); m.className="msg err";
+  if($("#c-clave").value!==$("#c-clave2").value){m.textContent="Las claves no coinciden.";return}
+  try{await api("/api/usuarios/"+yo.id,{method:"PUT",body:{clave:$("#c-clave").value}});$("#cscrim").hidden=true;toast("Clave actualizada")}
+  catch(err){m.textContent=err.message}
+});
+
+/* ---------- caja ---------- */
+const EQN={tc:"TC",rx:"RX",eco:"ECO"};
+let cajaFecha=null, cajaData=null;
+function tabla(el,filas,cols){
+  el.innerHTML="";
+  const t=document.createElement("table");
+  const tr=document.createElement("tr");
+  for(const c of cols){const th=document.createElement("th");th.textContent=c.t;if(c.n)th.className="n";tr.appendChild(th)}
+  t.appendChild(tr);
+  for(const f of filas){const r=document.createElement("tr");if(f._cls)r.className=f._cls;
+    for(const c of cols){const td=document.createElement("td");td.textContent=c.f(f);if(c.n)td.className="n";r.appendChild(td)}t.appendChild(r)}
+  if(el.tagName==="TABLE"){el.replaceChildren(...t.childNodes)}else el.appendChild(t);
+}
+function grupoTabla(el,obj,etq=k=>k){
+  const filas=Object.entries(obj).map(([k,v])=>({k:etq(k),...v}));
+  if(!filas.length){el.innerHTML='<p class="meta">Sin pagos.</p>';return}
+  tabla(el,filas,[{t:"",f:r=>r.k},{t:"N°",n:1,f:r=>r.cantidad},{t:"Bonificación",n:1,f:r=>$$(r.bonificacion)},{t:"Recaudado",n:1,f:r=>$$(r.copago)}]);
+}
+async function abrirCaja(fecha){
+  cajaFecha=fecha||cajaFecha; $("#kmsg").textContent="";
+  try{cajaData=await api("/api/caja"+(cajaFecha?"?fecha="+cajaFecha:""))}catch(e){$("#kmsg").className="msg err";$("#kmsg").textContent=e.message;return}
+  const d=cajaData, t=d.totales; cajaFecha=d.fecha;
+  $("#kscrim").hidden=false;
+  $("#k-fecha").value=d.fecha; $("#k-fecha").max=d.hoy;
+  
+  const st=$("#k-estado");
+  st.textContent=d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"—"} · ${d.cierre.creado.slice(11,16)}`:"Abierta";
+  st.className="pill "+(d.cierre?"closed":"open");
+  const tiles=[["Atenciones cobradas",t.atenciones],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Recaudado en caja",$$(t.recaudado)]];
+  $("#k-tiles").innerHTML="";
+  for(const [l,v] of tiles){const d2=document.createElement("div");d2.className="tile";d2.innerHTML="<span></span><b></b>";d2.children[0].textContent=l;d2.children[1].textContent=v;$("#k-tiles").appendChild(d2)}
+  grupoTabla($("#k-medio"),t.por_medio); grupoTabla($("#k-prev"),t.por_prevision); grupoTabla($("#k-equipo"),t.por_equipo,k=>EQN[k]||k);
+  tabla($("#k-pagos"),d.pagos.map(p=>({...p,_cls:p.anulado?"anulado":""})),[
+    {t:"Hora",f:p=>p.creado.slice(11,16)},{t:"Paciente",f:p=>p.paciente},{t:"Equipo",f:p=>EQN[p.equipo]||p.equipo},
+    {t:"Examen",f:p=>(p.codigo?p.codigo+" · ":"")+p.examen},{t:"Previsión",f:p=>p.prevision},
+    {t:"Valor",n:1,f:p=>$$(p.valor)},{t:"Bonif.",n:1,f:p=>$$(p.bonificacion)},{t:"Copago",n:1,f:p=>$$(p.copago)},
+    {t:"Medio",f:p=>p.medio},{t:"Bono",f:p=>p.folio_bono},{t:"Cajero",f:p=>p.usuario_nombre||""},
+    {t:"",f:p=>p.anulado?"Anulado: "+p.motivo_anulacion:""}]);
+  if(!d.pagos.length) $("#k-pagos").innerHTML='<tr><td class="meta">Aún no hay pagos registrados este día.</td></tr>';
+  // cierre
+  const k=$("#k-cierre"); k.innerHTML="";
+  if(d.cierre){
+    const c=d.cierre;
+    k.innerHTML=`<h3>Cierre de caja</h3><div class="cuadre"><div><span>Efectivo esperado</span><b></b></div><div><span>Efectivo contado</span><b></b></div><div><span>Diferencia</span><b></b></div></div><p class="meta obs"></p>`;
+    const bs=k.querySelectorAll(".cuadre b"); bs[0].textContent=$$(c.resumen.efectivo_esperado); bs[1].textContent=$$(c.efectivo_contado);
+    bs[2].textContent=(c.diferencia>0?"+":c.diferencia<0?"−":"")+$$(Math.abs(c.diferencia)); bs[2].className=c.diferencia?"bad":"ok";
+    k.querySelector(".obs").textContent=c.observaciones?"Observaciones: "+c.observaciones:"";
+    if(yo.rol==="admin"){const b=document.createElement("button");b.type="button";b.className="btn noprint";b.textContent="Reabrir caja";
+      b.addEventListener("click",async()=>{if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="Confirmar: reabrir caja";return}
+        try{await api("/api/caja/reabrir",{method:"POST",body:{fecha:d.fecha}});toast("Caja reabierta");abrirCaja()}catch(e){toast(e.message)}});k.appendChild(b)}
+  }else if(canWrite){
+    k.innerHTML=`<h3>Cerrar caja</h3>
+      <div class="cuadre"><div><span>Efectivo esperado</span><b id="k-esperado"></b></div>
+      <div class="field"><label for="k-contado">Efectivo contado</label><input id="k-contado" inputmode="numeric" autocomplete="off" placeholder="$0"></div>
+      <div><span>Diferencia</span><b id="k-dif">—</b></div></div>
+      <div class="field"><label for="k-obs">Observaciones</label><textarea id="k-obs" placeholder="Ej. sencillo inicial, retiros, diferencias"></textarea></div>
+      <p class="meta">Al cerrar la caja no se pueden registrar ni anular pagos de este día.</p>
+      <button type="button" class="btn primary" id="k-cerrar">Cerrar caja del ${parseISO(d.fecha).toLocaleDateString("es-CL")}</button>`;
+    $("#k-esperado").textContent=$$(t.efectivo_esperado);
+    $("#k-contado").addEventListener("input",e=>{const v=pesos(e.target.value);const dif=v-t.efectivo_esperado;
+      $("#k-dif").textContent=e.target.value?(dif>0?"+":dif<0?"−":"")+$$(Math.abs(dif)):"—";$("#k-dif").className=e.target.value?(dif?"bad":"ok"):""});
+    $("#k-contado").addEventListener("blur",e=>{if(e.target.value)e.target.value=$$(pesos(e.target.value))});
+    $("#k-cerrar").addEventListener("click",async()=>{
+      const b=$("#k-cerrar"), m=$("#kmsg"); m.className="msg err";
+      if(!$("#k-contado").value){m.textContent="Ingresa el efectivo contado en caja.";return}
+      if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="Confirmar cierre de caja";return}
+      try{await api("/api/caja/cerrar",{method:"POST",body:{fecha:d.fecha,efectivo_contado:pesos($("#k-contado").value),observaciones:$("#k-obs").value}});
+        toast("Caja cerrada");abrirCaja()}catch(e){m.textContent=e.message}
+    });
+  }
+}
+$("#btnCaja").addEventListener("click",()=>abrirCaja(null));
+$("#k-fecha").addEventListener("change",e=>{if(e.target.value)abrirCaja(e.target.value)});
+$("#kcerrar").addEventListener("click",()=>$("#kscrim").hidden=true);
+$("#k-print").addEventListener("click",()=>window.print());
+
+/* ---------- aranceles ---------- */
+let filtroEq="tc";
+function pintarAranceles(){
+  const q=$("#a-buscar").value.trim().toLowerCase();
+  const filas=ARANCEL.filter(a=>a.equipo===filtroEq&&(!q||a.codigo.includes(q)||a.nombre.toLowerCase().includes(q)))
+    .map(a=>({...a,_cls:a.activo?"":"anulado"}));
+  tabla($("#a-tabla"),filas,[{t:"Código",f:a=>a.codigo},{t:"Prestación",f:a=>a.nombre},{t:"Valor N2",n:1,f:a=>$$(a.fonasa_total)},
+    {t:"Bonif. N2",n:1,f:a=>$$(a.fonasa_bonif)},{t:"Copago",n:1,f:a=>$$(a.fonasa_total-a.fonasa_bonif)},{t:"Particular",n:1,f:a=>a.particular?$$(a.particular):"—"}]);
+  if(!filas.length) $("#a-tabla").innerHTML=`<tr><td class="meta">No hay prestaciones de ${EQN[filtroEq]} cargadas. Agrégalas con el formulario de arriba.</td></tr>`;
+  [...$("#a-tabla").querySelectorAll("tr")].slice(1).forEach((tr,i)=>{if(!filas[i])return;tr.classList.add("click");tr.tabIndex=0;
+    const ed=()=>editarArancel(filas[i]);tr.addEventListener("click",ed);tr.addEventListener("keydown",e=>{if(e.key==="Enter")ed()})});
+}
+function editarArancel(a){
+  $("#a-codigo").value=a?.codigo||""; $("#a-codigo").readOnly=!!a; $("#a-nombre").value=a?.nombre||"";
+  $("#a-equipo").value=a?.equipo||filtroEq; $("#a-activo").value=a&&!a.activo?"0":"1";
+  $("#a-total").value=a?$$(a.fonasa_total):""; $("#a-bonif").value=a?$$(a.fonasa_bonif):""; $("#a-part").value=a?.particular?$$(a.particular):"";
+  $("#amsg").textContent=""; $("#a-guardar").textContent=a?"Guardar cambios":"Agregar prestación";
+  if(a) $("#ascrim .panel").scrollTo({top:0,behavior:"smooth"});
+}
+async function abrirAranceles(){
+  await cargarAranceles();
+  const admin=yo.rol==="admin";
+  $("#aform").hidden=!admin;
+  segButtons($("#a-filtro"),EQUIPOS,filtroEq,id=>{filtroEq=id;pintarAranceles()});
+  editarArancel(null); pintarAranceles(); $("#ascrim").hidden=false;
+}
+$("#btnAranceles").addEventListener("click",abrirAranceles);
+$("#acerrar").addEventListener("click",()=>$("#ascrim").hidden=true);
+$("#a-nuevo").addEventListener("click",()=>editarArancel(null));
+$("#a-buscar").addEventListener("input",pintarAranceles);
+for(const id of ["#a-total","#a-bonif","#a-part"]) $(id).addEventListener("blur",e=>{if(e.target.value)e.target.value=$$(pesos(e.target.value))});
+$("#aform").addEventListener("submit",async e=>{
+  e.preventDefault(); const m=$("#amsg"); m.className="msg err";
+  const codigo=$("#a-codigo").value.replace(/\s|-/g,"");
+  if(!/^[\w.]{1,20}$/.test(codigo)){m.textContent="Escribe el código de la prestación (ej. 0403001).";return}
+  try{
+    await api("/api/aranceles/"+encodeURIComponent(codigo),{method:"PUT",body:{nombre:$("#a-nombre").value,equipo:$("#a-equipo").value,
+      fonasa_total:pesos($("#a-total").value),fonasa_bonif:pesos($("#a-bonif").value),particular:pesos($("#a-part").value),activo:$("#a-activo").value==="1"}});
+    await cargarAranceles(); filtroEq=$("#a-equipo").value; segButtons($("#a-filtro"),EQUIPOS,filtroEq,id=>{filtroEq=id;pintarAranceles()});
+    editarArancel(null); pintarAranceles(); toast("Prestación guardada");
+  }catch(err){m.textContent=err.message}
+});
+
+$("#imp-btn").addEventListener("click",async()=>{
+  const m=$("#imp-msg"), lineas=$("#imp-texto").value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!lineas.length){m.textContent="Pega al menos una fila.";return}
+  let ok=0; const malas=[];
+  $("#imp-btn").disabled=true;
+  for(const [i,l] of lineas.entries()){
+    const c=l.split(/\t|;/).map(x=>x.trim());
+    const codigo=(c[0]||"").replace(/\s|-/g,""), equipo=(c[2]||"").toLowerCase().replace("eco","eco");
+    if(/^c[oó]digo$/i.test(codigo)) continue;
+    if(!/^[\w.]{1,20}$/.test(codigo)||!["tc","rx","eco"].includes(equipo)||!c[1]){malas.push(i+1);continue}
+    try{await api("/api/aranceles/"+encodeURIComponent(codigo),{method:"PUT",body:{nombre:c[1],equipo,fonasa_total:pesos(c[3]),fonasa_bonif:pesos(c[4]),particular:pesos(c[5]),activo:true}});ok++}
+    catch(e){malas.push(i+1)}
+  }
+  $("#imp-btn").disabled=false;
+  m.textContent=`${ok} prestaciones cargadas.`+(malas.length?` Revisa las filas ${malas.join(", ")}: falta código, nombre, equipo válido, o la bonificación supera el valor.`:"");
+  if(ok){$("#imp-texto").value="";await cargarAranceles();pintarAranceles()}
+});
+
+/* ---------- exportar cierre de caja: PDF y Excel ---------- */
+// Usa jsPDF + AutoTable y SheetJS (cargados desde cdnjs). Funciona igual en la app instalada
+// (descarga normal del navegador) y en la demo publicada (permiso de descargas del artifact).
+let _descargas;
+async function guardarArchivo(nombre, blob){
+  if(_descargas===undefined){try{_descargas=window.claude?.use?await window.claude.use("downloads"):null}catch(e){_descargas=null}}
+  if(_descargas){
+    try{await _descargas.save({filename:nombre,data:blob});toast("Archivo descargado");}
+    catch(e){if(e?.code!=="declined")toast("No se pudo descargar el archivo.");}
+    return;
+  }
+  const url=URL.createObjectURL(blob), a=document.createElement("a");
+  a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+const fechaLarga=f=>parseISO(f).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+const fechaCorta=f=>{const [y,m,d]=f.split("-");return `${d}-${m}-${y}`};
+const signo=n=>(n>0?"+":n<0?"-":"")+$$(Math.abs(n));
+function filasGrupo(obj,etq=k=>k){return Object.entries(obj).map(([k,v])=>[etq(k),v.cantidad,v.valor,v.bonificacion,v.copago])}
+
+async function exportarPDF(){
+  const d=cajaData; if(!d) return;
+  if(!window.jspdf){toast("No se pudo cargar el generador de PDF. Revisa tu conexión.");return}
+  const {jsPDF}=window.jspdf, t=d.totales;
+  const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+  const W=doc.internal.pageSize.getWidth(), M=14;
+  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("Cierre de caja",M,18);
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(90);
+  doc.text(fechaLarga(d.fecha).replace(/^./,c=>c.toUpperCase()),M,24);
+  doc.text(d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"-"} a las ${d.cierre.creado.slice(11,16)}`:"Caja abierta (sin cerrar)",W-M,18,{align:"right"});
+  doc.setTextColor(0);
+  // resumen
+  const tiles=[["Atenciones cobradas",String(t.atenciones)],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Recaudado en caja",$$(t.recaudado)]];
+  const tw=(W-2*M-9)/4;
+  tiles.forEach(([l,v],i)=>{const x=M+i*(tw+3);
+    doc.setFillColor(i===3?30:238,i===3?40:241,i===3?50:244); doc.roundedRect(x,30,tw,18,2,2,"F");
+    doc.setTextColor(i===3?220:100); doc.setFontSize(8); doc.text(l.toUpperCase(),x+4,36);
+    doc.setTextColor(i===3?255:0); doc.setFontSize(14); doc.setFont("helvetica","bold"); doc.text(v,x+4,44); doc.setFont("helvetica","normal");});
+  doc.setTextColor(0);
+  const estilo={fontSize:8.5,cellPadding:1.8,lineColor:[220,226,232],lineWidth:0.1};
+  const cab={fillColor:[31,95,139],textColor:255,fontStyle:"bold"};
+  const money=r=>r.map((c,i)=>i>=2&&typeof c==="number"?$$(c):c);
+  const grupos=[["Por medio de pago",filasGrupo(t.por_medio)],["Por previsión",filasGrupo(t.por_prevision)],["Por equipo",filasGrupo(t.por_equipo,k=>EQN[k]||k)]];
+  const gw=(W-2*M-8)/3; let yMax=56;
+  grupos.forEach(([tit,filas],i)=>{
+    const x=M+i*(gw+4);
+    doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text(tit,x,56); doc.setFont("helvetica","normal");
+    doc.autoTable({startY:58,margin:{left:x},tableWidth:gw,styles:estilo,headStyles:cab,
+      head:[["","N°","Valor","Bonif.","Recaudado"]],body:filas.length?filas.map(money):[["Sin pagos","","","",""]],
+      columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}}});
+    yMax=Math.max(yMax,doc.lastAutoTable.finalY);
+  });
+  // pagos
+  doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text("Pagos del día",M,yMax+8); doc.setFont("helvetica","normal");
+  doc.autoTable({startY:yMax+10,margin:{left:M,right:M},styles:estilo,headStyles:cab,
+    head:[["Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonif.","Copago","Medio","Bono","Cajero","Estado"]],
+    body:d.pagos.length?d.pagos.map(p=>[p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
+      $$(p.valor),$$(p.bonificacion),$$(p.copago),p.medio,p.folio_bono,p.usuario_nombre||"",p.anulado?"Anulado: "+p.motivo_anulacion:"OK"]):[["","Sin pagos registrados","","","","","","","","","","","",""]],
+    columnStyles:{5:{cellWidth:60},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"}},
+    didParseCell:h=>{if(h.section==="body"&&d.pagos[h.row.index]?.anulado){h.cell.styles.textColor=[150,150,150];if(h.column.index===13)h.cell.styles.textColor=[180,52,46]}}});
+  // cuadre
+  let y=doc.lastAutoTable.finalY+10;
+  if(y>170){doc.addPage();y=20}
+  doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text("Cuadre de efectivo",M,y); doc.setFont("helvetica","normal");
+  const c=d.cierre;
+  doc.autoTable({startY:y+2,margin:{left:M},tableWidth:110,styles:{...estilo,fontSize:9.5},theme:"plain",
+    body:[["Efectivo esperado",$$(t.efectivo_esperado)],["Efectivo contado",c?$$(c.efectivo_contado):"-"],["Diferencia",c?signo(c.diferencia):"-"],
+      ["Pagos anulados",String(t.anulados)],["Observaciones",c?.observaciones||"-"]],
+    columnStyles:{0:{fontStyle:"bold",cellWidth:45},1:{halign:"left"}}});
+  y=doc.lastAutoTable.finalY+22;
+  if(y>190){doc.addPage();y=40}
+  doc.setDrawColor(120); doc.line(M,y,M+70,y); doc.line(W-M-70,y,W-M,y);
+  doc.setFontSize(8.5); doc.setTextColor(90); doc.text("Firma cajero(a)",M,y+5); doc.text("Firma supervisor(a)",W-M-70,y+5);
+  // pie
+  const n=doc.getNumberOfPages(), gen=new Date().toLocaleString("es-CL");
+  for(let i=1;i<=n;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(130);
+    doc.text(`Generado el ${gen}`,M,200);doc.text(`Página ${i} de ${n}`,W-M,200,{align:"right"})}
+  await guardarArchivo(`cierre-caja-${fechaCorta(d.fecha)}.pdf`,doc.output("blob"));
+}
+
+async function exportarExcel(){
+  const d=cajaData; if(!d) return;
+  if(!window.XLSX){toast("No se pudo cargar el generador de Excel. Revisa tu conexión.");return}
+  const t=d.totales, c=d.cierre, FMT='"$"#,##0';
+  const wb=XLSX.utils.book_new();
+  // Hoja Resumen
+  const res=[["Cierre de caja",fechaLarga(d.fecha).replace(/^./,c=>c.toUpperCase())],["Estado",c?`Cerrada por ${c.usuario_nombre||"-"} a las ${c.creado.slice(11,16)}`:"Abierta (sin cerrar)"],[],
+    ["Atenciones cobradas",t.atenciones],["Valor total",t.valor],["Bonificación (bonos)",t.bonificacion],["Recaudado en caja",t.recaudado],["Pagos anulados",t.anulados],[],
+    ["Efectivo esperado",t.efectivo_esperado],["Efectivo contado",c?c.efectivo_contado:""],["Diferencia",c?c.diferencia:""],["Observaciones",c?.observaciones||""],[]];
+  const bloques=[["Por medio de pago",filasGrupo(t.por_medio)],["Por previsión",filasGrupo(t.por_prevision)],["Por equipo",filasGrupo(t.por_equipo,k=>EQN[k]||k)]];
+  const filasMoneda=[4,5,6,9,10,11]; // filas (0-index) con montos en columna B
+  for(const [tit,filas] of bloques){
+    res.push([tit]); res.push(["","N°","Valor","Bonificación","Recaudado"]);
+    for(const f of filas) res.push(f);
+    res.push([]);
+  }
+  const ws1=XLSX.utils.aoa_to_sheet(res);
+  for(const r of filasMoneda){const ref=XLSX.utils.encode_cell({r,c:1});if(ws1[ref]&&typeof ws1[ref].v==="number")ws1[ref].z=FMT}
+  res.forEach((fila,r)=>{if(fila.length===5&&typeof fila[1]==="number")for(const col of [2,3,4]){const ref=XLSX.utils.encode_cell({r,c:col});if(ws1[ref])ws1[ref].z=FMT}});
+  ws1["!cols"]=[{wch:24},{wch:34},{wch:14},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws1,"Resumen");
+  // Hoja Pagos
+  const cab=["Fecha","Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonificación","Copago","Medio","Folio bono","Cajero","Estado","Motivo anulación"];
+  const filas=d.pagos.map(p=>[fechaCorta(p.fecha),p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
+    p.valor,p.bonificacion,p.copago,p.medio,p.folio_bono,p.usuario_nombre||"",p.anulado?"Anulado":"OK",p.motivo_anulacion||""]);
+  const validos=d.pagos.filter(p=>!p.anulado);
+  filas.push([]); filas.push(["","","Total (sin anulados)","","","","","",t.valor,t.bonificacion,t.recaudado]);
+  const ws2=XLSX.utils.aoa_to_sheet([cab,...filas]);
+  for(let r=1;r<=filas.length;r++)for(const col of [8,9,10]){const ref=XLSX.utils.encode_cell({r,c:col});if(ws2[ref]&&typeof ws2[ref].v==="number")ws2[ref].z=FMT}
+  ws2["!cols"]=[{wch:11},{wch:7},{wch:24},{wch:13},{wch:7},{wch:9},{wch:46},{wch:11},{wch:11},{wch:12},{wch:11},{wch:13},{wch:11},{wch:18},{wch:9},{wch:28}];
+  ws2["!autofilter"]={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(1,d.pagos.length),c:cab.length-1}})};
+  XLSX.utils.book_append_sheet(wb,ws2,"Pagos");
+  const buf=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  await guardarArchivo(`cierre-caja-${fechaCorta(d.fecha)}.xlsx`,new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+}
+$("#k-pdf").addEventListener("click",exportarPDF);
+$("#k-xlsx").addEventListener("click",exportarExcel);
+
+/* ---------- navegación y sesión ---------- */
+const shift=n=>{const d=parseISO(dia);d.setDate(d.getDate()+n);setDia(isoDate(d))};
+$("#prev").addEventListener("click",()=>shift(-1));
+$("#next").addEventListener("click",()=>shift(1));
+$("#hoy").addEventListener("click",()=>setDia(isoDate(new Date())));
+$("#fecha").addEventListener("change",e=>{if(e.target.value)setDia(e.target.value)});
+$("#nueva").addEventListener("click",()=>{const n=new Date();const m=Math.min(Math.max(Math.ceil((n.getHours()*60+n.getMinutes())/STEP)*STEP,START),END-STEP);openForm(null,{equipo:"tc",hora:toHora(m)})});
+$("#salir").addEventListener("click",async()=>{await fetch("/api/logout",{method:"POST"});location.href="/login"});
+setInterval(()=>{if(dia===isoDate(new Date()))render()},60000);
+
+buildGrid(); render();
+(async()=>{
+  try{
+    yo=await api("/api/me");
+    $("#me").textContent=yo.nombre||yo.usuario;
+    canWrite=yo.rol!=="lectura";
+    $("#nueva").hidden=!canWrite;
+    $("#btnUsuarios").hidden=yo.rol!=="admin";
+    await cargarAranceles();
+    cargar();
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
