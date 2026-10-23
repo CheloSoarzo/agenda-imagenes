@@ -34,6 +34,7 @@
       <button class="linkbtn" id="btnCaja">Caja</button>
       <button class="linkbtn" id="btnAranceles">Aranceles</button>
       <button class="linkbtn" id="btnUsuarios" hidden>Usuarios</button>
+      <a class="linkbtn" id="btnRespaldo" href="/api/respaldo" hidden title="Descarga una copia completa de la base de datos">Respaldo</a>
       <button class="linkbtn" id="btnClave">Cambiar clave</button>
       <button class="linkbtn" id="salir">Salir</button>
     </div>
@@ -845,6 +846,7 @@ buildGrid(); render();
     canWrite=yo.rol!=="lectura";
     $("#nueva").hidden=!canWrite;
     $("#btnUsuarios").hidden=yo.rol!=="admin";
+    $("#btnRespaldo").hidden=yo.rol!=="admin";
     await cargarAranceles();
     cargar();
   }catch(e){}
