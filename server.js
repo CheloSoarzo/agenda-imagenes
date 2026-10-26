@@ -117,7 +117,7 @@ function validarCita(b) {
     equipo: txt(b.equipo, 5), paciente: txt(b.paciente, 120), rut: txt(b.rut, 20),
     telefono: txt(b.telefono, 30), examen: txt(b.examen, 160), prevision: txt(b.prevision, 40),
     medico: txt(b.medico, 120), estado: txt(b.estado, 20) || "agendado", notas: txt(b.notas, 2000),
-    codigo: txt(b.codigo, 20), valor: entero(b.valor), bonificacion: entero(b.bonificacion), copago: 0,
+    codigo: "", valor: 0, bonificacion: 0, copago: 0, examenes: "",
   };
   if (!c.paciente) fallo(400, "Escribe el nombre del paciente.");
   if (!reFecha.test(c.fecha)) fallo(400, "La fecha no es válida.");
@@ -125,25 +125,37 @@ function validarCita(b) {
   if (!EQUIPOS.includes(c.equipo)) fallo(400, "Elige un equipo.");
   if (!ESTADOS.includes(c.estado)) fallo(400, "El estado no es válido.");
   if (c.duracion < 5 || c.duracion > 240) fallo(400, "La duración debe estar entre 5 y 240 minutos.");
-  return precioCita(c);
+  // Uno o varios exámenes (cada uno con su código y valores). Se aceptan también los campos sueltos de versiones anteriores.
+  let lineas = Array.isArray(b.examenes) ? b.examenes : [{ codigo: b.codigo, nombre: b.examen, valor: b.valor, bonificacion: b.bonificacion }];
+  if (lineas.length > 10) fallo(400, "Una cita puede tener hasta 10 exámenes.");
+  lineas = lineas.map((l) => precioLinea({ codigo: txt(l?.codigo, 20), nombre: txt(l?.nombre ?? l?.examen, 160),
+    valor: entero(l?.valor), bonificacion: entero(l?.bonificacion) }, c.prevision))
+    .filter((l) => l.codigo || l.nombre || l.valor);
+  c.codigo = lineas.map((l) => l.codigo).filter(Boolean).join("+");
+  c.examen = lineas.map((l) => l.nombre).filter(Boolean).join(" + ").slice(0, 600);
+  c.valor = lineas.reduce((t, l) => t + l.valor, 0);
+  c.bonificacion = lineas.reduce((t, l) => t + l.bonificacion, 0);
+  c.copago = c.valor - c.bonificacion;
+  c.examenes = lineas.length > 1 ? JSON.stringify(lineas) : "";
+  return c;
 }
 // Montos en pesos: se ignoran puntos de miles, "$" y espacios
 const entero = (v) => (typeof v === "number" ? Math.max(0, Math.round(v)) : Number(String(v ?? "").replace(/\D/g, "")) || 0);
 
-// Valores del examen: con Fonasa se usan siempre los del arancel nivel 2;
+// Valores de cada examen: con Fonasa se usan siempre los del arancel nivel 2;
 // en las demás previsiones se respeta lo ingresado (por defecto el precio particular).
-function precioCita(c) {
-  const a = c.codigo ? db.prepare("SELECT * FROM aranceles WHERE codigo = ?").get(c.codigo) : null;
-  if (a && !c.examen) c.examen = a.nombre;
-  if (c.prevision === "Fonasa" && a) {
-    c.valor = a.fonasa_total; c.bonificacion = a.fonasa_bonif;
-  } else if (c.prevision === "Particular") {
-    if (!c.valor && a) c.valor = a.particular || a.fonasa_total;
-    c.bonificacion = 0;
+function precioLinea(l, prevision) {
+  const a = l.codigo ? db.prepare("SELECT * FROM aranceles WHERE codigo = ?").get(l.codigo) : null;
+  if (a && !l.nombre) l.nombre = a.nombre;
+  if (prevision === "Fonasa" && a) {
+    l.valor = a.fonasa_total; l.bonificacion = a.fonasa_bonif;
+  } else if (prevision === "Particular") {
+    if (!l.valor && a) l.valor = a.particular || a.fonasa_total;
+    l.bonificacion = 0;
   }
-  if (c.bonificacion > c.valor) fallo(400, "La bonificación no puede ser mayor que el valor del examen.");
-  c.copago = c.valor - c.bonificacion;
-  return c;
+  if (l.bonificacion > l.valor) fallo(400, `La bonificación no puede ser mayor que el valor${l.nombre ? " en " + l.nombre : ""}.`);
+  l.copago = l.valor - l.bonificacion;
+  return l;
 }
 
 // ---------- caja ----------
@@ -295,8 +307,8 @@ const rutas = [
 
   ["POST", /^\/api\/citas$/, "escribir", async (req, u) => {
     const c = validarCita(await leerCuerpo(req));
-    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,examen,prevision,medico,estado,notas,codigo,valor,bonificacion,copago,creado_por,actualizado_por)
-      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@examen,@prevision,@medico,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@uid,@uid)`)
+    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,examen,prevision,medico,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
+      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@examen,@prevision,@medico,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
       .run({ ...c, uid: u.id });
     return [201, citaPorId(Number(r.lastInsertRowid))];
   }],
@@ -306,12 +318,12 @@ const rutas = [
     const c = validarCita(await leerCuerpo(req));
     // Si ya está pagada, los datos de cobro quedan fijos (para cambiarlos hay que anular el pago)
     if (pagoActivo(id)) {
-      const prev = db.prepare("SELECT codigo, examen, prevision, valor, bonificacion, copago FROM citas WHERE id = ?").get(id);
+      const prev = db.prepare("SELECT codigo, examen, prevision, valor, bonificacion, copago, examenes FROM citas WHERE id = ?").get(id);
       Object.assign(c, plain(prev));
     }
     const r = db.prepare(`UPDATE citas SET fecha=@fecha,hora=@hora,duracion=@duracion,equipo=@equipo,paciente=@paciente,rut=@rut,
       telefono=@telefono,examen=@examen,prevision=@prevision,medico=@medico,estado=@estado,notas=@notas,
-      codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,
+      codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");
     return [200, citaPorId(id)];
@@ -351,9 +363,9 @@ const rutas = [
     const folio = txt(b.folio_bono, 40);
     if (c.prevision === "Fonasa" && c.bonificacion > 0 && !folio) fallo(400, "Ingresa el folio del bono Fonasa.");
     db.prepare(`INSERT INTO pagos (cita_id, fecha, paciente, rut, equipo, codigo, examen, prevision, valor, bonificacion, copago, medio, folio_bono, usuario_id, creado,
-      descuento, descuento_motivo, descuento_detalle)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
-      c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle);
+      descuento, descuento_motivo, descuento_detalle, examenes)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
+      c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "");
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
     return [201, citaPorId(id)];
   }],

@@ -6,7 +6,7 @@ El personal ingresa con usuario y clave, y todos ven la misma agenda (se actuali
 - Vista por **día** (una columna por equipo) o por **semana** (una columna por día), de 08:00 a 21:00 en bloques de 15 minutos.
 - Panel con selector de agenda (TC, RX, Eco o todas), calendario del mes con los días que tienen citas y ocupación del día o semana.
 - **Orden médica adjunta** a cada cita: foto (se reduce automáticamente a ~100–300 KB) o PDF, hasta 10 MB. Se guarda dentro de la base de datos, así que el respaldo la incluye.
-- Ficha de la cita: paciente, RUT, teléfono, examen, duración, previsión, médico solicitante y notas.
+- Ficha de la cita: paciente, RUT, teléfono, uno o **varios exámenes** (cada uno con su código, valor y bonificación; el cobro suma todos), duración, previsión, médico solicitante y notas.
 - Estados: agendado, confirmado, llegó, atendido, no asistió y cancelado.
 - Las citas que se cruzan en el mismo equipo se muestran lado a lado y marcadas en rojo.
 - Búsqueda de pacientes por nombre o RUT.
