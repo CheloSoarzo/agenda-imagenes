@@ -11,7 +11,8 @@
 <body>
 <div class="login-wrap">
   <form class="login" id="form" novalidate>
-    <div class="mods"><span class="tc">TC</span><span class="rx">RX</span><span class="eco">ECO</span></div>
+    <div class="login-logo" id="logo-box" hidden><img id="logo" alt=""></div>
+    <div class="mods" id="mods"><span class="tc">TC</span><span class="rx">RX</span><span class="eco">ECO</span></div>
     <h1>Agenda de Imágenes</h1>
     <p class="sub">Ingresa con tu usuario del centro.</p>
     <div class="field"><label for="usuario">Usuario</label><input id="usuario" autocomplete="username" autocapitalize="none" required></div>
@@ -35,6 +36,11 @@ f.addEventListener("submit",async e=>{
   btn.disabled=false;
 });
 document.getElementById("usuario").focus();
+fetch("/api/config").then(r=>r.json()).then(c=>{
+  if(c.centro){document.querySelector(".login h1").textContent="Agenda "+c.centro;document.title="Ingresar · Agenda "+c.centro}
+  if(c.logo){const img=document.getElementById("logo");img.alt=c.centro?"Logo "+c.centro:"Logo del centro";
+    img.onload=()=>{document.getElementById("logo-box").hidden=false;document.getElementById("mods").hidden=true};img.src=c.logo}
+}).catch(()=>{});
 </script>
 </body>
 </html>

@@ -11,14 +11,17 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand">
-      <span>Agenda por equipo</span>
-      <h1 id="dayname" class="dayname">—</h1>
+    <div class="brand-row">
+      <div class="marca" id="brand-logo" hidden><img alt=""></div>
+      <div class="brand">
+        <span id="brand-centro">Agenda por equipo</span>
+        <h1 id="dayname" class="dayname">—</h1>
+      </div>
     </div>
     <div class="daynav">
-      <button class="btn icon" id="prev" aria-label="Día anterior">‹</button>
+      <button class="btn icon" id="prev" aria-label="Anterior">‹</button>
       <input type="date" id="fecha" aria-label="Fecha">
-      <button class="btn icon" id="next" aria-label="Día siguiente">›</button>
+      <button class="btn icon" id="next" aria-label="Siguiente">›</button>
       <button class="btn" id="hoy">Hoy</button>
       <button class="btn primary" id="nueva">Nueva cita</button>
     </div>
@@ -51,8 +54,12 @@
           <option value="todas">Todas las agendas</option>
         </select>
       </div>
+      <div class="seg vistas" id="vistas" role="group" aria-label="Vista">
+        <button type="button" data-v="dia">Día</button>
+        <button type="button" data-v="semana">Semana</button>
+      </div>
       <div class="ocupacion" id="ocupacion" title="Minutos agendados sobre el horario de atención del día">
-        <div class="oc-top"><span>Ocupación del día</span><b id="oc-pct">0%</b></div>
+        <div class="oc-top"><span id="oc-label">Ocupación del día</span><b id="oc-pct">0%</b></div>
         <div class="oc-bar"><i id="oc-fill"></i></div>
       </div>
       <div class="minical" id="minical">
@@ -110,6 +117,15 @@
     </div>
     <div class="field"><label>Estado</label><div class="seg" id="f-estado"></div></div>
     <div class="field"><label for="f-notas">Notas</label><textarea id="f-notas" placeholder="Preparación, ayuno, creatinina, alergia a contraste…"></textarea></div>
+    <div class="adjuntos" id="adjuntos">
+      <div class="adj-head">
+        <strong class="pago-tit">Orden médica</strong>
+        <label class="btn sm" id="adj-btn" for="adj-file">Adjuntar foto o PDF</label>
+        <input type="file" id="adj-file" accept="image/*,application/pdf" multiple hidden>
+      </div>
+      <div class="adj-list" id="adj-list"></div>
+      <p class="meta" id="adj-msg"></p>
+    </div>
     <div class="pago" id="pago" hidden>
       <strong class="pago-tit">Pago</strong>
       <div id="pago-hecho" hidden>
@@ -125,6 +141,16 @@
             <select id="p-medio"><option value="">Elige…</option><option>Efectivo</option><option>Débito</option><option>Crédito</option><option>Transferencia</option></select></div>
           <div class="field" id="p-folio-f"><label for="p-folio">Folio bono Fonasa</label><input id="p-folio" autocomplete="off" inputmode="numeric"></div>
         </div>
+        <div class="desc">
+          <div class="row3">
+            <div class="field"><label for="p-dtipo">Descuento</label>
+              <select id="p-dtipo"><option value="">Sin descuento</option><option value="pct">Porcentaje (%)</option><option value="monto">Monto ($)</option></select></div>
+            <div class="field" id="p-dvalor-f" hidden><label for="p-dvalor" id="p-dvalor-l">Porcentaje</label><input id="p-dvalor" inputmode="decimal" autocomplete="off"></div>
+            <div class="field" id="p-dmotivo-f" hidden><label for="p-dmotivo">Motivo</label><input id="p-dmotivo" list="motivos-desc" autocomplete="off" placeholder="Ej. convenio"></div>
+          </div>
+          <datalist id="motivos-desc"><option value="Funcionario"><option value="Convenio"><option value="Adulto mayor"><option value="Cortesía"><option value="Paciente frecuente"><option value="Campaña"></datalist>
+        </div>
+        <div class="total-pagar"><div><span>Total a pagar</span><small id="p-desc-txt"></small></div><b id="p-total">$0</b></div>
         <button type="button" class="btn pay" id="cobrar">Guardar y cobrar</button>
       </div>
     </div>
@@ -177,7 +203,7 @@
 <div class="scrim" id="kscrim" hidden>
   <div class="panel wide" id="caja">
     <div class="caja-head">
-      <h2>Caja del día</h2>
+      <div class="caja-marca"><div class="marca" id="k-logo" hidden><img alt=""></div><h2 id="k-titulo">Caja del día</h2></div>
       <div class="caja-ctrl">
         <input type="date" id="k-fecha" aria-label="Día de caja">
         <span class="pill" id="k-estado"></span>
@@ -188,6 +214,7 @@
       <div><h3>Por medio de pago</h3><div class="tbl" id="k-medio"></div></div>
       <div><h3>Por previsión</h3><div class="tbl" id="k-prev"></div></div>
       <div><h3>Por equipo</h3><div class="tbl" id="k-equipo"></div></div>
+      <div id="k-desc-box" hidden><h3>Descuentos por motivo</h3><div class="tbl" id="k-desc"></div></div>
     </div>
     <h3>Pagos del día</h3>
     <div class="tblwrap"><table class="pagos" id="k-pagos"></table></div>
@@ -263,7 +290,7 @@ const fmtFecha=s=>parseISO(s).toLocaleDateString("es-CL",{day:"2-digit",month:"2
 
 let dia=isoDate(new Date());
 {const h=location.hash.slice(1); if(/^\d{4}-\d{2}-\d{2}$/.test(h)) dia=h;}
-let ARANCEL=[];
+let ARANCEL=[], centroNombre="", centroLogo="";
 const $$=n=>"$"+Math.round(n||0).toLocaleString("es-CL");
 const pesos=v=>Number(String(v||"").replace(/\D/g,""))||0;
 let citas=[], yo=null, canWrite=true, editId=null, equipoSel="tc", estadoSel="agendado";
@@ -272,7 +299,10 @@ function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTim
 function notice(t){const el=$("#notice");el.textContent=t||"";el.hidden=!t}
 
 async function api(url,opts={}){
-  const r=await fetch(url,{...opts,headers:{"Content-Type":"application/json"},body:opts.body?JSON.stringify(opts.body):undefined});
+  const init=opts.archivo
+    ?{method:opts.method||"POST",headers:{"Content-Type":opts.archivo.type||"application/octet-stream"},body:opts.archivo}
+    :{...opts,headers:{"Content-Type":"application/json"},body:opts.body?JSON.stringify(opts.body):undefined};
+  const r=await fetch(url,init);
   if(r.status===401){location.href="/login";throw new Error("sesion")}
   const j=await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(j.error||"Ocurrió un error en el servidor.");
@@ -285,62 +315,93 @@ try{const g=localStorage.getItem("agenda-sel");if(["tc","rx","eco","todas"].incl
 const visibles=()=>agendaSel==="todas"?EQUIPOS:EQUIPOS.filter(e=>e.id===agendaSel);
 const delAgenda=c=>agendaSel==="todas"||c.equipo===agendaSel;
 
+/* ---------- vista: día o semana ---------- */
+let vista="dia";
+try{if(localStorage.getItem("agenda-vista")==="semana")vista="semana"}catch(e){}
+const sumarDias=(f,n)=>{const d=parseISO(f);d.setDate(d.getDate()+n);return isoDate(d)};
+const lunesDe=f=>{const d=parseISO(f);return sumarDias(f,-((d.getDay()+6)%7))};
+const rango=()=>vista==="semana"?[lunesDe(dia),sumarDias(lunesDe(dia),6)]:[dia,dia];
+// Día: una columna por equipo visible. Semana: una columna por día con las agendas visibles.
+function columnas(){
+  const hoy=isoDate(new Date());
+  if(vista==="semana"){
+    const l=lunesDe(dia);
+    return Array.from({length:7},(_,k)=>{const f=sumarDias(l,k),d=parseISO(f);
+      return {fecha:f,equipos:visibles().map(e=>e.id),titulo:d.toLocaleDateString("es-CL",{weekday:"short"}).replace(".","").replace(/^./,c=>c.toUpperCase()),
+        sub:String(d.getDate()),cls:"semdia"+(agendaSel==="todas"?"":" "+agendaSel)+(f===hoy?" hoy":"")+(f===dia?" sel":"")}});
+  }
+  return visibles().map(e=>({fecha:dia,equipos:[e.id],titulo:e.nombre,sub:e.largo,cls:e.id}));
+}
+
 /* ---------- grilla ---------- */
+let COLS=[];
 function buildGrid(){
   const g=$("#grid"); g.innerHTML="";
   const rows=(END-START)/STEP;
-  const vis=visibles();
-  g.style.gridTemplateColumns=`58px repeat(${vis.length}, minmax(150px,1fr))`;
-  g.classList.toggle("una",vis.length===1);
+  COLS=columnas();
+  g.style.gridTemplateColumns=`58px repeat(${COLS.length}, minmax(${vista==="semana"?110:150}px,1fr))`;
+  g.classList.toggle("una",COLS.length===1);
+  g.classList.toggle("semana",vista==="semana");
   g.appendChild(Object.assign(document.createElement("div"),{className:"corner"}));
-  for(const eq of vis){
-    const h=document.createElement("div"); h.className="colhead "+eq.id;
-    h.innerHTML=`<span class="name">${eq.nombre} <span style="font-weight:500;color:var(--muted);letter-spacing:0;font-size:12px">${eq.largo}</span></span><span class="count" id="cnt-${eq.id}">0</span>`;
+  COLS.forEach((col,i)=>{
+    const h=document.createElement(vista==="semana"?"button":"div"); h.className="colhead "+col.cls;
+    h.innerHTML=`<span class="name"><span class="t"></span> <span class="s"></span></span><span class="count" id="cnt-${i}">0</span>`;
+    h.querySelector(".t").textContent=col.titulo; h.querySelector(".s").textContent=col.sub;
+    if(vista==="semana"){h.type="button";h.title="Ver este día";h.addEventListener("click",()=>{setVista("dia");setDia(col.fecha)})}
     g.appendChild(h);
-  }
+  });
   const times=document.createElement("div"); times.className="times"; times.style.height=rows*ROW+"px";
   for(let m=START+60;m<END;m+=60){const t=document.createElement("div");t.className="tlabel";t.style.top=((m-START)/STEP)*ROW+"px";t.textContent=toHora(m);times.appendChild(t)}
   g.appendChild(times);
-  for(const eq of vis){
-    const c=document.createElement("div"); c.className="col"; c.id="col-"+eq.id;
-    for(let i=0;i<rows;i++){
-      const m=START+i*STEP; const b=document.createElement("button");
+  COLS.forEach((col,i)=>{
+    const c=document.createElement("div"); c.className="col"; c.id="col-"+i;
+    const eqDefecto=col.equipos.length===1?col.equipos[0]:"tc";
+    for(let r=0;r<rows;r++){
+      const m=START+r*STEP; const b=document.createElement("button");
       b.type="button"; b.className="slot"+(((m+STEP)%60===0)?" hour":"");
-      b.setAttribute("aria-label",`Agendar ${eq.nombre} a las ${toHora(m)}`);
-      b.addEventListener("click",()=>{if(canWrite)openForm(null,{equipo:eq.id,hora:toHora(m)})});
+      b.setAttribute("aria-label",`Agendar ${col.titulo} ${col.sub} a las ${toHora(m)}`);
+      b.addEventListener("click",()=>{if(canWrite)openForm(null,{equipo:eqDefecto,hora:toHora(m),fecha:col.fecha})});
       c.appendChild(b);
     }
     g.appendChild(c);
-  }
+  });
 }
 
 function render(){
-  $("#dayname").textContent=parseISO(dia).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"});
+  const [desde,hasta]=rango();
+  if(vista==="semana"){
+    const a=parseISO(desde),b=parseISO(hasta);
+    const mismoMes=a.getMonth()===b.getMonth();
+    $("#dayname").textContent=`Semana del ${a.getDate()}${mismoMes?"":" de "+a.toLocaleDateString("es-CL",{month:"long"})} al ${b.getDate()} de ${b.toLocaleDateString("es-CL",{month:"long"})}`;
+  }else $("#dayname").textContent=parseISO(dia).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"});
+  $("#dayname").classList.toggle("semana",vista==="semana");
   $("#fecha").value=dia;
+  if(COLS.length&&COLS[0].fecha!==columnas()[0].fecha) buildGrid();
   document.querySelectorAll(".appt,.nowline").forEach(e=>e.remove());
   const activos=citas.filter(c=>c.estado!=="cancelado");
-  for(const eq of visibles()){
-    const col=$("#col-"+eq.id);
-    const lista=citas.filter(c=>c.equipo===eq.id);
+  COLS.forEach((colInfo,i)=>{
+    const col=$("#col-"+i);
+    const lista=citas.filter(c=>c.fecha===colInfo.fecha&&colInfo.equipos.includes(c.equipo));
     // carriles: las citas que se cruzan se muestran lado a lado
-    const visibles=lista.filter(c=>c.estado!=="cancelado").sort((a,b)=>a.hora.localeCompare(b.hora));
+    const enCurso=lista.filter(c=>c.estado!=="cancelado").sort((a,b)=>a.hora.localeCompare(b.hora));
     const carril=new Map(), anchoGrupo=new Map(); let grupo=[], finGrupo=-1;
     const cerrar=()=>{const n=Math.max(1,...grupo.map(c=>carril.get(c.id)+1));grupo.forEach(c=>anchoGrupo.set(c.id,n));grupo=[]};
     const finesCarril=[];
-    for(const c of visibles){
+    for(const c of enCurso){
       const ini=toMin(c.hora), fin=ini+(Number(c.duracion)||15);
       if(ini>=finGrupo){cerrar();finesCarril.length=0}
       let k=finesCarril.findIndex(f=>f<=ini); if(k<0){k=finesCarril.length;finesCarril.push(fin)}else finesCarril[k]=fin;
       carril.set(c.id,k); grupo.push(c); finGrupo=Math.max(finGrupo,fin);
     }
     cerrar();
-    $("#cnt-"+eq.id).textContent=lista.filter(c=>c.estado!=="cancelado").length+" citas";
+    const nAct=enCurso.length;
+    $("#cnt-"+i).textContent=vista==="semana"?(nAct||""):nAct+(nAct===1?" cita":" citas");
     for(const c of lista){
       const ini=toMin(c.hora), dur=Number(c.duracion)||15;
       if(ini+dur<=START||ini>=END) continue;
-      const clash=c.estado!=="cancelado"&&activos.some(o=>o.id!==c.id&&o.equipo===c.equipo&&toMin(o.hora)<ini+dur&&ini<toMin(o.hora)+(Number(o.duracion)||15));
+      const clash=c.estado!=="cancelado"&&activos.some(o=>o.id!==c.id&&o.fecha===c.fecha&&o.equipo===c.equipo&&toMin(o.hora)<ini+dur&&ini<toMin(o.hora)+(Number(o.duracion)||15));
       const el=document.createElement("button"); el.type="button";
-      el.className=`appt ${eq.id} s-${c.estado}`+(clash?" clash":"");
+      el.className=`appt ${c.equipo} s-${c.estado}`+(clash?" clash":"");
       el.style.top=((Math.max(ini,START)-START)/STEP*ROW+1)+"px";
       el.style.height=Math.max(dur/STEP*ROW-3,24)+"px";
       const n=anchoGrupo.get(c.id)||1, k=carril.get(c.id)||0;
@@ -350,43 +411,58 @@ function render(){
       el.querySelector(".h").textContent=c.hora;
       el.querySelector(".p").textContent=c.paciente;
       el.querySelector(".e").textContent=c.examen||"";
-      el.querySelector(".st").textContent=est.n+(c.pago_id?" · pagado":"")+(clash?" · se superpone":"");
+      el.querySelector(".st").textContent=est.n+(c.pago_id?" · pagado":"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
       if(c.pago_id) el.classList.add("paid");
-      el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}`;
+      el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.adjuntos?" · orden adjunta":""}`;
       el.addEventListener("click",()=>openForm(c));
       col.appendChild(el);
     }
-  }
-  if(dia===isoDate(new Date())){
-    const now=new Date(), m=now.getHours()*60+now.getMinutes();
-    if(m>=START&&m<END) for(const eq of visibles()){const l=document.createElement("div");l.className="nowline";l.style.top=(m-START)/STEP*ROW+"px";$("#col-"+eq.id).appendChild(l)}
-  }
+    if(colInfo.fecha===isoDate(new Date())){
+      const now=new Date(), m=now.getHours()*60+now.getMinutes();
+      if(m>=START&&m<END){const l=document.createElement("div");l.className="nowline";l.style.top=(m-START)/STEP*ROW+"px";col.appendChild(l)}
+    }
+  });
   const s=$("#summary"); s.innerHTML="";
   const chip=(color,label,n)=>{const c=document.createElement("span");c.className="chip";c.innerHTML=`<span class="dot" style="background:${color}"></span><span></span><b></b>`;c.children[1].textContent=label;c.children[2].textContent=n;s.appendChild(c)};
   const mias=citas.filter(delAgenda), misActivas=mias.filter(c=>c.estado!=="cancelado");
-  chip("var(--fg)",agendaSel==="todas"?"Total del día":"Citas "+EQUIPOS.find(e=>e.id===agendaSel).nombre,misActivas.length);
-  const col={agendado:"muted",confirmado:"accent",llego:"warn",atendido:"ok",ausente:"bad"};
-  for(const e of ESTADOS.filter(e=>e.id!=="cancelado")){const n=mias.filter(c=>c.estado===e.id).length;if(n)chip(`var(--${col[e.id]})`,e.n,n)}
-  // ocupación: minutos agendados / minutos de atención de las agendas visibles
-  const ocup=misActivas.reduce((t,c)=>t+(Number(c.duracion)||15),0), cap=(END-START)*visibles().length;
+  const periodo=vista==="semana"?"de la semana":"del día";
+  chip("var(--fg)",agendaSel==="todas"?"Total "+periodo:"Citas "+EQUIPOS.find(e=>e.id===agendaSel).nombre+" "+periodo,misActivas.length);
+  const colEst={agendado:"muted",confirmado:"accent",llego:"warn",atendido:"ok",ausente:"bad"};
+  for(const e of ESTADOS.filter(e=>e.id!=="cancelado")){const n=mias.filter(c=>c.estado===e.id).length;if(n)chip(`var(--${colEst[e.id]})`,e.n,n)}
+  // ocupación: minutos agendados / minutos de atención (en semana: lunes a sábado, y domingo si tiene citas)
+  const dias=vista==="semana"?6+(misActivas.some(c=>parseISO(c.fecha).getDay()===0)?1:0):1;
+  const ocup=misActivas.reduce((t,c)=>t+(Number(c.duracion)||15),0), cap=(END-START)*visibles().length*dias;
   const pct=Math.min(100,Math.round(ocup*100/cap));
+  $("#oc-label").textContent="Ocupación "+periodo;
   $("#oc-pct").textContent=pct+"%"; $("#oc-fill").style.width=pct+"%";
   $("#oc-fill").className=pct>=85?"alto":pct>=50?"medio":"";
   renderCal();
-  $("#empty").textContent=!canWrite?"Tu usuario es solo de lectura.":(mias.length?"Toca una cita para editarla o cambiar su estado.":"No hay citas en esta agenda este día. Toca un horario libre para agendar.");
+  $("#empty").textContent=!canWrite?"Tu usuario es solo de lectura.":(mias.length?"Toca una cita para editarla o cambiar su estado.":`No hay citas en esta agenda ${vista==="semana"?"esta semana":"este día"}. Toca un horario libre para agendar.`);
 }
 
 /* ---------- datos ---------- */
 let cargando=0;
 async function cargar(){
-  const pedido=++cargando, d=dia;
+  const pedido=++cargando, [desde,hasta]=rango(), clave=desde+hasta;
   try{
-    const r=await api("/api/citas?fecha="+d);
-    if(pedido!==cargando||d!==dia) return;
+    const r=await api(`/api/citas?desde=${desde}&hasta=${hasta}`);
+    if(pedido!==cargando||clave!==rango().join("")) return;
     citas=r; notice(""); render(); cargarMes();
   }catch(e){if(e.message!=="sesion")notice("No se pudo actualizar la agenda: "+e.message)}
 }
-function setDia(d){dia=d;history.replaceState(null,"","#"+d);if(d.slice(0,7)!==calMes){calMes=d.slice(0,7);mesData={};cargarMes()}citas=[];render();cargar()}
+function setDia(d){
+  const antes=rango().join("");
+  dia=d;history.replaceState(null,"","#"+d);
+  if(d.slice(0,7)!==calMes){calMes=d.slice(0,7);mesData={};cargarMes()}
+  if(rango().join("")!==antes){citas=[];buildGrid()}else buildGrid();
+  render();cargar();
+}
+function setVista(v){
+  vista=v; try{localStorage.setItem("agenda-vista",v)}catch(e){}
+  [...$("#vistas").children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===v)));
+}
+[...$("#vistas").children].forEach(b=>b.addEventListener("click",()=>{if(b.dataset.v===vista)return;setVista(b.dataset.v);citas=[];buildGrid();render();cargar()}));
+setVista(vista);
 
 /* ---------- calendario del mes ---------- */
 let calMes=dia.slice(0,7), mesData={}, pidiendoMes=0;
@@ -412,7 +488,8 @@ function renderCal(){
     const f=`${calMes}-${pad(d)}`, info=mesData[f]||{};
     const n=visibles().reduce((t,e)=>t+(info[e.id]||0),0);
     const b=document.createElement("button"); b.type="button"; b.textContent=d;
-    b.className="mc-day"+(n?" con":"")+(f===hoy?" hoy":"")+(f===dia?" sel":"");
+    const [rd,rh]=rango();
+    b.className="mc-day"+(n?" con":"")+(f===hoy?" hoy":"")+(f===dia?" sel":"")+(vista==="semana"&&f>=rd&&f<=rh?" sem":"");
     b.setAttribute("aria-label",parseISO(f).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})+(n?`, ${n} citas`:", sin citas"));
     if(n) b.title=n+(n===1?" cita":" citas");
     if(f===dia) b.setAttribute("aria-current","date");
@@ -430,6 +507,66 @@ $("#agenda-sel").addEventListener("change",e=>{
 });
 setInterval(()=>{if(document.visibilityState==="visible"&&$("#scrim").hidden)cargar()},15000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")cargar()});
+
+/* ---------- orden médica (adjuntos) ---------- */
+let adjPendientes=[], adjCita=null;
+const pesoTxt=b=>b>=1048576?(b/1048576).toFixed(1).replace(".",",")+" MB":Math.max(1,Math.round(b/1024))+" KB";
+// Reduce las fotos (lado mayor 1800 px, JPEG 80%) para que ocupen ~200–400 KB y se lean bien
+async function comprimir(file){
+  if(file.type==="application/pdf"||!file.type.startsWith("image/")) return file;
+  try{
+    const url=URL.createObjectURL(file);
+    const img=await new Promise((ok,mal)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=mal;i.src=url});
+    const k=Math.min(1,1800/Math.max(img.naturalWidth,img.naturalHeight));
+    const cv=document.createElement("canvas"); cv.width=Math.round(img.naturalWidth*k); cv.height=Math.round(img.naturalHeight*k);
+    const cx=cv.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,cv.width,cv.height); cx.drawImage(img,0,0,cv.width,cv.height);
+    URL.revokeObjectURL(url);
+    const out=await new Promise(ok=>cv.toBlob(ok,"image/jpeg",0.8));
+    return out&&(out.size<file.size||file.type!=="image/jpeg")?out:file;
+  }catch(e){return file}
+}
+async function subirAdjunto(citaId,file){
+  const blob=await comprimir(file);
+  if(blob.size>10*1024*1024) throw new Error(`"${file.name}" pesa más de 10 MB.`);
+  const nombre=(file.name||"orden").replace(/\.[a-z0-9]{2,5}$/i,"")+(blob.type==="application/pdf"?".pdf":".jpg");
+  return api(`/api/citas/${citaId}/adjuntos?nombre=${encodeURIComponent(nombre)}`,{method:"POST",archivo:blob});
+}
+async function cargarAdjuntos(id){
+  adjCita=id||null; const box=$("#adj-list"); box.innerHTML="";
+  if(id){try{pintarAdjuntos(await api(`/api/citas/${id}/adjuntos`))}catch(e){$("#adj-msg").textContent=e.message}}
+  else pintarAdjuntos([]);
+}
+function pintarAdjuntos(lista){
+  const box=$("#adj-list"); box.innerHTML="";
+  const fila=(nombre,meta,url,tipo,onDel)=>{
+    const d=document.createElement("div"); d.className="adj";
+    const prev=document.createElement(url?"a":"div"); prev.className="adj-prev";
+    if(url){prev.href=url;prev.target="_blank";prev.rel="noopener";prev.title="Abrir"}
+    if(tipo&&tipo.startsWith("image/")&&url){const im=document.createElement("img");im.src=url;im.alt="";im.loading="lazy";prev.appendChild(im)}
+    else{prev.textContent=tipo==="application/pdf"?"PDF":"…"}
+    const info=document.createElement("div"); info.className="adj-info";
+    const b=document.createElement("b"); b.textContent=nombre; const m=document.createElement("span"); m.className="meta"; m.textContent=meta;
+    info.append(b,m); d.append(prev,info);
+    if(url){const v=document.createElement("a");v.className="linkbtn";v.href=url;v.target="_blank";v.rel="noopener";v.textContent="Ver";d.appendChild(v)}
+    if(onDel&&canWrite){const x=document.createElement("button");x.type="button";x.className="linkbtn danger-txt";x.textContent="Quitar";
+      x.addEventListener("click",async()=>{if(!x.classList.contains("armed")){x.classList.add("armed");x.textContent="¿Quitar?";return}await onDel()});d.appendChild(x)}
+    box.appendChild(d);
+  };
+  for(const a of lista) fila(a.nombre,`${pesoTxt(a.tamano)} · ${(a.creado||"").slice(8,10)}-${(a.creado||"").slice(5,7)} ${(a.creado||"").slice(11,16)}${a.usuario_nombre?" · "+a.usuario_nombre:""}`,a.url,a.tipo,
+    async()=>{try{await api("/api/adjuntos/"+a.id,{method:"DELETE"});toast("Orden quitada");cargarAdjuntos(adjCita);cargar()}catch(e){toast(e.message)}});
+  adjPendientes.forEach((f,k)=>fila(f.name,`${pesoTxt(f.size)} · se guardará al guardar la cita`,null,f.type,async()=>{adjPendientes.splice(k,1);pintarAdjuntos(lista)}));
+  $("#adj-msg").textContent=lista.length||adjPendientes.length?"":(canWrite?"Sin orden adjunta. Puedes sacar una foto con el celular o subir un PDF.":"Sin orden adjunta.");
+}
+$("#adj-file").addEventListener("change",async e=>{
+  const files=[...e.target.files]; e.target.value=""; if(!files.length) return;
+  const malos=files.filter(f=>!(f.type.startsWith("image/")||f.type==="application/pdf"));
+  if(malos.length){$("#adj-msg").textContent="Solo se pueden adjuntar fotos o PDF.";return}
+  if(!editId){adjPendientes.push(...files);pintarAdjuntos([]);return}
+  $("#adj-msg").textContent="Subiendo…"; $("#adj-btn").classList.add("busy");
+  try{for(const f of files) await subirAdjunto(editId,f); toast(files.length>1?"Órdenes adjuntadas":"Orden adjuntada"); await cargarAdjuntos(editId); cargar()}
+  catch(err){$("#adj-msg").textContent=err.message}
+  finally{$("#adj-btn").classList.remove("busy")}
+});
 
 /* ---------- formulario de cita ---------- */
 function segButtons(cont,items,sel,onPick){
@@ -469,10 +606,38 @@ function recalcular(reset){
   $("#f-copago").classList.toggle("bad",bon>val);
   hint.textContent=bon>val?"La bonificación no puede ser mayor que el valor.":h;
   $("#p-folio-f").hidden=!(prev==="Fonasa"&&bon>0);
-  $("#cobrar").textContent=val?`Guardar y cobrar ${$$(Math.max(0,val-bon))}`:"Guardar y cobrar";
-  $("#p-medio").disabled=disabled||(val>0&&val-bon===0);
+  const cop=Math.max(0,val-bon), ds=descuentoActual(cop), total=cop-ds.monto;
+  $("#p-total").textContent=$$(total);
+  $("#p-desc-txt").textContent=ds.error||(ds.monto?`Copago ${$$(cop)} − descuento ${$$(ds.monto)}`:"");
+  $("#p-desc-txt").className=ds.error?"bad":"";
+  $("#cobrar").textContent=val?`Guardar y cobrar ${$$(total)}`:"Guardar y cobrar";
+  $("#p-medio").disabled=disabled||(val>0&&total===0);
+  if(val>0&&total===0)$("#p-medio").value="";
   if(val>0&&val-bon===0)$("#p-medio").value="";
 }
+// Descuento sobre el copago: porcentaje o monto fijo
+function descuentoActual(copago){
+  const tipo=$("#p-dtipo").value, raw=$("#p-dvalor").value.trim();
+  if(!tipo||!raw) return {monto:0};
+  if(tipo==="pct"){
+    const pct=Number(raw.replace("%","").replace(",","."));
+    if(!(pct>=0&&pct<=100)) return {monto:0,error:"El porcentaje debe estar entre 0 y 100."};
+    return {monto:Math.round(copago*pct/100),pct};
+  }
+  const m=pesos(raw);
+  if(m>copago) return {monto:0,error:"El descuento no puede ser mayor que el copago."};
+  return {monto:m};
+}
+$("#p-dtipo").addEventListener("change",()=>{
+  const t=$("#p-dtipo").value;
+  $("#p-dvalor-f").hidden=!t; $("#p-dmotivo-f").hidden=!t;
+  $("#p-dvalor-l").textContent=t==="pct"?"Porcentaje":"Monto";
+  $("#p-dvalor").placeholder=t==="pct"?"Ej. 10":"Ej. $5.000"; $("#p-dvalor").value="";
+  recalcular(false); if(t) $("#p-dvalor").focus();
+});
+$("#p-dvalor").addEventListener("input",()=>recalcular(false));
+$("#p-dvalor").addEventListener("blur",e=>{if($("#p-dtipo").value==="monto"&&e.target.value)e.target.value=$$(pesos(e.target.value))});
+
 $("#f-codigo").addEventListener("change",()=>{const a=ARANCEL.find(x=>x.codigo===$("#f-codigo").value);if(a)$("#f-examen").value=a.nombre;recalcular(true)});
 $("#f-prevision").addEventListener("change",()=>recalcular(true));
 for(const id of ["#f-valor","#f-bonif"]){
@@ -484,7 +649,7 @@ function openForm(c,preset={}){
   editId=c?c.id:null;
   $("#ftitle").textContent=c?"Editar cita":"Nueva cita";
   $("#f-paciente").value=c?.paciente||preset.paciente||""; $("#f-rut").value=c?.rut||preset.rut||""; $("#f-tel").value=c?.telefono||preset.telefono||"";
-  $("#f-examen").value=c?.examen||""; $("#f-fecha").value=c?.fecha||dia;
+  $("#f-examen").value=c?.examen||""; $("#f-fecha").value=c?.fecha||preset.fecha||dia;
   $("#f-hora").value=c?.hora||preset.hora||"09:00";
   $("#f-prevision").value=c?.prevision||preset.prevision||""; $("#f-medico").value=c?.medico||""; $("#f-notas").value=c?.notas||"";
   $("#f-codigo").value="";
@@ -493,6 +658,7 @@ function openForm(c,preset={}){
   $("#f-valor").value=c?.valor?$$(c.valor):""; $("#f-bonif").value=c?.valor?$$(c.bonificacion):"";
   citaPagada=!!c?.pago_id;
   $("#p-medio").value=""; $("#p-folio").value="";
+  $("#p-dtipo").value=""; $("#p-dvalor").value=""; $("#p-dmotivo").value=""; $("#p-dvalor-f").hidden=true; $("#p-dmotivo-f").hidden=true;
   $("#anular-box").hidden=true; $("#anular-motivo").value="";
   segButtons($("#f-equipo"),EQUIPOS,eq,id=>setEquipo(id,!editId));
   estadoSel=c?.estado||"agendado"; segButtons($("#f-estado"),ESTADOS,estadoSel,id=>estadoSel=id);
@@ -504,10 +670,11 @@ function openForm(c,preset={}){
   $("#pago").hidden=!canWrite&&!citaPagada;
   $("#pago-hecho").hidden=!citaPagada; $("#pago-form").hidden=citaPagada;
   if(citaPagada){
-    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_medio}${c.pago_folio?" · bono "+c.pago_folio:""} · ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar el examen o los valores, anula el pago.`;
+    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""} · ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar el examen o los valores, anula el pago.`;
     $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
   }
   recalcular(false);
+  adjPendientes=[]; $("#adj-btn").hidden=!canWrite; cargarAdjuntos(c?.id);
   $("#scrim").hidden=false; setTimeout(()=>$("#f-paciente").focus(),30);
 }
 function closeForm(){$("#scrim").hidden=true;editId=null}
@@ -531,7 +698,9 @@ function validarForm(data){
 }
 async function guardarCita(data){
   const c=await api(editId?"/api/citas/"+editId:"/api/citas",{method:editId?"PUT":"POST",body:data});
-  editId=c.id; return c;
+  editId=c.id;
+  if(adjPendientes.length){const p=adjPendientes;adjPendientes=[];for(const f of p) await subirAdjunto(c.id,f)}
+  return c;
 }
 $("#form").addEventListener("submit",async e=>{
   e.preventDefault();
@@ -551,14 +720,18 @@ $("#cobrar").addEventListener("click",async()=>{
   const copago=data.valor-data.bonificacion;
   if(!err&&!data.valor) err="Elige la prestación o ingresa el valor del examen.";
   if(!err&&!data.prevision) err="Elige la previsión del paciente.";
-  if(!err&&copago>0&&!$("#p-medio").value) err="Elige el medio de pago.";
+  const ds=descuentoActual(Math.max(0,copago)), total=copago-ds.monto;
+  if(!err&&ds.error) err=ds.error;
+  if(!err&&$("#p-dtipo").value&&$("#p-dvalor").value.trim()&&ds.monto>0&&!$("#p-dmotivo").value.trim()) err="Escribe el motivo del descuento.";
+  if(!err&&total>0&&!$("#p-medio").value) err="Elige el medio de pago.";
   if(!err&&data.prevision==="Fonasa"&&data.bonificacion>0&&!$("#p-folio").value.trim()) err="Ingresa el folio del bono Fonasa.";
   if(err){msg.textContent=err;return}
   const btn=$("#cobrar"); btn.disabled=true;
   try{
     const c=await guardarCita(data);
-    await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{medio:$("#p-medio").value,folio_bono:$("#p-folio").value.trim()}});
-    closeForm(); toast(copago>0?`Pago registrado: ${$$(copago)}`:"Atención registrada sin copago");
+    const desc=ds.monto>0?{descuento_tipo:$("#p-dtipo").value,descuento_valor:$("#p-dtipo").value==="pct"?String(ds.pct):ds.monto,descuento_motivo:$("#p-dmotivo").value.trim()}:{};
+    await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{medio:$("#p-medio").value,folio_bono:$("#p-folio").value.trim(),...desc}});
+    closeForm(); toast(total>0?`Pago registrado: ${$$(total)}${ds.monto?" (con descuento)":""}`:"Atención registrada sin copago");
     if(data.fecha!==dia) setDia(data.fecha); else cargar();
   }catch(e){msg.textContent=e.message}
   finally{btn.disabled=false}
@@ -679,20 +852,23 @@ async function abrirCaja(fecha){
   cajaFecha=fecha||cajaFecha; $("#kmsg").textContent="";
   try{cajaData=await api("/api/caja"+(cajaFecha?"?fecha="+cajaFecha:""))}catch(e){$("#kmsg").className="msg err";$("#kmsg").textContent=e.message;return}
   const d=cajaData, t=d.totales; cajaFecha=d.fecha;
-  $("#kscrim").hidden=false;
+  $("#kscrim").hidden=false; $("#k-titulo").textContent="Caja del día"+(centroNombre?" · "+centroNombre:"");
   $("#k-fecha").value=d.fecha; $("#k-fecha").max=d.hoy;
   
   const st=$("#k-estado");
   st.textContent=d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"—"} · ${d.cierre.creado.slice(11,16)}`:"Abierta";
   st.className="pill "+(d.cierre?"closed":"open");
-  const tiles=[["Atenciones cobradas",t.atenciones],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Recaudado en caja",$$(t.recaudado)]];
+  const tiles=[["Atenciones cobradas",t.atenciones],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Descuentos",$$(t.descuentos||0)],["Recaudado en caja",$$(t.recaudado)]];
   $("#k-tiles").innerHTML="";
   for(const [l,v] of tiles){const d2=document.createElement("div");d2.className="tile";d2.innerHTML="<span></span><b></b>";d2.children[0].textContent=l;d2.children[1].textContent=v;$("#k-tiles").appendChild(d2)}
   grupoTabla($("#k-medio"),t.por_medio); grupoTabla($("#k-prev"),t.por_prevision); grupoTabla($("#k-equipo"),t.por_equipo,k=>EQN[k]||k);
+  const pd=Object.entries(t.por_descuento||{}).map(([k,v])=>({k,...v}));
+  $("#k-desc-box").hidden=!pd.length;
+  if(pd.length) tabla($("#k-desc"),pd,[{t:"Motivo",f:r=>r.k},{t:"N°",n:1,f:r=>r.cantidad},{t:"Descuento",n:1,f:r=>$$(r.descuento)}]);
   tabla($("#k-pagos"),d.pagos.map(p=>({...p,_cls:p.anulado?"anulado":""})),[
     {t:"Hora",f:p=>p.creado.slice(11,16)},{t:"Paciente",f:p=>p.paciente},{t:"Equipo",f:p=>EQN[p.equipo]||p.equipo},
     {t:"Examen",f:p=>(p.codigo?p.codigo+" · ":"")+p.examen},{t:"Previsión",f:p=>p.prevision},
-    {t:"Valor",n:1,f:p=>$$(p.valor)},{t:"Bonif.",n:1,f:p=>$$(p.bonificacion)},{t:"Copago",n:1,f:p=>$$(p.copago)},
+    {t:"Valor",n:1,f:p=>$$(p.valor)},{t:"Bonif.",n:1,f:p=>$$(p.bonificacion)},{t:"Desc.",n:1,f:p=>p.descuento?"−"+$$(p.descuento):""},{t:"Pagado",n:1,f:p=>$$(p.copago)},
     {t:"Medio",f:p=>p.medio},{t:"Bono",f:p=>p.folio_bono},{t:"Cajero",f:p=>p.usuario_nombre||""},
     {t:"",f:p=>p.anulado?"Anulado: "+p.motivo_anulacion:""}]);
   if(!d.pagos.length) $("#k-pagos").innerHTML='<tr><td class="meta">Aún no hay pagos registrados este día.</td></tr>';
@@ -814,30 +990,47 @@ const fechaCorta=f=>{const [y,m,d]=f.split("-");return `${d}-${m}-${y}`};
 const signo=n=>(n>0?"+":n<0?"-":"")+$$(Math.abs(n));
 function filasGrupo(obj,etq=k=>k){return Object.entries(obj).map(([k,v])=>[etq(k),v.cantidad,v.valor,v.bonificacion,v.copago])}
 
+// Logo del centro como PNG para el PDF (se dibuja sobre fondo blanco)
+let _logoPDF;
+async function logoParaPDF(){
+  if(_logoPDF!==undefined) return _logoPDF;
+  _logoPDF=null;
+  if(!centroLogo) return null;
+  try{
+    const img=await new Promise((ok,mal)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=mal;i.src=centroLogo});
+    const cv=document.createElement("canvas"); cv.width=img.naturalWidth; cv.height=img.naturalHeight;
+    const cx=cv.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,cv.width,cv.height); cx.drawImage(img,0,0);
+    _logoPDF={data:cv.toDataURL("image/png"),w:cv.width,h:cv.height};
+  }catch(e){}
+  return _logoPDF;
+}
 async function exportarPDF(){
   const d=cajaData; if(!d) return;
   if(!window.jspdf){toast("No se pudo cargar el generador de PDF. Revisa tu conexión.");return}
   const {jsPDF}=window.jspdf, t=d.totales;
   const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
   const W=doc.internal.pageSize.getWidth(), M=14;
-  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("Cierre de caja",M,18);
+  const logo=await logoParaPDF(); let tx=M;
+  if(logo){const h=16, w=Math.min(46,h*logo.w/logo.h); doc.addImage(logo.data,"PNG",M,9,w,w*logo.h/logo.w); tx=M+w+6}
+  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("Cierre de caja"+(centroNombre?" · "+centroNombre:""),tx,17);
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(90);
-  doc.text(fechaLarga(d.fecha).replace(/^./,c=>c.toUpperCase()),M,24);
+  doc.text(fechaLarga(d.fecha).replace(/^./,c=>c.toUpperCase()),tx,23);
   doc.text(d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"-"} a las ${d.cierre.creado.slice(11,16)}`:"Caja abierta (sin cerrar)",W-M,18,{align:"right"});
   doc.setTextColor(0);
   // resumen
-  const tiles=[["Atenciones cobradas",String(t.atenciones)],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Recaudado en caja",$$(t.recaudado)]];
-  const tw=(W-2*M-9)/4;
+  const tiles=[["Atenciones cobradas",String(t.atenciones)],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Descuentos",$$(t.descuentos||0)],["Recaudado en caja",$$(t.recaudado)]];
+  const tw=(W-2*M-12)/5, ult=tiles.length-1;
   tiles.forEach(([l,v],i)=>{const x=M+i*(tw+3);
-    doc.setFillColor(i===3?30:238,i===3?40:241,i===3?50:244); doc.roundedRect(x,30,tw,18,2,2,"F");
-    doc.setTextColor(i===3?220:100); doc.setFontSize(8); doc.text(l.toUpperCase(),x+4,36);
-    doc.setTextColor(i===3?255:0); doc.setFontSize(14); doc.setFont("helvetica","bold"); doc.text(v,x+4,44); doc.setFont("helvetica","normal");});
+    doc.setFillColor(i===ult?30:238,i===ult?40:241,i===ult?50:244); doc.roundedRect(x,30,tw,18,2,2,"F");
+    doc.setTextColor(i===ult?220:100); doc.setFontSize(8); doc.text(l.toUpperCase(),x+4,36);
+    doc.setTextColor(i===ult?255:0); doc.setFontSize(14); doc.setFont("helvetica","bold"); doc.text(v,x+4,44); doc.setFont("helvetica","normal");});
   doc.setTextColor(0);
   const estilo={fontSize:8.5,cellPadding:1.8,lineColor:[220,226,232],lineWidth:0.1};
   const cab={fillColor:[31,95,139],textColor:255,fontStyle:"bold"};
   const money=r=>r.map((c,i)=>i>=2&&typeof c==="number"?$$(c):c);
   const grupos=[["Por medio de pago",filasGrupo(t.por_medio)],["Por previsión",filasGrupo(t.por_prevision)],["Por equipo",filasGrupo(t.por_equipo,k=>EQN[k]||k)]];
-  const gw=(W-2*M-8)/3; let yMax=56;
+  const descFilas=Object.entries(t.por_descuento||{}).map(([k,v])=>[k,v.cantidad,$$(v.descuento)]);
+  const nG=grupos.length+(descFilas.length?1:0), gw=(W-2*M-4*(nG-1))/nG; let yMax=56;
   grupos.forEach(([tit,filas],i)=>{
     const x=M+i*(gw+4);
     doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text(tit,x,56); doc.setFont("helvetica","normal");
@@ -846,14 +1039,21 @@ async function exportarPDF(){
       columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}}});
     yMax=Math.max(yMax,doc.lastAutoTable.finalY);
   });
+  if(descFilas.length){
+    const x=M+grupos.length*(gw+4);
+    doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text("Descuentos por motivo",x,56); doc.setFont("helvetica","normal");
+    doc.autoTable({startY:58,margin:{left:x},tableWidth:gw,styles:estilo,headStyles:cab,head:[["Motivo","N°","Descuento"]],body:descFilas,
+      columnStyles:{1:{halign:"right"},2:{halign:"right"}}});
+    yMax=Math.max(yMax,doc.lastAutoTable.finalY);
+  }
   // pagos
   doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text("Pagos del día",M,yMax+8); doc.setFont("helvetica","normal");
   doc.autoTable({startY:yMax+10,margin:{left:M,right:M},styles:estilo,headStyles:cab,
-    head:[["Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonif.","Copago","Medio","Bono","Cajero","Estado"]],
+    head:[["Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonif.","Desc.","Pagado","Medio","Bono","Cajero","Estado"]],
     body:d.pagos.length?d.pagos.map(p=>[p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
-      $$(p.valor),$$(p.bonificacion),$$(p.copago),p.medio,p.folio_bono,p.usuario_nombre||"",p.anulado?"Anulado: "+p.motivo_anulacion:"OK"]):[["","Sin pagos registrados","","","","","","","","","","","",""]],
-    columnStyles:{5:{cellWidth:60},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"}},
-    didParseCell:h=>{if(h.section==="body"&&d.pagos[h.row.index]?.anulado){h.cell.styles.textColor=[150,150,150];if(h.column.index===13)h.cell.styles.textColor=[180,52,46]}}});
+      $$(p.valor),$$(p.bonificacion),p.descuento?"-"+$$(p.descuento)+(p.descuento_motivo?"\n"+p.descuento_motivo:""):"",$$(p.copago),p.medio,p.folio_bono,p.usuario_nombre||"",p.anulado?"Anulado: "+p.motivo_anulacion:"OK"]):[["","Sin pagos registrados","","","","","","","","","","","","",""]],
+    columnStyles:{5:{cellWidth:52},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"},10:{halign:"right"}},
+    didParseCell:h=>{if(h.section==="body"&&d.pagos[h.row.index]?.anulado){h.cell.styles.textColor=[150,150,150];if(h.column.index===14)h.cell.styles.textColor=[180,52,46]}}});
   // cuadre
   let y=doc.lastAutoTable.finalY+10;
   if(y>170){doc.addPage();y=20}
@@ -861,6 +1061,7 @@ async function exportarPDF(){
   const c=d.cierre;
   doc.autoTable({startY:y+2,margin:{left:M},tableWidth:110,styles:{...estilo,fontSize:9.5},theme:"plain",
     body:[["Efectivo esperado",$$(t.efectivo_esperado)],["Efectivo contado",c?$$(c.efectivo_contado):"-"],["Diferencia",c?signo(c.diferencia):"-"],
+      ["Descuentos otorgados",`${$$(t.descuentos||0)} (${t.con_descuento||0} ${t.con_descuento===1?"pago":"pagos"})`],
       ["Pagos anulados",String(t.anulados)],["Observaciones",c?.observaciones||"-"]],
     columnStyles:{0:{fontStyle:"bold",cellWidth:45},1:{halign:"left"}}});
   y=doc.lastAutoTable.finalY+22;
@@ -871,7 +1072,7 @@ async function exportarPDF(){
   const n=doc.getNumberOfPages(), gen=new Date().toLocaleString("es-CL");
   for(let i=1;i<=n;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(130);
     doc.text(`Generado el ${gen}`,M,200);doc.text(`Página ${i} de ${n}`,W-M,200,{align:"right"})}
-  await guardarArchivo(`cierre-caja-${fechaCorta(d.fecha)}.pdf`,doc.output("blob"));
+  await guardarArchivo(`cierre-caja-${centroNombre?centroNombre.toLowerCase().replace(/[^a-z0-9]+/g,"-")+"-":""}${fechaCorta(d.fecha)}.pdf`,doc.output("blob"));
 }
 
 async function exportarExcel(){
@@ -880,40 +1081,46 @@ async function exportarExcel(){
   const t=d.totales, c=d.cierre, FMT='"$"#,##0';
   const wb=XLSX.utils.book_new();
   // Hoja Resumen
-  const res=[["Cierre de caja",fechaLarga(d.fecha).replace(/^./,c=>c.toUpperCase())],["Estado",c?`Cerrada por ${c.usuario_nombre||"-"} a las ${c.creado.slice(11,16)}`:"Abierta (sin cerrar)"],[],
-    ["Atenciones cobradas",t.atenciones],["Valor total",t.valor],["Bonificación (bonos)",t.bonificacion],["Recaudado en caja",t.recaudado],["Pagos anulados",t.anulados],[],
+  const res=[["Cierre de caja"+(centroNombre?" · "+centroNombre:""),fechaLarga(d.fecha).replace(/^./,c=>c.toUpperCase())],["Estado",c?`Cerrada por ${c.usuario_nombre||"-"} a las ${c.creado.slice(11,16)}`:"Abierta (sin cerrar)"],[],
+    ["Atenciones cobradas",t.atenciones],["Valor total",t.valor],["Bonificación (bonos)",t.bonificacion],["Descuentos",t.descuentos||0],["Recaudado en caja",t.recaudado],["Pagos anulados",t.anulados],[],
     ["Efectivo esperado",t.efectivo_esperado],["Efectivo contado",c?c.efectivo_contado:""],["Diferencia",c?c.diferencia:""],["Observaciones",c?.observaciones||""],[]];
   const bloques=[["Por medio de pago",filasGrupo(t.por_medio)],["Por previsión",filasGrupo(t.por_prevision)],["Por equipo",filasGrupo(t.por_equipo,k=>EQN[k]||k)]];
-  const filasMoneda=[4,5,6,9,10,11]; // filas (0-index) con montos en columna B
+  const filasMoneda=[4,5,6,7,10,11,12]; // filas (0-index) con montos en columna B
+  const filasGrupoIdx=new Set();
   for(const [tit,filas] of bloques){
     res.push([tit]); res.push(["","N°","Valor","Bonificación","Recaudado"]);
-    for(const f of filas) res.push(f);
+    for(const f of filas){filasGrupoIdx.add(res.length);res.push(f)}
     res.push([]);
+  }
+  const pdesc=Object.entries(t.por_descuento||{});
+  if(pdesc.length){
+    res.push(["Descuentos por motivo"]); res.push(["","N°","Descuento"]);
+    for(const [k,v] of pdesc){filasGrupoIdx.add(res.length);res.push([k,v.cantidad,v.descuento])}
   }
   const ws1=XLSX.utils.aoa_to_sheet(res);
   for(const r of filasMoneda){const ref=XLSX.utils.encode_cell({r,c:1});if(ws1[ref]&&typeof ws1[ref].v==="number")ws1[ref].z=FMT}
-  res.forEach((fila,r)=>{if(fila.length===5&&typeof fila[1]==="number")for(const col of [2,3,4]){const ref=XLSX.utils.encode_cell({r,c:col});if(ws1[ref])ws1[ref].z=FMT}});
+  res.forEach((fila,r)=>{if(filasGrupoIdx.has(r))for(let col=2;col<fila.length;col++){const ref=XLSX.utils.encode_cell({r,c:col});if(ws1[ref]&&typeof ws1[ref].v==="number")ws1[ref].z=FMT}});
   ws1["!cols"]=[{wch:24},{wch:34},{wch:14},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws1,"Resumen");
   // Hoja Pagos
-  const cab=["Fecha","Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonificación","Copago","Medio","Folio bono","Cajero","Estado","Motivo anulación"];
+  const cab=["Fecha","Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonificación","Descuento","Motivo descuento","Pagado","Medio","Folio bono","Cajero","Estado","Motivo anulación"];
   const filas=d.pagos.map(p=>[fechaCorta(p.fecha),p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
-    p.valor,p.bonificacion,p.copago,p.medio,p.folio_bono,p.usuario_nombre||"",p.anulado?"Anulado":"OK",p.motivo_anulacion||""]);
+    p.valor,p.bonificacion,p.descuento||0,p.descuento_motivo||"",p.copago,p.medio,p.folio_bono,p.usuario_nombre||"",p.anulado?"Anulado":"OK",p.motivo_anulacion||""]);
   const validos=d.pagos.filter(p=>!p.anulado);
-  filas.push([]); filas.push(["","","Total (sin anulados)","","","","","",t.valor,t.bonificacion,t.recaudado]);
+  filas.push([]); filas.push(["","","Total (sin anulados)","","","","","",t.valor,t.bonificacion,t.descuentos||0,"",t.recaudado]);
   const ws2=XLSX.utils.aoa_to_sheet([cab,...filas]);
-  for(let r=1;r<=filas.length;r++)for(const col of [8,9,10]){const ref=XLSX.utils.encode_cell({r,c:col});if(ws2[ref]&&typeof ws2[ref].v==="number")ws2[ref].z=FMT}
-  ws2["!cols"]=[{wch:11},{wch:7},{wch:24},{wch:13},{wch:7},{wch:9},{wch:46},{wch:11},{wch:11},{wch:12},{wch:11},{wch:13},{wch:11},{wch:18},{wch:9},{wch:28}];
+  for(let r=1;r<=filas.length;r++)for(const col of [8,9,10,12]){const ref=XLSX.utils.encode_cell({r,c:col});if(ws2[ref]&&typeof ws2[ref].v==="number")ws2[ref].z=FMT}
+  ws2["!cols"]=[{wch:11},{wch:7},{wch:24},{wch:13},{wch:7},{wch:9},{wch:46},{wch:11},{wch:11},{wch:12},{wch:11},{wch:20},{wch:11},{wch:13},{wch:11},{wch:18},{wch:9},{wch:28}];
   ws2["!autofilter"]={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(1,d.pagos.length),c:cab.length-1}})};
   XLSX.utils.book_append_sheet(wb,ws2,"Pagos");
   const buf=XLSX.write(wb,{bookType:"xlsx",type:"array"});
-  await guardarArchivo(`cierre-caja-${fechaCorta(d.fecha)}.xlsx`,new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  await guardarArchivo(`cierre-caja-${centroNombre?centroNombre.toLowerCase().replace(/[^a-z0-9]+/g,"-")+"-":""}${fechaCorta(d.fecha)}.xlsx`,new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
 }
 $("#k-pdf").addEventListener("click",exportarPDF);
 $("#k-xlsx").addEventListener("click",exportarExcel);
 
 /* ---------- navegación y sesión ---------- */
-const shift=n=>{const d=parseISO(dia);d.setDate(d.getDate()+n);setDia(isoDate(d))};
+const shift=n=>setDia(sumarDias(dia,vista==="semana"?7*n:n));
 $("#prev").addEventListener("click",()=>shift(-1));
 $("#next").addEventListener("click",()=>shift(1));
 $("#hoy").addEventListener("click",()=>setDia(isoDate(new Date())));
@@ -927,6 +1134,9 @@ buildGrid(); render();
   try{
     yo=await api("/api/me");
     $("#me").textContent=yo.nombre||yo.usuario;
+    if(yo.centro){$("#brand-centro").textContent="Agenda "+yo.centro;document.title="Agenda "+yo.centro;centroNombre=yo.centro}
+    if(yo.logo){centroLogo=yo.logo;
+      for(const box of [$("#brand-logo"),$("#k-logo")]){const img=box.querySelector("img");img.alt=yo.centro?"Logo "+yo.centro:"Logo";img.onload=()=>box.hidden=false;img.src=yo.logo}}
     canWrite=yo.rol!=="lectura";
     $("#nueva").hidden=!canWrite;
     $("#btnUsuarios").hidden=yo.rol!=="admin";
