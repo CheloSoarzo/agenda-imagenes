@@ -309,3 +309,26 @@ button.colhead:hover{background:var(--sunk)}
 .tiles{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media (max-width:760px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media print{.marca{border:0}}
+
+/* --- varios exámenes por cita --- */
+.ex-list{display:flex;flex-direction:column;gap:8px}
+.ex-line{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
+.ex-line.bad{border-color:var(--bad)}
+.ex-top{display:flex;align-items:center;gap:8px;min-width:0}
+.ex-n{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);white-space:nowrap}
+.ex-n:empty{display:none}
+.ex-cod{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px}
+.ex-nom{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;width:100%}
+.ex-nom[readonly]{background:transparent;border-color:transparent;padding-left:0;font-weight:600}
+.ex-del{flex:none;width:32px;height:32px;border:1px solid var(--line);background:var(--surface);border-radius:8px;font-size:18px;line-height:1;color:var(--bad)}
+.ex-del:hover{border-color:var(--bad)}
+.ex-vals{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+.ex-vals label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ex-vals input{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 9px;width:100%;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:14px;color:var(--fg);text-transform:none;letter-spacing:0;font-weight:400}
+.ex-vals input[readonly]{background:transparent;border-color:transparent;padding-left:0;font-weight:700}
+.ex-copw{display:flex;flex-direction:column;gap:4px;text-align:right;min-width:80px}
+.ex-copw span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ex-cop{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:15px;padding:7px 0}
+.ex-hint:empty{display:none}
+.ex-add{align-self:flex-start;margin-top:8px}
+.cobro .money{font-size:16px}

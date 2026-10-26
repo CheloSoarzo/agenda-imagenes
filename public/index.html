@@ -98,14 +98,17 @@
         <select id="f-prevision"><option value="">—</option><option>Fonasa</option><option>Isapre</option><option>Particular</option><option>Convenio</option></select></div>
       <div class="field"><label for="f-medico">Médico solicitante</label><input id="f-medico" autocomplete="off"></div>
     </div>
-    <div class="field"><label for="f-codigo">Prestación (código Fonasa)</label><select id="f-codigo"></select></div>
-    <div class="field"><label for="f-examen">Examen</label><input id="f-examen" list="examenes" autocomplete="off" placeholder="Ej. TC de tórax con contraste"></div>
+    <div class="field">
+      <label>Exámenes</label>
+      <div class="ex-list" id="ex-list"></div>
+      <button type="button" class="btn sm ex-add" id="ex-add">+ Agregar otro examen</button>
+    </div>
     <datalist id="examenes"></datalist>
     <div class="cobro" id="cobro">
       <div class="row3">
-        <div class="field"><label for="f-valor">Valor</label><input id="f-valor" inputmode="numeric" autocomplete="off" placeholder="$0"></div>
-        <div class="field"><label for="f-bonif">Bonificación</label><input id="f-bonif" inputmode="numeric" autocomplete="off" placeholder="$0"></div>
-        <div class="field"><label for="f-copago">Copago paciente</label><output id="f-copago" class="money">$0</output></div>
+        <div class="field"><label>Valor total</label><output id="f-valor" class="money">$0</output></div>
+        <div class="field"><label>Bonificación</label><output id="f-bonif" class="money">$0</output></div>
+        <div class="field"><label>Copago paciente</label><output id="f-copago" class="money">$0</output></div>
       </div>
       <div class="meta" id="f-preciohint"></div>
     </div>
@@ -579,10 +582,11 @@ function setEquipo(id,changeDur){
   $("#examenes").innerHTML="";
   for(const e of EXAMENES[id]){const o=document.createElement("option");o.value=e;$("#examenes").appendChild(o)}
   if(changeDur) $("#f-dur").value=String(DUR_DEF[id]);
-  llenarCodigos(id,$("#f-codigo").value);
+  for(const row of $$rows()) llenarCodigos(row.querySelector(".ex-cod"),id,row.querySelector(".ex-cod").value);
+  recalcular(false);
 }
-function llenarCodigos(eq,sel){
-  const s=$("#f-codigo"); s.innerHTML="";
+function llenarCodigos(s,eq,sel){
+  s.innerHTML="";
   const o0=document.createElement("option");o0.value="";o0.textContent="— Sin código / otro examen —";s.appendChild(o0);
   for(const a of ARANCEL.filter(a=>a.equipo===eq&&(a.activo||a.codigo===sel))){
     const o=document.createElement("option");o.value=a.codigo;o.textContent=`${a.codigo} · ${a.nombre}`;s.appendChild(o)}
@@ -590,21 +594,66 @@ function llenarCodigos(eq,sel){
   s.value=sel||"";
 }
 let citaPagada=false;
-// Calcula valor, bonificación y copago según la prestación y la previsión
-function recalcular(reset){
-  const a=ARANCEL.find(x=>x.codigo===$("#f-codigo").value), prev=$("#f-prevision").value;
-  const v=$("#f-valor"), b=$("#f-bonif"), hint=$("#f-preciohint");
+/* ---------- exámenes de la cita (uno o varios) ---------- */
+const $$rows=()=>[...document.querySelectorAll("#ex-list .ex-line")];
+function addLinea(l={}){
+  const row=document.createElement("div"); row.className="ex-line";
+  row.innerHTML=`<div class="ex-top"><span class="ex-n"></span><select class="ex-cod" aria-label="Prestación (código Fonasa)"></select>
+      <button type="button" class="ex-del" aria-label="Quitar este examen" title="Quitar este examen">×</button></div>
+    <input class="ex-nom" list="examenes" autocomplete="off" placeholder="Nombre del examen" aria-label="Nombre del examen">
+    <div class="ex-vals">
+      <label>Valor<input class="ex-val" inputmode="numeric" autocomplete="off" placeholder="$0"></label>
+      <label>Bonificación<input class="ex-bon" inputmode="numeric" autocomplete="off" placeholder="$0"></label>
+      <div class="ex-copw"><span>Copago</span><b class="ex-cop">$0</b></div>
+    </div>
+    <div class="ex-hint meta"></div>`;
+  const cod=row.querySelector(".ex-cod"), nom=row.querySelector(".ex-nom"), val=row.querySelector(".ex-val"), bon=row.querySelector(".ex-bon");
+  llenarCodigos(cod,equipoSel,l.codigo||"");
+  nom.value=l.nombre||""; val.value=l.valor?$$(l.valor):""; bon.value=l.valor?$$(l.bonificacion||0):"";
+  cod.addEventListener("change",()=>{const a=ARANCEL.find(x=>x.codigo===cod.value);if(a)nom.value=a.nombre;recalcLinea(row,true);recalcular(false)});
+  for(const inp of [val,bon]){
+    inp.addEventListener("input",()=>recalcular(false));
+    inp.addEventListener("blur",e=>{if(e.target.value)e.target.value=$$(pesos(e.target.value))});
+  }
+  row.querySelector(".ex-del").addEventListener("click",()=>{row.remove();if(!$$rows().length)addLinea();numerar();recalcular(false)});
+  $("#ex-list").appendChild(row); numerar();
+  return row;
+}
+function numerar(){const rs=$$rows();rs.forEach((r,i)=>{r.querySelector(".ex-n").textContent=rs.length>1?`Examen ${i+1}`:"";r.querySelector(".ex-del").hidden=rs.length<2||!canWrite||citaPagada})}
+$("#ex-add").addEventListener("click",()=>{const r=addLinea();recalcLinea(r,true);recalcular(false);r.querySelector(".ex-cod").focus()});
+function lineas(){
+  return $$rows().map(r=>({codigo:r.querySelector(".ex-cod").value,nombre:r.querySelector(".ex-nom").value.trim(),
+    valor:pesos(r.querySelector(".ex-val").value),bonificacion:pesos(r.querySelector(".ex-bon").value)}))
+    .filter(l=>l.codigo||l.nombre||l.valor);
+}
+// Valores de una línea según la prestación y la previsión
+function recalcLinea(row,reset){
+  const a=ARANCEL.find(x=>x.codigo===row.querySelector(".ex-cod").value), prev=$("#f-prevision").value;
+  const v=row.querySelector(".ex-val"), b=row.querySelector(".ex-bon");
   let lockV=false, lockB=false, h="";
   if(prev==="Fonasa"&&a){v.value=$$(a.fonasa_total);b.value=$$(a.fonasa_bonif);lockV=lockB=true;h="Arancel Fonasa MLE nivel 2 · código "+a.codigo}
-  else if(prev==="Fonasa"){if(reset){v.value="";b.value=""}h="Este examen no está en el arancel: ingresa valor y bonificación, o agrégalo en Aranceles."}
-  else if(prev==="Particular"){if(reset&&a)v.value=$$(a.particular||a.fonasa_total);b.value=$$(0);lockB=true;h=a?(a.particular?"Precio particular del centro":"Sin precio particular definido: se usa el valor Fonasa"):"Ingresa el valor del examen."}
-  else{if(reset&&a){v.value=$$(a.particular||a.fonasa_total);b.value=""}h=prev?"Ingresa la bonificación que cubre el bono de "+prev+".":"Elige la previsión para calcular el copago."}
+  else if(prev==="Fonasa"){if(reset){v.value="";b.value=""}h=row.querySelector(".ex-nom").value?"No está en el arancel: ingresa valor y bonificación, o agrégalo en Aranceles.":""}
+  else if(prev==="Particular"){if(reset&&a)v.value=$$(a.particular||a.fonasa_total);b.value=$$(0);lockB=true;h=a?(a.particular?"Precio particular del centro":"Sin precio particular: se usa el valor Fonasa"):""}
+  else{if(reset&&a){v.value=$$(a.particular||a.fonasa_total);b.value=""}h=prev&&a?"Ingresa la bonificación del bono de "+prev+".":""}
   const disabled=!canWrite||citaPagada;
   v.readOnly=lockV||disabled; b.readOnly=lockB||disabled;
+  row.querySelector(".ex-cod").disabled=disabled; row.querySelector(".ex-nom").readOnly=disabled;
   const val=pesos(v.value), bon=pesos(b.value);
+  row.querySelector(".ex-cop").textContent=$$(Math.max(0,val-bon));
+  row.querySelector(".ex-hint").textContent=bon>val?"La bonificación no puede ser mayor que el valor.":h;
+  row.classList.toggle("bad",bon>val);
+}
+// Totales de la cita (suma de los exámenes) y cobro
+function recalcular(reset){
+  const prev=$("#f-prevision").value;
+  for(const r of $$rows()) recalcLinea(r,reset);
+  const ls=lineas(), val=ls.reduce((t,l)=>t+l.valor,0), bon=ls.reduce((t,l)=>t+l.bonificacion,0);
+  const disabled=!canWrite||citaPagada;
+  $("#ex-add").hidden=disabled; numerar();
+  $("#f-valor").value=$$(val); $("#f-bonif").value=$$(bon);
   $("#f-copago").value=$$(Math.max(0,val-bon));
   $("#f-copago").classList.toggle("bad",bon>val);
-  hint.textContent=bon>val?"La bonificación no puede ser mayor que el valor.":h;
+  $("#f-preciohint").textContent=!prev?"Elige la previsión para calcular el copago.":ls.length>1?`${ls.length} exámenes`:"";
   $("#p-folio-f").hidden=!(prev==="Fonasa"&&bon>0);
   const cop=Math.max(0,val-bon), ds=descuentoActual(cop), total=cop-ds.monto;
   $("#p-total").textContent=$$(total);
@@ -638,25 +687,22 @@ $("#p-dtipo").addEventListener("change",()=>{
 $("#p-dvalor").addEventListener("input",()=>recalcular(false));
 $("#p-dvalor").addEventListener("blur",e=>{if($("#p-dtipo").value==="monto"&&e.target.value)e.target.value=$$(pesos(e.target.value))});
 
-$("#f-codigo").addEventListener("change",()=>{const a=ARANCEL.find(x=>x.codigo===$("#f-codigo").value);if(a)$("#f-examen").value=a.nombre;recalcular(true)});
 $("#f-prevision").addEventListener("change",()=>recalcular(true));
-for(const id of ["#f-valor","#f-bonif"]){
-  $(id).addEventListener("input",()=>recalcular(false));
-  $(id).addEventListener("blur",e=>{if(e.target.value)e.target.value=$$(pesos(e.target.value))});
-}
 async function cargarAranceles(){try{ARANCEL=await api("/api/aranceles")}catch(e){}}
 function openForm(c,preset={}){
   editId=c?c.id:null;
   $("#ftitle").textContent=c?"Editar cita":"Nueva cita";
   $("#f-paciente").value=c?.paciente||preset.paciente||""; $("#f-rut").value=c?.rut||preset.rut||""; $("#f-tel").value=c?.telefono||preset.telefono||"";
-  $("#f-examen").value=c?.examen||""; $("#f-fecha").value=c?.fecha||preset.fecha||dia;
+  $("#f-fecha").value=c?.fecha||preset.fecha||dia;
   $("#f-hora").value=c?.hora||preset.hora||"09:00";
   $("#f-prevision").value=c?.prevision||preset.prevision||""; $("#f-medico").value=c?.medico||""; $("#f-notas").value=c?.notas||"";
-  $("#f-codigo").value="";
-  const eq=c?.equipo||preset.equipo||"tc"; setEquipo(eq,!c); if(c) $("#f-dur").value=String(c.duracion||15);
-  llenarCodigos(eq,c?.codigo||"");
-  $("#f-valor").value=c?.valor?$$(c.valor):""; $("#f-bonif").value=c?.valor?$$(c.bonificacion):"";
   citaPagada=!!c?.pago_id;
+  $("#ex-list").innerHTML="";
+  const eq=c?.equipo||preset.equipo||"tc"; setEquipo(eq,!c); if(c) $("#f-dur").value=String(c.duracion||15);
+  let previas=[]; try{previas=c?.examenes?JSON.parse(c.examenes):[]}catch(e){}
+  if(!previas.length&&c&&(c.codigo||c.examen||c.valor)) previas=[{codigo:c.codigo,nombre:c.examen,valor:c.valor,bonificacion:c.bonificacion}];
+  if(!previas.length) previas=[{}];
+  for(const l of previas) addLinea(l);
   $("#p-medio").value=""; $("#p-folio").value="";
   $("#p-dtipo").value=""; $("#p-dvalor").value=""; $("#p-dmotivo").value=""; $("#p-dvalor-f").hidden=true; $("#p-dmotivo-f").hidden=true;
   $("#anular-box").hidden=true; $("#anular-motivo").value="";
@@ -666,7 +712,7 @@ function openForm(c,preset={}){
   $("#fmeta").textContent=c?`Creada por ${c.creado_por_nombre||"—"}${c.actualizado_por_nombre?` · última edición: ${c.actualizado_por_nombre}`:""}`:"";
   $("#fmsg").textContent=canWrite?"":"Tu usuario es solo de lectura."; $("#fmsg").className="msg";
   [...$("#form").elements].forEach(el=>{if(el.id!=="cancelar")el.disabled=!canWrite});
-  for(const id of ["#f-codigo","#f-prevision"]) $(id).disabled=!canWrite||citaPagada;
+  $("#f-prevision").disabled=!canWrite||citaPagada;
   $("#pago").hidden=!canWrite&&!citaPagada;
   $("#pago-hecho").hidden=!citaPagada; $("#pago-form").hidden=citaPagada;
   if(citaPagada){
@@ -684,16 +730,17 @@ for(const id of SCRIMS) $("#"+id).addEventListener("click",e=>{if(e.target.id===
 document.addEventListener("keydown",e=>{if(e.key==="Escape")for(const id of SCRIMS)$("#"+id).hidden=true});
 
 function datosForm(){
-  return {paciente:$("#f-paciente").value.trim(),rut:$("#f-rut").value.trim(),telefono:$("#f-tel").value.trim(),
-    equipo:equipoSel,examen:$("#f-examen").value.trim(),fecha:$("#f-fecha").value,hora:$("#f-hora").value,
+  const d={paciente:$("#f-paciente").value.trim(),rut:$("#f-rut").value.trim(),telefono:$("#f-tel").value.trim(),
+    equipo:equipoSel,fecha:$("#f-fecha").value,hora:$("#f-hora").value,
     duracion:Number($("#f-dur").value),prevision:$("#f-prevision").value,medico:$("#f-medico").value.trim(),
-    estado:estadoSel,notas:$("#f-notas").value.trim(),codigo:$("#f-codigo").value,
-    valor:pesos($("#f-valor").value),bonificacion:pesos($("#f-bonif").value)};
+    estado:estadoSel,notas:$("#f-notas").value.trim(),examenes:lineas()};
+  // totales para validar y cobrar
+  return Object.assign(d,{valor:d.examenes.reduce((t,l)=>t+l.valor,0),bonificacion:d.examenes.reduce((t,l)=>t+l.bonificacion,0)});
 }
 function validarForm(data){
   if(!data.paciente) return "Escribe el nombre del paciente.";
   if(!data.fecha||!data.hora) return "Elige fecha y hora.";
-  if(data.bonificacion>data.valor) return "La bonificación no puede ser mayor que el valor.";
+  if(data.examenes.some(l=>l.bonificacion>l.valor)) return "En un examen la bonificación es mayor que el valor.";
   return "";
 }
 async function guardarCita(data){
@@ -718,7 +765,7 @@ $("#cobrar").addEventListener("click",async()=>{
   const msg=$("#fmsg"), data=datosForm(); msg.className="msg err";
   let err=validarForm(data);
   const copago=data.valor-data.bonificacion;
-  if(!err&&!data.valor) err="Elige la prestación o ingresa el valor del examen.";
+  if(!err&&!data.valor) err="Elige la prestación o ingresa el valor de al menos un examen.";
   if(!err&&!data.prevision) err="Elige la previsión del paciente.";
   const ds=descuentoActual(Math.max(0,copago)), total=copago-ds.monto;
   if(!err&&ds.error) err=ds.error;
