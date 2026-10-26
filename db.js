@@ -103,6 +103,31 @@ for (const [col, def] of [["codigo", "TEXT NOT NULL DEFAULT ''"], ["valor", "INT
   if (!colsCitas.includes(col)) db.exec(`ALTER TABLE citas ADD COLUMN ${col} ${def}`);
 }
 
+// ---------- descuentos en pagos ----------
+// copago = lo que pagó el paciente (ya con descuento); descuento = monto rebajado del copago
+{
+  const colsPagos = db.prepare("PRAGMA table_info(pagos)").all().map((c) => c.name);
+  if (!colsPagos.includes("descuento")) db.exec("ALTER TABLE pagos ADD COLUMN descuento INTEGER NOT NULL DEFAULT 0");
+  if (!colsPagos.includes("descuento_motivo")) db.exec("ALTER TABLE pagos ADD COLUMN descuento_motivo TEXT NOT NULL DEFAULT ''");
+  if (!colsPagos.includes("descuento_detalle")) db.exec("ALTER TABLE pagos ADD COLUMN descuento_detalle TEXT NOT NULL DEFAULT ''");
+}
+
+// ---------- adjuntos (orden médica) ----------
+// Se guardan dentro de la base de datos para que el respaldo incluya todo en un solo archivo.
+db.exec(`
+CREATE TABLE IF NOT EXISTS adjuntos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cita_id INTEGER NOT NULL REFERENCES citas(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL DEFAULT '',
+  tipo TEXT NOT NULL,
+  tamano INTEGER NOT NULL,
+  datos BLOB NOT NULL,
+  usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  creado TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_adjuntos_cita ON adjuntos(cita_id);
+`);
+
 // Arancel Fonasa incluido con la app. Se aplica cuando el archivo trae una versión más nueva que la
 // cargada: inserta códigos nuevos y actualiza valor y bonificación Fonasa, sin tocar el precio
 // particular ni si la prestación está activa. Las citas Fonasa aún no pagadas se recalculan.

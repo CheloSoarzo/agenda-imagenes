@@ -3,7 +3,9 @@
 Agenda web de pacientes por equipo (TC, RX y Ecografía) para centros de imágenes.
 El personal ingresa con usuario y clave, y todos ven la misma agenda (se actualiza sola cada 15 segundos).
 
-- Vista por día con una columna por equipo, de 08:00 a 21:00 en bloques de 15 minutos.
+- Vista por **día** (una columna por equipo) o por **semana** (una columna por día), de 08:00 a 21:00 en bloques de 15 minutos.
+- Panel con selector de agenda (TC, RX, Eco o todas), calendario del mes con los días que tienen citas y ocupación del día o semana.
+- **Orden médica adjunta** a cada cita: foto (se reduce automáticamente a ~100–300 KB) o PDF, hasta 10 MB. Se guarda dentro de la base de datos, así que el respaldo la incluye.
 - Ficha de la cita: paciente, RUT, teléfono, examen, duración, previsión, médico solicitante y notas.
 - Estados: agendado, confirmado, llegó, atendido, no asistió y cancelado.
 - Las citas que se cruzan en el mismo equipo se muestran lado a lado y marcadas en rojo.
@@ -12,6 +14,8 @@ El personal ingresa con usuario y clave, y todos ven la misma agenda (se actuali
 - Registro de quién creó y quién editó por última vez cada cita.
 - **Cobro**: al elegir la prestación (código Fonasa) y la previsión, muestra valor, bonificación y copago. Con Fonasa usa el arancel MLE nivel 2; con Particular usa el precio particular del centro; con Isapre o Convenio se ingresa la bonificación del bono.
 - **Cierre de caja** diario: totales por medio de pago, previsión y equipo, cuadre de efectivo (esperado vs contado), observaciones, descarga en PDF (con firmas de cajero y supervisor) y en Excel (.xlsx, hojas Resumen y Pagos), e impresión. Una vez cerrada, la caja de ese día no admite pagos ni anulaciones; solo un administrador puede reabrirla.
+- **Descuentos** al cobrar: por porcentaje o monto, sobre el copago del paciente (la bonificación del bono no cambia), con motivo obligatorio. Quedan en el pago, en la caja (total y "Descuentos por motivo") y en el PDF, Excel y CSV del cierre.
+- **Logos**: cada centro muestra su logo en el ingreso, el encabezado de la agenda, la caja y el PDF del cierre.
 - **Aranceles**: mantenedor de prestaciones con valor y bonificación Fonasa nivel 2 y precio particular; permite pegar muchas filas desde Excel.
 
 No usa paquetes externos: solo Node.js. Los datos quedan en un archivo SQLite (`data/agenda.db`).
@@ -52,6 +56,8 @@ npm run usuario -- admin NuevaClave123 admin
 | `COOKIE_SECURE` | Pon `1` cuando la sirvas con HTTPS | — |
 | `TRUST_PROXY` | Pon `1` si está detrás de Nginx u otro proxy | — |
 | `CAJA_TZ` | Zona horaria para el día de caja | `America/Santiago` |
+| `CENTRO_NOMBRE` | Nombre del centro que se muestra en la agenda, el ingreso y los cierres de caja | — |
+| `CENTRO_LOGO` | Archivo de logo en `public/logos` (ingreso, agenda, caja y PDF). Si no se indica, se usa el que coincide con el nombre del centro (`rancagua.png`, `insi.png`) | — |
 
 ## Publicarla en Railway (la forma más rápida)
 
@@ -61,6 +67,10 @@ npm run usuario -- admin NuevaClave123 admin
 4. En **Variables** agrega: `DATA_DIR=/data`, `ADMIN_CLAVE=una-clave-segura`, `COOKIE_SECURE=1`, `TRUST_PROXY=1`.
 5. En **Settings → Networking** pulsa **Generate Domain** para tener un link HTTPS, o conecta tu propio dominio (por ejemplo `agenda.tucentro.cl`).
 6. Entra con el usuario `admin` y la clave que pusiste, y cámbiala.
+
+## Varios centros
+
+Cada centro usa su propia copia de la app, con su propia base de datos, usuarios y caja. En Render: un servicio por centro, todos desde el mismo repositorio de GitHub, cada uno con su disco en `/data`, su `CENTRO_NOMBRE` y su dominio (por ejemplo `agendarancagua.inq.cl` y `agendainsi.inq.cl`). Al subir cambios al repositorio se actualizan todos los centros a la vez.
 
 ## Dejarla funcionando en un servidor Linux
 

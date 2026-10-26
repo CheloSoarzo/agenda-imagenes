@@ -1,6 +1,6 @@
 // Agenda de Imágenes — servidor web sin dependencias (Node.js 22.13 o superior)
 // Inicio: npm start
-// Variables opcionales: PORT, HOST, DATA_DIR, ADMIN_CLAVE, SESION_HORAS, COOKIE_SECURE=1, TRUST_PROXY=1
+// Variables opcionales: PORT, HOST, DATA_DIR, ADMIN_CLAVE, SESION_HORAS, COOKIE_SECURE=1, TRUST_PROXY=1, CENTRO_NOMBRE
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -15,6 +15,18 @@ const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 const SESION_HORAS = Number(process.env.SESION_HORAS) || 12;
 const COOKIE = "agenda_sesion";
 const CAJA_TZ = process.env.CAJA_TZ || "America/Santiago";
+const CENTRO = txtEnv(process.env.CENTRO_NOMBRE); // nombre del centro que se muestra en pantalla
+function txtEnv(v) { return String(v || "").trim().slice(0, 60); }
+// Logo del centro: CENTRO_LOGO (archivo en public/logos) o, si no se indica, el que coincide con el nombre del centro
+const LOGO = (() => {
+  const dir = path.join(__dirname, "public", "logos");
+  let archivos = [];
+  try { archivos = fs.readdirSync(dir).filter((f) => /\.(png|jpe?g|svg|webp)$/i.test(f)); } catch {}
+  const pedido = txtEnv(process.env.CENTRO_LOGO);
+  const clave = (pedido || CENTRO).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const f = archivos.find((a) => a.toLowerCase() === clave) || (clave && archivos.find((a) => clave.includes(a.toLowerCase().replace(/\.[a-z]+$/, ""))));
+  return f ? "/logos/" + f : "";
+})();
 const PUBLIC = path.join(__dirname, "public");
 
 // ---------- primer usuario ----------
@@ -50,6 +62,15 @@ function leerCuerpo(req) {
     req.setEncoding("utf8");
     req.on("data", (c) => { datos += c; if (datos.length > 100_000) { mal(new ErrorHttp(413, "La solicitud es demasiado grande.")); req.destroy(); } });
     req.on("end", () => { if (!datos) return ok({}); try { ok(JSON.parse(datos)); } catch { mal(new ErrorHttp(400, "Datos no válidos.")); } });
+    req.on("error", mal);
+  });
+}
+const MAX_ADJUNTO = 10 * 1024 * 1024; // 10 MB por archivo
+function leerBinario(req, max) {
+  return new Promise((ok, mal) => {
+    const partes = []; let total = 0;
+    req.on("data", (c) => { total += c.length; if (total > max) { mal(new ErrorHttp(413, "El archivo supera los 10 MB.")); req.destroy(); } else partes.push(c); });
+    req.on("end", () => ok(Buffer.concat(partes)));
     req.on("error", mal);
   });
 }
@@ -147,7 +168,7 @@ function resumenCaja(fecha) {
   const agrupar = (clave, lista) => {
     const o = {};
     for (const p of lista) { const k = p[clave] || "Sin dato"; o[k] = o[k] || { cantidad: 0, valor: 0, bonificacion: 0, copago: 0 };
-      o[k].cantidad++; o[k].valor += p.valor; o[k].bonificacion += p.bonificacion; o[k].copago += p.copago; }
+      o[k].cantidad++; o[k].valor += p.valor; o[k].bonificacion += p.bonificacion; o[k].copago += p.copago; o[k].descuento = (o[k].descuento || 0) + (p.descuento || 0); }
     return o;
   };
   const totales = {
@@ -155,6 +176,9 @@ function resumenCaja(fecha) {
     valor: suma(validos, "valor"),
     bonificacion: suma(validos, "bonificacion"),
     recaudado: suma(validos, "copago"),
+    descuentos: suma(validos, "descuento"),
+    con_descuento: validos.filter((p) => p.descuento > 0).length,
+    por_descuento: agrupar("descuento_motivo", validos.filter((p) => p.descuento > 0)),
     anulados: pagos.length - validos.length,
     por_medio: agrupar("medio", validos),
     por_prevision: agrupar("prevision", validos),
@@ -166,7 +190,9 @@ function resumenCaja(fecha) {
   return { fecha, hoy: hoyCaja(), pagos, totales, cierre };
 }
 const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS actualizado_por_nombre,
+  (SELECT COUNT(*) FROM adjuntos a WHERE a.cita_id = c.id) AS adjuntos,
   p.id AS pago_id, p.medio AS pago_medio, p.copago AS pago_monto, p.folio_bono AS pago_folio, p.fecha AS pago_fecha,
+  p.descuento AS pago_descuento, p.descuento_motivo AS pago_desc_motivo,
   p.creado AS pago_creado, up.nombre AS pago_usuario
   FROM citas c LEFT JOIN usuarios uc ON uc.id = c.creado_por LEFT JOIN usuarios ua ON ua.id = c.actualizado_por
   LEFT JOIN pagos p ON p.id = (SELECT MAX(id) FROM pagos WHERE cita_id = c.id AND anulado = 0)
@@ -199,13 +225,56 @@ const rutas = [
 
   ["GET", /^\/api\/me$/, "sesion", async (req, u) => {
     const { tokenHash, ...datos } = u;
-    return [200, datos];
+    return [200, { ...datos, centro: CENTRO, logo: LOGO }];
   }],
 
+  ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO }]],
+
+  // Citas de un día (?fecha=) o de un rango (?desde=&hasta=, máximo 31 días)
   ["GET", /^\/api\/citas$/, "sesion", async (req, u, url) => {
     const fecha = url.searchParams.get("fecha") || "";
-    if (!reFecha.test(fecha)) fallo(400, "Falta la fecha.");
-    return [200, plainAll(db.prepare(`${SELECT_CITA} WHERE c.fecha = ? ORDER BY c.hora`).all(fecha))];
+    const desde = url.searchParams.get("desde") || fecha, hasta = url.searchParams.get("hasta") || fecha;
+    if (!reFecha.test(desde) || !reFecha.test(hasta) || hasta < desde) fallo(400, "Falta la fecha.");
+    if ((new Date(hasta) - new Date(desde)) / 864e5 > 31) fallo(400, "El rango no puede superar 31 días.");
+    return [200, plainAll(db.prepare(`${SELECT_CITA} WHERE c.fecha BETWEEN ? AND ? ORDER BY c.fecha, c.hora`).all(desde, hasta))];
+  }],
+
+  // ----- adjuntos (orden médica) -----
+  ["GET", /^\/api\/citas\/(\d+)\/adjuntos$/, "sesion", async (req, u, url, m) =>
+    [200, plainAll(db.prepare(`SELECT a.id, a.nombre, a.tipo, a.tamano, a.creado, us.nombre AS usuario_nombre,
+      '/api/adjuntos/' || a.id AS url FROM adjuntos a LEFT JOIN usuarios us ON us.id = a.usuario_id
+      WHERE a.cita_id = ? ORDER BY a.id`).all(Number(m[1])))]],
+
+  ["POST", /^\/api\/citas\/(\d+)\/adjuntos$/, "escribir", async (req, u, url, m) => {
+    const id = Number(m[1]);
+    if (!db.prepare("SELECT 1 FROM citas WHERE id = ?").get(id)) fallo(404, "La cita ya no existe.");
+    const tipo = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+    if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(tipo)) fallo(400, "Solo se pueden adjuntar fotos (JPG, PNG) o PDF.");
+    const datos = await leerBinario(req, MAX_ADJUNTO);
+    if (!datos.length) fallo(400, "El archivo está vacío.");
+    // comprobar que el contenido corresponde al tipo declarado
+    const firma = datos.subarray(0, 4).toString("hex");
+    const ok = (tipo === "application/pdf" && datos.subarray(0, 4).toString() === "%PDF") || (tipo === "image/jpeg" && firma.startsWith("ffd8"))
+      || (tipo === "image/png" && firma === "89504e47") || (tipo === "image/webp" && datos.subarray(8, 12).toString() === "WEBP");
+    if (!ok) fallo(400, "El archivo no es una imagen o PDF válido.");
+    const nombre = txt(decodeURIComponent(url.searchParams.get("nombre") || ""), 120) || "orden";
+    const r = db.prepare("INSERT INTO adjuntos (cita_id, nombre, tipo, tamano, datos, usuario_id, creado) VALUES (?,?,?,?,?,?,?)")
+      .run(id, nombre, tipo, datos.length, datos, u.id, ahoraCaja());
+    return [201, { id: Number(r.lastInsertRowid), url: "/api/adjuntos/" + r.lastInsertRowid }];
+  }],
+
+  ["GET", /^\/api\/adjuntos\/(\d+)$/, "sesion", async (req, u, url, m) => {
+    const a = db.prepare("SELECT nombre, tipo, datos FROM adjuntos WHERE id = ?").get(Number(m[1]));
+    if (!a) fallo(404, "El archivo ya no existe.");
+    const ext = a.tipo === "application/pdf" ? ".pdf" : a.tipo === "image/png" ? ".png" : a.tipo === "image/webp" ? ".webp" : ".jpg";
+    const nombre = (a.nombre.replace(/\.[a-z0-9]{2,4}$/i, "") || "orden").replace(/[^\w\- ]+/g, "_") + ext;
+    return ["RAW", Buffer.from(a.datos), { "Content-Type": a.tipo, "Content-Disposition": `inline; filename="${nombre}"`,
+      "Cache-Control": "private, max-age=3600", "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; plugin-types application/pdf" }];
+  }],
+
+  ["DELETE", /^\/api\/adjuntos\/(\d+)$/, "escribir", async (req, u, url, m) => {
+    db.prepare("DELETE FROM adjuntos WHERE id = ?").run(Number(m[1]));
+    return [200, { ok: true }];
   }],
 
   // Resumen del mes para el calendario: citas y minutos ocupados por día y equipo
@@ -264,13 +333,27 @@ const rutas = [
     if (!c.valor) fallo(400, "Elige el examen y su valor antes de cobrar.");
     const fecha = hoyCaja();
     if (cajaCerrada(fecha)) fallo(409, "La caja de hoy ya está cerrada. Un administrador debe reabrirla para registrar pagos.");
-    const medio = c.copago === 0 ? "Sin copago" : txt(b.medio, 20);
+    // Descuento sobre el copago del paciente (la bonificación del bono no cambia)
+    const tipoDesc = txt(b.descuento_tipo, 10), motivoDesc = txt(b.descuento_motivo, 120);
+    let descuento = 0, detalle = "";
+    if (tipoDesc === "pct") {
+      const pct = Math.min(100, Math.max(0, Number(String(b.descuento_valor ?? "").replace(",", ".")) || 0));
+      descuento = Math.round(c.copago * pct / 100); detalle = `${String(pct).replace(".", ",")}%`;
+    } else if (tipoDesc === "monto") {
+      descuento = entero(b.descuento_valor); detalle = "monto";
+    } else if (tipoDesc) fallo(400, "Tipo de descuento no válido.");
+    if (descuento < 0 || descuento > c.copago) fallo(400, "El descuento no puede ser mayor que el copago.");
+    if (descuento > 0 && !motivoDesc) fallo(400, "Escribe el motivo del descuento.");
+    if (!descuento) detalle = "";
+    const aPagar = c.copago - descuento;
+    const medio = aPagar === 0 ? "Sin copago" : txt(b.medio, 20);
     if (!MEDIOS.includes(medio)) fallo(400, "Elige el medio de pago.");
     const folio = txt(b.folio_bono, 40);
     if (c.prevision === "Fonasa" && c.bonificacion > 0 && !folio) fallo(400, "Ingresa el folio del bono Fonasa.");
-    db.prepare(`INSERT INTO pagos (cita_id, fecha, paciente, rut, equipo, codigo, examen, prevision, valor, bonificacion, copago, medio, folio_bono, usuario_id, creado)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
-      c.valor, c.bonificacion, c.copago, medio, folio, u.id, ahoraCaja());
+    db.prepare(`INSERT INTO pagos (cita_id, fecha, paciente, rut, equipo, codigo, examen, prevision, valor, bonificacion, copago, medio, folio_bono, usuario_id, creado,
+      descuento, descuento_motivo, descuento_detalle)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
+      c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle);
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
     return [201, citaPorId(id)];
   }],
@@ -319,13 +402,14 @@ const rutas = [
     if (!reFecha.test(fecha)) fallo(400, "La fecha no es válida.");
     const r = resumenCaja(fecha);
     const esc = (v) => { const t = String(v ?? ""); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const filas = [["Hora", "Paciente", "RUT", "Equipo", "Código", "Examen", "Previsión", "Valor", "Bonificación", "Copago", "Medio", "Folio bono", "Cajero", "Estado"]];
+    const filas = [["Hora", "Paciente", "RUT", "Equipo", "Código", "Examen", "Previsión", "Valor", "Bonificación", "Descuento", "Motivo descuento", "Pagado", "Medio", "Folio bono", "Cajero", "Estado"]];
     for (const p of r.pagos) filas.push([p.creado.slice(11, 16), p.paciente, p.rut, p.equipo.toUpperCase(), p.codigo, p.examen, p.prevision,
-      p.valor, p.bonificacion, p.copago, p.medio, p.folio_bono, p.usuario_nombre, p.anulado ? "ANULADO: " + p.motivo_anulacion : "OK"]);
+      p.valor, p.bonificacion, p.descuento, p.descuento_motivo, p.copago, p.medio, p.folio_bono, p.usuario_nombre, p.anulado ? "ANULADO: " + p.motivo_anulacion : "OK"]);
     filas.push([]);
     filas.push(["Total atenciones", r.totales.atenciones]);
     filas.push(["Total valor", r.totales.valor]);
     filas.push(["Total bonificación", r.totales.bonificacion]);
+    filas.push(["Total descuentos", r.totales.descuentos]);
     filas.push(["Total recaudado", r.totales.recaudado]);
     for (const [k, v] of Object.entries(r.totales.por_medio)) filas.push(["Recaudado " + k, v.copago]);
     if (r.cierre) { filas.push(["Efectivo contado", r.cierre.efectivo_contado]); filas.push(["Diferencia", r.cierre.diferencia]); }
@@ -402,7 +486,8 @@ const rutas = [
 
 // ---------- archivos ----------
 const TIPOS = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-  ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
+  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+  ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
 function enviarArchivo(res, archivo) {
   const ruta = path.join(PUBLIC, archivo);
   if (!ruta.startsWith(PUBLIC + path.sep)) { res.writeHead(404); return res.end(); }
