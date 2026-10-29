@@ -92,6 +92,11 @@
       <div class="field"><label for="f-rut">RUT</label><input id="f-rut" autocomplete="off" placeholder="12.345.678-9"></div>
       <div class="field"><label for="f-tel">Teléfono</label><input id="f-tel" type="tel" autocomplete="off" placeholder="+56 9 …"></div>
     </div>
+    <div class="row2">
+      <div class="field"><label for="f-nac">Fecha de nacimiento</label>
+        <div class="nac"><input id="f-nac" type="date" min="1900-01-01"><span class="edad" id="f-edad"></span></div></div>
+      <div class="field"><label for="f-email">Correo electrónico</label><input id="f-email" type="email" autocomplete="off" placeholder="nombre@correo.cl"></div>
+    </div>
     <div class="field"><label>Equipo</label><div class="seg" id="f-equipo"></div></div>
     <div class="row2">
       <div class="field"><label for="f-prevision">Previsión</label>
@@ -129,9 +134,26 @@
       <div class="adj-list" id="adj-list"></div>
       <p class="meta" id="adj-msg"></p>
     </div>
-    <div class="pago" id="pago" hidden>
-      <strong class="pago-tit">Pago</strong>
-      <div id="pago-hecho" hidden>
+    <div class="meta" id="fmeta"></div>
+    <div class="msg" id="fmsg"></div>
+    <div class="actions">
+      <button type="button" class="btn danger" id="borrar" hidden>Eliminar</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="cancelar">Cancelar</button>
+      <button type="submit" class="btn primary" id="guardar">Guardar cita</button>
+      <button type="button" class="btn pay" id="ir-cobro" hidden>Cobrar</button>
+    </div>
+  </form>
+</div>
+
+<!-- Panel de cobro (se usa cuando el paciente llega a pagar) -->
+<div class="scrim" id="pscrim" hidden>
+  <div class="panel" id="cobro-panel">
+    <h2>Cobro</h2>
+    <div class="c-pac"><b id="c-paciente"></b><span class="meta" id="c-sub"></span></div>
+    <div class="tblwrap"><table class="pagos c-ex" id="c-examenes"></table></div>
+    <div class="pago" id="pago">
+            <div id="pago-hecho" hidden>
         <div id="pago-info"></div>
         <div class="anular" id="anular-box" hidden>
           <div class="field"><label for="anular-motivo">Motivo de la anulación</label><input id="anular-motivo" autocomplete="off" placeholder="Ej. se cobró el examen equivocado"></div>
@@ -142,7 +164,10 @@
         <div class="row2">
           <div class="field"><label for="p-medio">Medio de pago</label>
             <select id="p-medio"><option value="">Elige…</option><option>Efectivo</option><option>Débito</option><option>Crédito</option><option>Transferencia</option></select></div>
-          <div class="field" id="p-folio-f"><label for="p-folio">Folio bono Fonasa</label><input id="p-folio" autocomplete="off" inputmode="numeric"></div>
+          <div class="field"><label for="p-boleta">N° de boleta</label><input id="p-boleta" autocomplete="off" inputmode="numeric" placeholder="Opcional"></div>
+        </div>
+        <div class="row2">
+          <div class="field" id="p-folio-f"><label for="p-folio" id="p-folio-l">Folio bono Fonasa</label><input id="p-folio" autocomplete="off" inputmode="numeric"></div>
         </div>
         <div class="desc">
           <div class="row3">
@@ -154,18 +179,16 @@
           <datalist id="motivos-desc"><option value="Funcionario"><option value="Convenio"><option value="Adulto mayor"><option value="Cortesía"><option value="Paciente frecuente"><option value="Campaña"></datalist>
         </div>
         <div class="total-pagar"><div><span>Total a pagar</span><small id="p-desc-txt"></small></div><b id="p-total">$0</b></div>
-        <button type="button" class="btn pay" id="cobrar">Guardar y cobrar</button>
+        <button type="button" class="btn pay" id="cobrar">Cobrar</button>
       </div>
     </div>
-    <div class="meta" id="fmeta"></div>
-    <div class="msg" id="fmsg"></div>
+    <div class="msg" id="pmsg"></div>
     <div class="actions">
-      <button type="button" class="btn danger" id="borrar" hidden>Eliminar</button>
+      <button type="button" class="btn" id="c-editar">Editar cita</button>
       <span class="spacer"></span>
-      <button type="button" class="btn" id="cancelar">Cancelar</button>
-      <button type="submit" class="btn primary" id="guardar">Guardar</button>
+      <button type="button" class="btn" id="c-cerrar">Cerrar</button>
     </div>
-  </form>
+  </div>
 </div>
 
 <!-- Panel de usuarios -->
@@ -208,7 +231,17 @@
     <div class="caja-head">
       <div class="caja-marca"><div class="marca" id="k-logo" hidden><img alt=""></div><h2 id="k-titulo">Caja del día</h2></div>
       <div class="caja-ctrl">
-        <input type="date" id="k-fecha" aria-label="Día de caja">
+        <select id="k-rango" aria-label="Período">
+          <option value="hoy">Hoy</option>
+          <option value="3d">Últimos 3 días</option>
+          <option value="7d">Última semana</option>
+          <option value="mes">Mes actual</option>
+          <option value="mesant">Mes pasado</option>
+          <option value="entre">Elegir fechas…</option>
+        </select>
+        <span class="k-entre" id="k-entre" hidden>
+          <input type="date" id="k-desde" aria-label="Desde"><span class="meta">a</span><input type="date" id="k-hasta" aria-label="Hasta">
+        </span>
         <span class="pill" id="k-estado"></span>
       </div>
     </div>
@@ -219,7 +252,8 @@
       <div><h3>Por equipo</h3><div class="tbl" id="k-equipo"></div></div>
       <div id="k-desc-box" hidden><h3>Descuentos por motivo</h3><div class="tbl" id="k-desc"></div></div>
     </div>
-    <h3>Pagos del día</h3>
+    <div id="k-dias-box" hidden><h3>Cierres por día</h3><div class="tblwrap"><table class="pagos dias" id="k-dias"></table></div><p class="meta">Toca un día para verlo, cerrarlo o reabrirlo.</p></div>
+    <h3 id="k-pagos-tit">Pagos del día</h3>
     <div class="tblwrap"><table class="pagos" id="k-pagos"></table></div>
     <div class="cierre" id="k-cierre"></div>
     <div class="msg" id="kmsg"></div>
@@ -414,7 +448,7 @@ function render(){
       el.querySelector(".h").textContent=c.hora;
       el.querySelector(".p").textContent=c.paciente;
       el.querySelector(".e").textContent=c.examen||"";
-      el.querySelector(".st").textContent=est.n+(c.pago_id?" · pagado":"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
+      el.querySelector(".st").textContent=est.n+(c.pago_id?" · pagado":(c.estado==="llego"||c.estado==="atendido")&&c.valor?" · por cobrar":"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
       if(c.pago_id) el.classList.add("paid");
       el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.adjuntos?" · orden adjunta":""}`;
       el.addEventListener("click",()=>openForm(c));
@@ -654,15 +688,48 @@ function recalcular(reset){
   $("#f-copago").value=$$(Math.max(0,val-bon));
   $("#f-copago").classList.toggle("bad",bon>val);
   $("#f-preciohint").textContent=!prev?"Elige la previsión para calcular el copago.":ls.length>1?`${ls.length} exámenes`:"";
-  $("#p-folio-f").hidden=!(prev==="Fonasa"&&bon>0);
+}
+/* ---------- cobro (separado del agendamiento) ---------- */
+let cobroCita=null;
+function lineasDe(c){
+  let ls=[]; try{ls=c.examenes?JSON.parse(c.examenes):[]}catch(e){}
+  if(!ls.length&&(c.codigo||c.examen||c.valor)) ls=[{codigo:c.codigo,nombre:c.examen,valor:c.valor,bonificacion:c.bonificacion,copago:c.copago}];
+  return ls;
+}
+function openCobro(c){
+  cobroCita=c; const pagada=!!c.pago_id;
+  $("#c-paciente").textContent=c.paciente;
+  $("#c-sub").textContent=[c.rut,c.prevision||"Sin previsión",parseISO(c.fecha).toLocaleDateString("es-CL")+" "+c.hora,(EQN[c.equipo]||c.equipo)].filter(Boolean).join(" · ");
+  const ls=lineasDe(c);
+  tabla($("#c-examenes"),[...ls.map(l=>({...l,copago:l.copago??(l.valor-l.bonificacion)})),{_cls:"tot",nombre:"Total",codigo:"",valor:c.valor,bonificacion:c.bonificacion,copago:c.copago}],[
+    {t:"Examen",f:l=>(l.codigo?l.codigo+" · ":"")+(l.nombre||"")},{t:"Valor",n:1,f:l=>$$(l.valor)},{t:"Bonif.",n:1,f:l=>$$(l.bonificacion)},{t:"Copago",n:1,f:l=>$$(l.copago)}]);
+  if(!ls.length) $("#c-examenes").innerHTML='<tr><td class="meta">La cita no tiene exámenes. Usa "Editar cita" para agregarlos.</td></tr>';
+  $("#p-medio").value=""; $("#p-folio").value=""; $("#p-boleta").value="";
+  $("#p-dtipo").value=""; $("#p-dvalor").value=""; $("#p-dmotivo").value=""; $("#p-dvalor-f").hidden=true; $("#p-dmotivo-f").hidden=true;
+  $("#anular-box").hidden=true; $("#anular-motivo").value="";
+  $("#pago-hecho").hidden=!pagada; $("#pago-form").hidden=pagada||!canWrite;
+  if(pagada){
+    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""} · ${parseISO(c.pago_fecha||c.fecha).toLocaleDateString("es-CL")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
+    $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
+  }
+  $("#pmsg").textContent=""; $("#pmsg").className="msg";
+  if(!canWrite&&!pagada){$("#pmsg").textContent="Tu usuario es solo de lectura."}
+  $("#c-editar").hidden=false;
+  recalcCobro();
+  $("#pscrim").hidden=false;
+}
+function recalcCobro(){
+  const c=cobroCita; if(!c) return;
+  const val=c.valor||0, bon=c.bonificacion||0;
   const cop=Math.max(0,val-bon), ds=descuentoActual(cop), total=cop-ds.monto;
+  $("#p-folio-f").hidden=!(bon>0);
+  $("#p-folio-l").textContent=c.prevision==="Fonasa"?"Folio bono Fonasa":"N° de bono "+(c.prevision||"");
   $("#p-total").textContent=$$(total);
   $("#p-desc-txt").textContent=ds.error||(ds.monto?`Copago ${$$(cop)} − descuento ${$$(ds.monto)}`:"");
   $("#p-desc-txt").className=ds.error?"bad":"";
-  $("#cobrar").textContent=val?`Guardar y cobrar ${$$(total)}`:"Guardar y cobrar";
-  $("#p-medio").disabled=disabled||(val>0&&total===0);
+  $("#cobrar").textContent=val?`Cobrar ${$$(total)}`:"Cobrar";
+  $("#p-medio").disabled=val>0&&total===0;
   if(val>0&&total===0)$("#p-medio").value="";
-  if(val>0&&val-bon===0)$("#p-medio").value="";
 }
 // Descuento sobre el copago: porcentaje o monto fijo
 function descuentoActual(copago){
@@ -682,9 +749,9 @@ $("#p-dtipo").addEventListener("change",()=>{
   $("#p-dvalor-f").hidden=!t; $("#p-dmotivo-f").hidden=!t;
   $("#p-dvalor-l").textContent=t==="pct"?"Porcentaje":"Monto";
   $("#p-dvalor").placeholder=t==="pct"?"Ej. 10":"Ej. $5.000"; $("#p-dvalor").value="";
-  recalcular(false); if(t) $("#p-dvalor").focus();
+  recalcCobro(); if(t) $("#p-dvalor").focus();
 });
-$("#p-dvalor").addEventListener("input",()=>recalcular(false));
+$("#p-dvalor").addEventListener("input",()=>recalcCobro());
 $("#p-dvalor").addEventListener("blur",e=>{if($("#p-dtipo").value==="monto"&&e.target.value)e.target.value=$$(pesos(e.target.value))});
 
 $("#f-prevision").addEventListener("change",()=>recalcular(true));
@@ -693,6 +760,7 @@ function openForm(c,preset={}){
   editId=c?c.id:null;
   $("#ftitle").textContent=c?"Editar cita":"Nueva cita";
   $("#f-paciente").value=c?.paciente||preset.paciente||""; $("#f-rut").value=c?.rut||preset.rut||""; $("#f-tel").value=c?.telefono||preset.telefono||"";
+  $("#f-nac").value=c?.fecha_nac||""; $("#f-email").value=c?.email||""; mostrarEdad();
   $("#f-fecha").value=c?.fecha||preset.fecha||dia;
   $("#f-hora").value=c?.hora||preset.hora||"09:00";
   $("#f-prevision").value=c?.prevision||preset.prevision||""; $("#f-medico").value=c?.medico||""; $("#f-notas").value=c?.notas||"";
@@ -703,9 +771,6 @@ function openForm(c,preset={}){
   if(!previas.length&&c&&(c.codigo||c.examen||c.valor)) previas=[{codigo:c.codigo,nombre:c.examen,valor:c.valor,bonificacion:c.bonificacion}];
   if(!previas.length) previas=[{}];
   for(const l of previas) addLinea(l);
-  $("#p-medio").value=""; $("#p-folio").value="";
-  $("#p-dtipo").value=""; $("#p-dvalor").value=""; $("#p-dmotivo").value=""; $("#p-dvalor-f").hidden=true; $("#p-dmotivo-f").hidden=true;
-  $("#anular-box").hidden=true; $("#anular-motivo").value="";
   segButtons($("#f-equipo"),EQUIPOS,eq,id=>setEquipo(id,!editId));
   estadoSel=c?.estado||"agendado"; segButtons($("#f-estado"),ESTADOS,estadoSel,id=>estadoSel=id);
   const del=$("#borrar"); del.hidden=!c||!canWrite; del.classList.remove("armed"); del.textContent="Eliminar";
@@ -713,24 +778,23 @@ function openForm(c,preset={}){
   $("#fmsg").textContent=canWrite?"":"Tu usuario es solo de lectura."; $("#fmsg").className="msg";
   [...$("#form").elements].forEach(el=>{if(el.id!=="cancelar")el.disabled=!canWrite});
   $("#f-prevision").disabled=!canWrite||citaPagada;
-  $("#pago").hidden=!canWrite&&!citaPagada;
-  $("#pago-hecho").hidden=!citaPagada; $("#pago-form").hidden=citaPagada;
-  if(citaPagada){
-    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""} · ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar el examen o los valores, anula el pago.`;
-    $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
-  }
+  const ir=$("#ir-cobro");
+  ir.hidden=!c&&!canWrite; ir.disabled=false;
+  ir.textContent=citaPagada?"Ver pago":c?"Cobrar":"Guardar y cobrar";
+  if(!canWrite&&!citaPagada) ir.hidden=true;
   recalcular(false);
   adjPendientes=[]; $("#adj-btn").hidden=!canWrite; cargarAdjuntos(c?.id);
   $("#scrim").hidden=false; setTimeout(()=>$("#f-paciente").focus(),30);
 }
 function closeForm(){$("#scrim").hidden=true;editId=null}
 $("#cancelar").addEventListener("click",closeForm);
-const SCRIMS=["scrim","uscrim","cscrim","kscrim","ascrim"];
+const SCRIMS=["scrim","uscrim","cscrim","kscrim","ascrim","pscrim"];
 for(const id of SCRIMS) $("#"+id).addEventListener("click",e=>{if(e.target.id===id)$("#"+id).hidden=true});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")for(const id of SCRIMS)$("#"+id).hidden=true});
 
 function datosForm(){
   const d={paciente:$("#f-paciente").value.trim(),rut:$("#f-rut").value.trim(),telefono:$("#f-tel").value.trim(),
+    fecha_nac:$("#f-nac").value,email:$("#f-email").value.trim(),
     equipo:equipoSel,fecha:$("#f-fecha").value,hora:$("#f-hora").value,
     duracion:Number($("#f-dur").value),prevision:$("#f-prevision").value,medico:$("#f-medico").value.trim(),
     estado:estadoSel,notas:$("#f-notas").value.trim(),examenes:lineas()};
@@ -740,6 +804,8 @@ function datosForm(){
 function validarForm(data){
   if(!data.paciente) return "Escribe el nombre del paciente.";
   if(!data.fecha||!data.hora) return "Elige fecha y hora.";
+  if(data.fecha_nac&&(data.fecha_nac>isoDate(new Date())||data.fecha_nac<"1900-01-01")) return "Revisa la fecha de nacimiento.";
+  if(data.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email)) return "Revisa el correo electrónico.";
   if(data.examenes.some(l=>l.bonificacion>l.valor)) return "En un examen la bonificación es mayor que el valor.";
   return "";
 }
@@ -761,25 +827,39 @@ $("#form").addEventListener("submit",async e=>{
   finally{btn.disabled=false}
 });
 
+// Desde la cita: guarda los cambios y abre el cobro
+$("#ir-cobro").addEventListener("click",async()=>{
+  const msg=$("#fmsg"); msg.className="msg err";
+  if(citaPagada||!canWrite){const c=citas.find(x=>x.id===editId); if(c){closeForm();openCobro(c)} return}
+  const data=datosForm(), err=validarForm(data);
+  if(err){msg.textContent=err;return}
+  const b=$("#ir-cobro"); b.disabled=true;
+  try{
+    const c=await guardarCita(data);
+    closeForm(); openCobro(c);
+    if(data.fecha!==dia) setDia(data.fecha); else cargar();
+  }catch(e){msg.textContent=e.message}
+  finally{b.disabled=false}
+});
+
 $("#cobrar").addEventListener("click",async()=>{
-  const msg=$("#fmsg"), data=datosForm(); msg.className="msg err";
-  let err=validarForm(data);
-  const copago=data.valor-data.bonificacion;
-  if(!err&&!data.valor) err="Elige la prestación o ingresa el valor de al menos un examen.";
-  if(!err&&!data.prevision) err="Elige la previsión del paciente.";
-  const ds=descuentoActual(Math.max(0,copago)), total=copago-ds.monto;
-  if(!err&&ds.error) err=ds.error;
-  if(!err&&$("#p-dtipo").value&&$("#p-dvalor").value.trim()&&ds.monto>0&&!$("#p-dmotivo").value.trim()) err="Escribe el motivo del descuento.";
-  if(!err&&total>0&&!$("#p-medio").value) err="Elige el medio de pago.";
-  if(!err&&data.prevision==="Fonasa"&&data.bonificacion>0&&!$("#p-folio").value.trim()) err="Ingresa el folio del bono Fonasa.";
+  const c=cobroCita, msg=$("#pmsg"); msg.className="msg err";
+  const copago=c.valor-c.bonificacion, ds=descuentoActual(Math.max(0,copago)), total=copago-ds.monto;
+  let err="";
+  if(!c.valor) err="La cita no tiene exámenes con valor. Usa \"Editar cita\" para agregarlos.";
+  else if(!c.prevision) err="La cita no tiene previsión. Usa \"Editar cita\" para indicarla.";
+  else if(ds.error) err=ds.error;
+  else if($("#p-dtipo").value&&$("#p-dvalor").value.trim()&&ds.monto>0&&!$("#p-dmotivo").value.trim()) err="Escribe el motivo del descuento.";
+  else if(total>0&&!$("#p-medio").value) err="Elige el medio de pago.";
+  else if(c.prevision==="Fonasa"&&c.bonificacion>0&&!$("#p-folio").value.trim()) err="Ingresa el folio del bono Fonasa.";
   if(err){msg.textContent=err;return}
   const btn=$("#cobrar"); btn.disabled=true;
   try{
-    const c=await guardarCita(data);
     const desc=ds.monto>0?{descuento_tipo:$("#p-dtipo").value,descuento_valor:$("#p-dtipo").value==="pct"?String(ds.pct):ds.monto,descuento_motivo:$("#p-dmotivo").value.trim()}:{};
-    await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{medio:$("#p-medio").value,folio_bono:$("#p-folio").value.trim(),...desc}});
-    closeForm(); toast(total>0?`Pago registrado: ${$$(total)}${ds.monto?" (con descuento)":""}`:"Atención registrada sin copago");
-    if(data.fecha!==dia) setDia(data.fecha); else cargar();
+    await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{medio:$("#p-medio").value,folio_bono:$("#p-folio").value.trim(),boleta:$("#p-boleta").value.trim(),...desc}});
+    $("#pscrim").hidden=true; cobroCita=null;
+    toast(total>0?`Pago registrado: ${$$(total)}${ds.monto?" (con descuento)":""}`:"Atención registrada sin copago");
+    cargar();
   }catch(e){msg.textContent=e.message}
   finally{btn.disabled=false}
 });
@@ -787,11 +867,39 @@ $("#cobrar").addEventListener("click",async()=>{
 $("#anular").addEventListener("click",async()=>{
   const b=$("#anular"), box=$("#anular-box");
   if(box.hidden){box.hidden=false;b.classList.add("armed");b.textContent="Confirmar anulación";$("#anular-motivo").focus();return}
-  const c=citas.find(x=>x.id===editId);
+  const c=cobroCita;
   try{
     await api(`/api/pagos/${c.pago_id}/anular`,{method:"POST",body:{motivo:$("#anular-motivo").value}});
-    toast("Pago anulado"); await cargar(); openForm(citas.find(x=>x.id===c.id));
-  }catch(e){$("#fmsg").className="msg err";$("#fmsg").textContent=e.message}
+    toast("Pago anulado"); await cargar();
+    const nueva=citas.find(x=>x.id===c.id); if(nueva) openCobro(nueva); else $("#pscrim").hidden=true;
+  }catch(e){$("#pmsg").className="msg err";$("#pmsg").textContent=e.message}
+});
+$("#c-cerrar").addEventListener("click",()=>{$("#pscrim").hidden=true;cobroCita=null});
+$("#c-editar").addEventListener("click",()=>{const c=cobroCita;$("#pscrim").hidden=true;cobroCita=null;if(c)openForm(citas.find(x=>x.id===c.id)||c)});
+
+/* ---------- edad y datos del paciente por RUT ---------- */
+function edadTxt(nac){
+  if(!nac) return "";
+  const n=parseISO(nac), h=new Date(); if(n>h) return "";
+  let a=h.getFullYear()-n.getFullYear(), m=h.getMonth()-n.getMonth();
+  if(h.getDate()<n.getDate()) m--; if(m<0){a--;m+=12}
+  if(a>=2) return a+" años";
+  const meses=a*12+m; if(meses>=1) return meses+(meses===1?" mes":" meses");
+  const dias=Math.floor((h-n)/864e5); return dias+(dias===1?" día":" días");
+}
+function mostrarEdad(){$("#f-edad").textContent=edadTxt($("#f-nac").value)}
+$("#f-nac").addEventListener("input",mostrarEdad);
+$("#f-nac").max=isoDate(new Date());
+$("#f-rut").addEventListener("blur",async()=>{
+  if(editId||!canWrite) return;
+  const rut=$("#f-rut").value.trim(); if(rut.replace(/[^0-9kK]/g,"").length<7) return;
+  try{
+    const p=await api("/api/paciente?rut="+encodeURIComponent(rut)); if(!p) return;
+    let n=0; const poner=(id,v)=>{if(v&&!$(id).value){$(id).value=v;n++}};
+    poner("#f-paciente",p.paciente); poner("#f-tel",p.telefono); poner("#f-nac",p.fecha_nac); poner("#f-email",p.email);
+    if(p.prevision&&!$("#f-prevision").value){$("#f-prevision").value=p.prevision;n++;recalcular(true)}
+    mostrarEdad(); if(n) toast("Datos del paciente cargados de su última cita");
+  }catch(e){}
 });
 
 $("#borrar").addEventListener("click",async()=>{
@@ -879,7 +987,18 @@ $("#cform").addEventListener("submit",async e=>{
 
 /* ---------- caja ---------- */
 const EQN={tc:"TC",rx:"RX",eco:"ECO"};
-let cajaFecha=null, cajaData=null;
+let cajaData=null, cajaRango={desde:null,hasta:null};
+const fCorta=f=>{const [y,m,d]=f.split("-");return `${d}-${m}-${y}`};
+// Fechas de cada período (incluye hoy)
+function rangoPreset(v){
+  const hoy=isoDate(new Date()), d=new Date();
+  if(v==="3d") return {desde:sumarDias(hoy,-2),hasta:hoy};
+  if(v==="7d") return {desde:sumarDias(hoy,-6),hasta:hoy};
+  if(v==="mes") return {desde:hoy.slice(0,8)+"01",hasta:hoy};
+  if(v==="mesant"){const a=new Date(d.getFullYear(),d.getMonth()-1,1),b=new Date(d.getFullYear(),d.getMonth(),0);return {desde:isoDate(a),hasta:isoDate(b)}}
+  return {desde:hoy,hasta:hoy};
+}
+function textoPeriodo(d){return d.un_dia?fechaLarga(d.desde).replace(/^./,c=>c.toUpperCase()):`Del ${fCorta(d.desde)} al ${fCorta(d.hasta)}`}
 function tabla(el,filas,cols){
   el.innerHTML="";
   const t=document.createElement("table");
@@ -895,16 +1014,37 @@ function grupoTabla(el,obj,etq=k=>k){
   if(!filas.length){el.innerHTML='<p class="meta">Sin pagos.</p>';return}
   tabla(el,filas,[{t:"",f:r=>r.k},{t:"N°",n:1,f:r=>r.cantidad},{t:"Bonificación",n:1,f:r=>$$(r.bonificacion)},{t:"Recaudado",n:1,f:r=>$$(r.copago)}]);
 }
-async function abrirCaja(fecha){
-  cajaFecha=fecha||cajaFecha; $("#kmsg").textContent="";
-  try{cajaData=await api("/api/caja"+(cajaFecha?"?fecha="+cajaFecha:""))}catch(e){$("#kmsg").className="msg err";$("#kmsg").textContent=e.message;return}
-  const d=cajaData, t=d.totales; cajaFecha=d.fecha;
-  $("#kscrim").hidden=false; $("#k-titulo").textContent="Caja del día"+(centroNombre?" · "+centroNombre:"");
-  $("#k-fecha").value=d.fecha; $("#k-fecha").max=d.hoy;
-  
+async function abrirCaja(rango){
+  if(rango) cajaRango=rango;
+  if(!cajaRango.desde) cajaRango=rangoPreset("hoy");
+  $("#kmsg").textContent="";
+  try{cajaData=await api(`/api/caja?desde=${cajaRango.desde}&hasta=${cajaRango.hasta}`)}catch(e){$("#kmsg").className="msg err";$("#kmsg").textContent=e.message;$("#kscrim").hidden=false;return}
+  const d=cajaData, t=d.totales;
+  $("#kscrim").hidden=false;
+  $("#k-titulo").textContent=(d.un_dia?"Caja del día":"Resumen de caja")+(centroNombre?" · "+centroNombre:"");
+  $("#k-desde").value=d.desde; $("#k-hasta").value=d.hasta; $("#k-desde").max=$("#k-hasta").max=d.hoy;
   const st=$("#k-estado");
-  st.textContent=d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"—"} · ${d.cierre.creado.slice(11,16)}`:"Abierta";
-  st.className="pill "+(d.cierre?"closed":"open");
+  if(d.un_dia){
+    st.textContent=(d.desde===d.hoy?"":fCorta(d.desde)+" · ")+(d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"—"} · ${d.cierre.creado.slice(11,16)}`:"Abierta");
+    st.className="pill "+(d.cierre?"closed":"open");
+  }else{
+    const conPagos=d.por_dia.length, cerr=d.por_dia.filter(x=>x.cerrada).length;
+    st.textContent=`${textoPeriodo(d)} · ${conPagos?`${cerr} de ${conPagos} días cerrados`:"sin pagos"}`;
+    st.className="pill "+(conPagos&&cerr===conPagos?"closed":"open");
+  }
+  // cierres por día (períodos de varios días)
+  $("#k-dias-box").hidden=d.un_dia;
+  if(!d.un_dia){
+    tabla($("#k-dias"),d.por_dia.map(x=>({...x,_cls:"click"})),[
+      {t:"Fecha",f:x=>parseISO(x.fecha).toLocaleDateString("es-CL",{weekday:"short",day:"2-digit",month:"2-digit"})},
+      {t:"Atenciones",n:1,f:x=>x.atenciones},{t:"Recaudado",n:1,f:x=>$$(x.recaudado)},{t:"Efectivo esperado",n:1,f:x=>$$(x.efectivo_esperado)},
+      {t:"Contado",n:1,f:x=>x.cerrada?$$(x.efectivo_contado):"—"},{t:"Diferencia",n:1,f:x=>x.cerrada?(x.diferencia>0?"+":x.diferencia<0?"−":"")+$$(Math.abs(x.diferencia)):"—"},
+      {t:"Estado",f:x=>x.cerrada?"Cerrada":"Abierta"}]);
+    if(!d.por_dia.length) $("#k-dias").innerHTML='<tr><td class="meta">No hay pagos en este período.</td></tr>';
+    [...$("#k-dias").querySelectorAll("tr.click")].forEach((tr,i)=>{tr.tabIndex=0;const ir=()=>{$("#k-rango").value="entre";$("#k-entre").hidden=false;abrirCaja({desde:d.por_dia[i].fecha,hasta:d.por_dia[i].fecha})};
+      tr.addEventListener("click",ir);tr.addEventListener("keydown",e=>{if(e.key==="Enter")ir()})});
+  }
+  $("#k-pagos-tit").textContent=d.un_dia?"Pagos del día":"Pagos del período";
   const tiles=[["Atenciones cobradas",t.atenciones],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Descuentos",$$(t.descuentos||0)],["Recaudado en caja",$$(t.recaudado)]];
   $("#k-tiles").innerHTML="";
   for(const [l,v] of tiles){const d2=document.createElement("div");d2.className="tile";d2.innerHTML="<span></span><b></b>";d2.children[0].textContent=l;d2.children[1].textContent=v;$("#k-tiles").appendChild(d2)}
@@ -913,15 +1053,18 @@ async function abrirCaja(fecha){
   $("#k-desc-box").hidden=!pd.length;
   if(pd.length) tabla($("#k-desc"),pd,[{t:"Motivo",f:r=>r.k},{t:"N°",n:1,f:r=>r.cantidad},{t:"Descuento",n:1,f:r=>$$(r.descuento)}]);
   tabla($("#k-pagos"),d.pagos.map(p=>({...p,_cls:p.anulado?"anulado":""})),[
+    ...(d.un_dia?[]:[{t:"Fecha",f:p=>fCorta(p.fecha).slice(0,5)}]),
     {t:"Hora",f:p=>p.creado.slice(11,16)},{t:"Paciente",f:p=>p.paciente},{t:"Equipo",f:p=>EQN[p.equipo]||p.equipo},
     {t:"Examen",f:p=>(p.codigo?p.codigo+" · ":"")+p.examen},{t:"Previsión",f:p=>p.prevision},
     {t:"Valor",n:1,f:p=>$$(p.valor)},{t:"Bonif.",n:1,f:p=>$$(p.bonificacion)},{t:"Desc.",n:1,f:p=>p.descuento?"−"+$$(p.descuento):""},{t:"Pagado",n:1,f:p=>$$(p.copago)},
-    {t:"Medio",f:p=>p.medio},{t:"Bono",f:p=>p.folio_bono},{t:"Cajero",f:p=>p.usuario_nombre||""},
+    {t:"Medio",f:p=>p.medio},{t:"Bono / boleta",f:p=>[p.folio_bono&&"B "+p.folio_bono,p.boleta&&"Bol "+p.boleta].filter(Boolean).join(" · ")},{t:"Cajero",f:p=>p.usuario_nombre||""},
     {t:"",f:p=>p.anulado?"Anulado: "+p.motivo_anulacion:""}]);
-  if(!d.pagos.length) $("#k-pagos").innerHTML='<tr><td class="meta">Aún no hay pagos registrados este día.</td></tr>';
+  if(!d.pagos.length) $("#k-pagos").innerHTML=`<tr><td class="meta">${d.un_dia?"Aún no hay pagos registrados este día.":"No hay pagos en este período."}</td></tr>`;
   // cierre
   const k=$("#k-cierre"); k.innerHTML="";
-  if(d.cierre){
+  if(!d.un_dia){
+    if(d.cierres.length) k.innerHTML=`<p class="meta">Diferencias de efectivo en el período: <b>${(t.diferencias>0?"+":t.diferencias<0?"−":"")+$$(Math.abs(t.diferencias))}</b>. Para cerrar o reabrir la caja de un día, elige ese día.</p>`;
+  }else if(d.cierre){
     const c=d.cierre;
     k.innerHTML=`<h3>Cierre de caja</h3><div class="cuadre"><div><span>Efectivo esperado</span><b></b></div><div><span>Efectivo contado</span><b></b></div><div><span>Diferencia</span><b></b></div></div><p class="meta obs"></p>`;
     const bs=k.querySelectorAll(".cuadre b"); bs[0].textContent=$$(c.resumen.efectivo_esperado); bs[1].textContent=$$(c.efectivo_contado);
@@ -930,7 +1073,7 @@ async function abrirCaja(fecha){
     if(yo.rol==="admin"){const b=document.createElement("button");b.type="button";b.className="btn noprint";b.textContent="Reabrir caja";
       b.addEventListener("click",async()=>{if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="Confirmar: reabrir caja";return}
         try{await api("/api/caja/reabrir",{method:"POST",body:{fecha:d.fecha}});toast("Caja reabierta");abrirCaja()}catch(e){toast(e.message)}});k.appendChild(b)}
-  }else if(canWrite){
+  }else if(canWrite&&d.desde<=d.hoy){
     k.innerHTML=`<h3>Cerrar caja</h3>
       <div class="cuadre"><div><span>Efectivo esperado</span><b id="k-esperado"></b></div>
       <div class="field"><label for="k-contado">Efectivo contado</label><input id="k-contado" inputmode="numeric" autocomplete="off" placeholder="$0"></div>
@@ -951,8 +1094,17 @@ async function abrirCaja(fecha){
     });
   }
 }
-$("#btnCaja").addEventListener("click",()=>abrirCaja(null));
-$("#k-fecha").addEventListener("change",e=>{if(e.target.value)abrirCaja(e.target.value)});
+$("#btnCaja").addEventListener("click",()=>{$("#k-rango").value="hoy";$("#k-entre").hidden=true;abrirCaja(rangoPreset("hoy"))});
+$("#k-rango").addEventListener("change",e=>{
+  const v=e.target.value; $("#k-entre").hidden=v!=="entre";
+  if(v==="entre"){$("#k-desde").value=cajaRango.desde;$("#k-hasta").value=cajaRango.hasta;$("#k-desde").focus();return}
+  abrirCaja(rangoPreset(v));
+});
+for(const id of ["#k-desde","#k-hasta"]) $(id).addEventListener("change",()=>{
+  let a=$("#k-desde").value, b=$("#k-hasta").value; if(!a||!b) return;
+  if(b<a){[a,b]=[b,a];$("#k-desde").value=a;$("#k-hasta").value=b}
+  abrirCaja({desde:a,hasta:b});
+});
 $("#kcerrar").addEventListener("click",()=>$("#kscrim").hidden=true);
 $("#k-print").addEventListener("click",()=>window.print());
 
@@ -1051,6 +1203,10 @@ async function logoParaPDF(){
   }catch(e){}
   return _logoPDF;
 }
+function nombreArchivoCaja(d){
+  const c=centroNombre?centroNombre.toLowerCase().replace(/[^a-z0-9]+/g,"-")+"-":"";
+  return d.un_dia?`cierre-caja-${c}${fechaCorta(d.desde)}`:`resumen-caja-${c}${fechaCorta(d.desde)}_a_${fechaCorta(d.hasta)}`;
+}
 async function exportarPDF(){
   const d=cajaData; if(!d) return;
   if(!window.jspdf){toast("No se pudo cargar el generador de PDF. Revisa tu conexión.");return}
@@ -1059,10 +1215,10 @@ async function exportarPDF(){
   const W=doc.internal.pageSize.getWidth(), M=14;
   const logo=await logoParaPDF(); let tx=M;
   if(logo){const h=16, w=Math.min(46,h*logo.w/logo.h); doc.addImage(logo.data,"PNG",M,9,w,w*logo.h/logo.w); tx=M+w+6}
-  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("Cierre de caja"+(centroNombre?" · "+centroNombre:""),tx,17);
+  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text((d.un_dia?"Cierre de caja":"Resumen de caja")+(centroNombre?" · "+centroNombre:""),tx,17);
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(90);
-  doc.text(fechaLarga(d.fecha).replace(/^./,c=>c.toUpperCase()),tx,23);
-  doc.text(d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"-"} a las ${d.cierre.creado.slice(11,16)}`:"Caja abierta (sin cerrar)",W-M,18,{align:"right"});
+  doc.text(textoPeriodo(d),tx,23);
+  doc.text(d.un_dia?(d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"-"} a las ${d.cierre.creado.slice(11,16)}`:"Caja abierta (sin cerrar)"):`${d.por_dia.filter(x=>x.cerrada).length} de ${d.por_dia.length} días cerrados`,W-M,18,{align:"right"});
   doc.setTextColor(0);
   // resumen
   const tiles=[["Atenciones cobradas",String(t.atenciones)],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Descuentos",$$(t.descuentos||0)],["Recaudado en caja",$$(t.recaudado)]];
@@ -1094,24 +1250,35 @@ async function exportarPDF(){
     yMax=Math.max(yMax,doc.lastAutoTable.finalY);
   }
   // pagos
-  doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text("Pagos del día",M,yMax+8); doc.setFont("helvetica","normal");
+  doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text(d.un_dia?"Pagos del día":"Pagos del período",M,yMax+8); doc.setFont("helvetica","normal");
   doc.autoTable({startY:yMax+10,margin:{left:M,right:M},styles:estilo,headStyles:cab,
-    head:[["Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonif.","Desc.","Pagado","Medio","Bono","Cajero","Estado"]],
-    body:d.pagos.length?d.pagos.map(p=>[p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
-      $$(p.valor),$$(p.bonificacion),p.descuento?"-"+$$(p.descuento)+(p.descuento_motivo?"\n"+p.descuento_motivo:""):"",$$(p.copago),p.medio,p.folio_bono,p.usuario_nombre||"",p.anulado?"Anulado: "+p.motivo_anulacion:"OK"]):[["","Sin pagos registrados","","","","","","","","","","","","",""]],
+    head:[["Fecha / hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonif.","Desc.","Pagado","Medio","Bono / boleta","Cajero","Estado"]],
+    body:d.pagos.length?d.pagos.map(p=>[(d.un_dia?"":fCorta(p.fecha).slice(0,5)+" ")+p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
+      $$(p.valor),$$(p.bonificacion),p.descuento?"-"+$$(p.descuento)+(p.descuento_motivo?"\n"+p.descuento_motivo:""):"",$$(p.copago),p.medio,[p.folio_bono&&"B "+p.folio_bono,p.boleta&&"Bol "+p.boleta].filter(Boolean).join("\n"),p.usuario_nombre||"",p.anulado?"Anulado: "+p.motivo_anulacion:"OK"]):[["","Sin pagos registrados","","","","","","","","","","","","",""]],
     columnStyles:{5:{cellWidth:52},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"},10:{halign:"right"}},
     didParseCell:h=>{if(h.section==="body"&&d.pagos[h.row.index]?.anulado){h.cell.styles.textColor=[150,150,150];if(h.column.index===14)h.cell.styles.textColor=[180,52,46]}}});
   // cuadre
   let y=doc.lastAutoTable.finalY+10;
   if(y>170){doc.addPage();y=20}
-  doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text("Cuadre de efectivo",M,y); doc.setFont("helvetica","normal");
   const c=d.cierre;
+  if(!d.un_dia){
+    doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text("Cierres por día",M,y); doc.setFont("helvetica","normal");
+    doc.autoTable({startY:y+2,margin:{left:M,right:M},styles:estilo,headStyles:cab,
+      head:[["Fecha","Atenciones","Recaudado","Efectivo esperado","Efectivo contado","Diferencia","Estado"]],
+      body:d.por_dia.length?d.por_dia.map(x=>[fCorta(x.fecha),String(x.atenciones),$$(x.recaudado),$$(x.efectivo_esperado),x.cerrada?$$(x.efectivo_contado):"-",x.cerrada?signo(x.diferencia):"-",x.cerrada?"Cerrada ("+(x.cerrada_por||"")+")":"Abierta"]):[["Sin pagos","","","","","",""]],
+      columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"},5:{halign:"right"}}});
+    y=doc.lastAutoTable.finalY+8; if(y>180){doc.addPage();y=20}
+    doc.setFontSize(9.5); doc.text(`Descuentos otorgados: ${$$(t.descuentos||0)} (${t.con_descuento||0} pagos) · Pagos anulados: ${t.anulados} · Diferencias en cierres: ${signo(t.diferencias||0)}`,M,y);
+  }else{
+  doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text("Cuadre de efectivo",M,y); doc.setFont("helvetica","normal");
   doc.autoTable({startY:y+2,margin:{left:M},tableWidth:110,styles:{...estilo,fontSize:9.5},theme:"plain",
     body:[["Efectivo esperado",$$(t.efectivo_esperado)],["Efectivo contado",c?$$(c.efectivo_contado):"-"],["Diferencia",c?signo(c.diferencia):"-"],
       ["Descuentos otorgados",`${$$(t.descuentos||0)} (${t.con_descuento||0} ${t.con_descuento===1?"pago":"pagos"})`],
       ["Pagos anulados",String(t.anulados)],["Observaciones",c?.observaciones||"-"]],
     columnStyles:{0:{fontStyle:"bold",cellWidth:45},1:{halign:"left"}}});
-  y=doc.lastAutoTable.finalY+22;
+  y=doc.lastAutoTable.finalY;
+  }
+  y+=22;
   if(y>190){doc.addPage();y=40}
   doc.setDrawColor(120); doc.line(M,y,M+70,y); doc.line(W-M-70,y,W-M,y);
   doc.setFontSize(8.5); doc.setTextColor(90); doc.text("Firma cajero(a)",M,y+5); doc.text("Firma supervisor(a)",W-M-70,y+5);
@@ -1119,7 +1286,7 @@ async function exportarPDF(){
   const n=doc.getNumberOfPages(), gen=new Date().toLocaleString("es-CL");
   for(let i=1;i<=n;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(130);
     doc.text(`Generado el ${gen}`,M,200);doc.text(`Página ${i} de ${n}`,W-M,200,{align:"right"})}
-  await guardarArchivo(`cierre-caja-${centroNombre?centroNombre.toLowerCase().replace(/[^a-z0-9]+/g,"-")+"-":""}${fechaCorta(d.fecha)}.pdf`,doc.output("blob"));
+  await guardarArchivo(`${nombreArchivoCaja(d)}.pdf`,doc.output("blob"));
 }
 
 async function exportarExcel(){
@@ -1128,9 +1295,9 @@ async function exportarExcel(){
   const t=d.totales, c=d.cierre, FMT='"$"#,##0';
   const wb=XLSX.utils.book_new();
   // Hoja Resumen
-  const res=[["Cierre de caja"+(centroNombre?" · "+centroNombre:""),fechaLarga(d.fecha).replace(/^./,c=>c.toUpperCase())],["Estado",c?`Cerrada por ${c.usuario_nombre||"-"} a las ${c.creado.slice(11,16)}`:"Abierta (sin cerrar)"],[],
+  const res=[[(d.un_dia?"Cierre de caja":"Resumen de caja")+(centroNombre?" · "+centroNombre:""),textoPeriodo(d)],["Estado",d.un_dia?(c?`Cerrada por ${c.usuario_nombre||"-"} a las ${c.creado.slice(11,16)}`:"Abierta (sin cerrar)"):`${d.por_dia.filter(x=>x.cerrada).length} de ${d.por_dia.length} días cerrados`],[],
     ["Atenciones cobradas",t.atenciones],["Valor total",t.valor],["Bonificación (bonos)",t.bonificacion],["Descuentos",t.descuentos||0],["Recaudado en caja",t.recaudado],["Pagos anulados",t.anulados],[],
-    ["Efectivo esperado",t.efectivo_esperado],["Efectivo contado",c?c.efectivo_contado:""],["Diferencia",c?c.diferencia:""],["Observaciones",c?.observaciones||""],[]];
+    ["Efectivo esperado",t.efectivo_esperado],["Efectivo contado",d.un_dia?(c?c.efectivo_contado:""):d.cierres.reduce((x,y)=>x+y.efectivo_contado,0)],["Diferencia",d.un_dia?(c?c.diferencia:""):t.diferencias||0],["Observaciones",d.un_dia?(c?.observaciones||""):d.cierres.filter(x=>x.observaciones).map(x=>fCorta(x.fecha)+": "+x.observaciones).join(" | ")],[]];
   const bloques=[["Por medio de pago",filasGrupo(t.por_medio)],["Por previsión",filasGrupo(t.por_prevision)],["Por equipo",filasGrupo(t.por_equipo,k=>EQN[k]||k)]];
   const filasMoneda=[4,5,6,7,10,11,12]; // filas (0-index) con montos en columna B
   const filasGrupoIdx=new Set();
@@ -1150,18 +1317,26 @@ async function exportarExcel(){
   ws1["!cols"]=[{wch:24},{wch:34},{wch:14},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws1,"Resumen");
   // Hoja Pagos
-  const cab=["Fecha","Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonificación","Descuento","Motivo descuento","Pagado","Medio","Folio bono","Cajero","Estado","Motivo anulación"];
+  const cab=["Fecha","Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonificación","Descuento","Motivo descuento","Pagado","Medio","Folio bono","Boleta","Cajero","Estado","Motivo anulación"];
   const filas=d.pagos.map(p=>[fechaCorta(p.fecha),p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
-    p.valor,p.bonificacion,p.descuento||0,p.descuento_motivo||"",p.copago,p.medio,p.folio_bono,p.usuario_nombre||"",p.anulado?"Anulado":"OK",p.motivo_anulacion||""]);
+    p.valor,p.bonificacion,p.descuento||0,p.descuento_motivo||"",p.copago,p.medio,p.folio_bono,p.boleta||"",p.usuario_nombre||"",p.anulado?"Anulado":"OK",p.motivo_anulacion||""]);
   const validos=d.pagos.filter(p=>!p.anulado);
   filas.push([]); filas.push(["","","Total (sin anulados)","","","","","",t.valor,t.bonificacion,t.descuentos||0,"",t.recaudado]);
   const ws2=XLSX.utils.aoa_to_sheet([cab,...filas]);
   for(let r=1;r<=filas.length;r++)for(const col of [8,9,10,12]){const ref=XLSX.utils.encode_cell({r,c:col});if(ws2[ref]&&typeof ws2[ref].v==="number")ws2[ref].z=FMT}
-  ws2["!cols"]=[{wch:11},{wch:7},{wch:24},{wch:13},{wch:7},{wch:9},{wch:46},{wch:11},{wch:11},{wch:12},{wch:11},{wch:20},{wch:11},{wch:13},{wch:11},{wch:18},{wch:9},{wch:28}];
+  ws2["!cols"]=[{wch:11},{wch:7},{wch:24},{wch:13},{wch:7},{wch:9},{wch:46},{wch:11},{wch:11},{wch:12},{wch:11},{wch:20},{wch:11},{wch:13},{wch:11},{wch:11},{wch:18},{wch:9},{wch:28}];
   ws2["!autofilter"]={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(1,d.pagos.length),c:cab.length-1}})};
   XLSX.utils.book_append_sheet(wb,ws2,"Pagos");
+  if(!d.un_dia){
+    const filasD=[["Fecha","Atenciones","Recaudado","Efectivo esperado","Efectivo contado","Diferencia","Estado","Cerrada por"],
+      ...d.por_dia.map(x=>[fCorta(x.fecha),x.atenciones,x.recaudado,x.efectivo_esperado,x.cerrada?x.efectivo_contado:"",x.cerrada?x.diferencia:"",x.cerrada?"Cerrada":"Abierta",x.cerrada_por||""])];
+    const ws3=XLSX.utils.aoa_to_sheet(filasD);
+    for(let r=1;r<filasD.length;r++)for(const col of [2,3,4,5]){const ref=XLSX.utils.encode_cell({r,c:col});if(ws3[ref]&&typeof ws3[ref].v==="number")ws3[ref].z=FMT}
+    ws3["!cols"]=[{wch:12},{wch:11},{wch:13},{wch:17},{wch:16},{wch:12},{wch:10},{wch:18}];
+    XLSX.utils.book_append_sheet(wb,ws3,"Por día");
+  }
   const buf=XLSX.write(wb,{bookType:"xlsx",type:"array"});
-  await guardarArchivo(`cierre-caja-${centroNombre?centroNombre.toLowerCase().replace(/[^a-z0-9]+/g,"-")+"-":""}${fechaCorta(d.fecha)}.xlsx`,new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  await guardarArchivo(`${nombreArchivoCaja(d)}.xlsx`,new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
 }
 $("#k-pdf").addEventListener("click",exportarPDF);
 $("#k-xlsx").addEventListener("click",exportarExcel);

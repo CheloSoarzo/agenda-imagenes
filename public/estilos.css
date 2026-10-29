@@ -332,3 +332,22 @@ button.colhead:hover{background:var(--sunk)}
 .ex-hint:empty{display:none}
 .ex-add{align-self:flex-start;margin-top:8px}
 .cobro .money{font-size:16px}
+/* fecha de nacimiento + edad */
+.nac{display:flex;align-items:center;gap:10px}
+.nac input{flex:1;min-width:0}
+.edad{font-size:13px;font-weight:700;color:var(--muted);white-space:nowrap}
+.edad:empty{display:none}
+/* panel de cobro */
+.c-pac{display:flex;flex-direction:column;gap:2px;margin:4px 0 10px}
+.c-pac b{font-size:17px}
+#c-examenes{min-width:0}
+#c-examenes tr.tot td{font-weight:800;border-top:2px solid var(--line);border-bottom:0}
+/* caja por período */
+#k-rango{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;font:inherit;color:var(--fg)}
+.k-entre{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.k-entre input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px;font:inherit;color:var(--fg)}
+.k-entre[hidden]{display:none!important}
+.tblwrap table.pagos.dias{min-width:640px}
+table.pagos.dias tr.click{cursor:pointer}
+table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background:var(--bg)}
+@media (max-width:640px){.caja-ctrl{flex-wrap:wrap}}

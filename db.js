@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS cierres (
 const colsCitas = db.prepare("PRAGMA table_info(citas)").all().map((c) => c.name);
 for (const [col, def] of [["codigo", "TEXT NOT NULL DEFAULT ''"], ["valor", "INTEGER NOT NULL DEFAULT 0"],
   ["bonificacion", "INTEGER NOT NULL DEFAULT 0"], ["copago", "INTEGER NOT NULL DEFAULT 0"],
-  ["examenes", "TEXT NOT NULL DEFAULT ''"]]) { // examenes: JSON con el detalle cuando la cita tiene más de un examen
+  ["examenes", "TEXT NOT NULL DEFAULT ''"], ["fecha_nac", "TEXT NOT NULL DEFAULT ''"], ["email", "TEXT NOT NULL DEFAULT ''"]]) { // examenes: JSON con el detalle cuando la cita tiene más de un examen
   if (!colsCitas.includes(col)) db.exec(`ALTER TABLE citas ADD COLUMN ${col} ${def}`);
 }
 
@@ -112,6 +112,7 @@ for (const [col, def] of [["codigo", "TEXT NOT NULL DEFAULT ''"], ["valor", "INT
   if (!colsPagos.includes("descuento_motivo")) db.exec("ALTER TABLE pagos ADD COLUMN descuento_motivo TEXT NOT NULL DEFAULT ''");
   if (!colsPagos.includes("descuento_detalle")) db.exec("ALTER TABLE pagos ADD COLUMN descuento_detalle TEXT NOT NULL DEFAULT ''");
   if (!colsPagos.includes("examenes")) db.exec("ALTER TABLE pagos ADD COLUMN examenes TEXT NOT NULL DEFAULT ''");
+  if (!colsPagos.includes("boleta")) db.exec("ALTER TABLE pagos ADD COLUMN boleta TEXT NOT NULL DEFAULT ''");
 }
 
 // ---------- adjuntos (orden médica) ----------

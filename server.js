@@ -117,6 +117,7 @@ function validarCita(b) {
     equipo: txt(b.equipo, 5), paciente: txt(b.paciente, 120), rut: txt(b.rut, 20),
     telefono: txt(b.telefono, 30), examen: txt(b.examen, 160), prevision: txt(b.prevision, 40),
     medico: txt(b.medico, 120), estado: txt(b.estado, 20) || "agendado", notas: txt(b.notas, 2000),
+    fecha_nac: txt(b.fecha_nac, 10), email: txt(b.email, 120).toLowerCase(),
     codigo: "", valor: 0, bonificacion: 0, copago: 0, examenes: "",
   };
   if (!c.paciente) fallo(400, "Escribe el nombre del paciente.");
@@ -125,6 +126,8 @@ function validarCita(b) {
   if (!EQUIPOS.includes(c.equipo)) fallo(400, "Elige un equipo.");
   if (!ESTADOS.includes(c.estado)) fallo(400, "El estado no es válido.");
   if (c.duracion < 5 || c.duracion > 240) fallo(400, "La duración debe estar entre 5 y 240 minutos.");
+  if (c.fecha_nac && (!reFecha.test(c.fecha_nac) || c.fecha_nac > hoyCaja() || c.fecha_nac < "1900-01-01")) fallo(400, "La fecha de nacimiento no es válida.");
+  if (c.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email)) fallo(400, "El correo electrónico no es válido.");
   // Uno o varios exámenes (cada uno con su código y valores). Se aceptan también los campos sueltos de versiones anteriores.
   let lineas = Array.isArray(b.examenes) ? b.examenes : [{ codigo: b.codigo, nombre: b.examen, valor: b.valor, bonificacion: b.bonificacion }];
   if (lineas.length > 10) fallo(400, "Una cita puede tener hasta 10 exámenes.");
@@ -171,10 +174,11 @@ function hoyCaja() {
 const cajaCerrada = (fecha) => !!db.prepare("SELECT 1 FROM cierres WHERE fecha = ?").get(fecha);
 const MEDIOS = ["Efectivo", "Débito", "Crédito", "Transferencia", "Sin copago"];
 
-function resumenCaja(fecha) {
+// Resumen de caja de un día o de un período (desde–hasta, ambos incluidos)
+function resumenCaja(desde, hasta = desde) {
   const pagos = plainAll(db.prepare(`SELECT p.*, u.nombre AS usuario_nombre, ua.nombre AS anulado_por_nombre
     FROM pagos p LEFT JOIN usuarios u ON u.id = p.usuario_id LEFT JOIN usuarios ua ON ua.id = p.anulado_por
-    WHERE p.fecha = ? ORDER BY p.creado`).all(fecha));
+    WHERE p.fecha BETWEEN ? AND ? ORDER BY p.fecha, p.creado`).all(desde, hasta));
   const validos = pagos.filter((p) => !p.anulado);
   const suma = (arr, k) => arr.reduce((t, p) => t + (p[k] || 0), 0);
   const agrupar = (clave, lista) => {
@@ -197,14 +201,38 @@ function resumenCaja(fecha) {
     por_equipo: agrupar("equipo", validos),
     efectivo_esperado: validos.filter((p) => p.medio === "Efectivo").reduce((t, p) => t + p.copago, 0),
   };
-  const c = db.prepare(`SELECT c.*, u.nombre AS usuario_nombre FROM cierres c LEFT JOIN usuarios u ON u.id = c.usuario_id WHERE c.fecha = ?`).get(fecha);
-  const cierre = c ? { ...plain(c), resumen: JSON.parse(c.resumen) } : null;
-  return { fecha, hoy: hoyCaja(), pagos, totales, cierre };
+  const cierres = plainAll(db.prepare(`SELECT c.*, u.nombre AS usuario_nombre FROM cierres c LEFT JOIN usuarios u ON u.id = c.usuario_id
+    WHERE c.fecha BETWEEN ? AND ? ORDER BY c.fecha`).all(desde, hasta)).map((c) => ({ ...c, resumen: JSON.parse(c.resumen) }));
+  // Detalle por día (para períodos de varios días)
+  const dias = {};
+  for (const p of validos) {
+    const d = (dias[p.fecha] = dias[p.fecha] || { fecha: p.fecha, atenciones: 0, valor: 0, bonificacion: 0, descuentos: 0, recaudado: 0, efectivo_esperado: 0 });
+    d.atenciones++; d.valor += p.valor; d.bonificacion += p.bonificacion; d.descuentos += p.descuento || 0; d.recaudado += p.copago;
+    if (p.medio === "Efectivo") d.efectivo_esperado += p.copago;
+  }
+  for (const c of cierres) dias[c.fecha] = dias[c.fecha] || { fecha: c.fecha, atenciones: 0, valor: 0, bonificacion: 0, descuentos: 0, recaudado: 0, efectivo_esperado: 0 };
+  const por_dia = Object.values(dias).sort((a, b) => a.fecha.localeCompare(b.fecha)).map((d) => {
+    const c = cierres.find((x) => x.fecha === d.fecha);
+    return { ...d, cerrada: !!c, efectivo_contado: c ? c.efectivo_contado : null, diferencia: c ? c.diferencia : null, cerrada_por: c ? c.usuario_nombre : null };
+  });
+  totales.diferencias = cierres.reduce((t, c) => t + c.diferencia, 0);
+  const cierre = desde === hasta ? cierres[0] || null : null;
+  return { fecha: desde, desde, hasta, un_dia: desde === hasta, hoy: hoyCaja(), pagos, totales, cierre, cierres, por_dia };
+}
+// Lee ?fecha= o ?desde=&hasta= (máximo un año)
+function rangoCaja(url) {
+  const fecha = url.searchParams.get("fecha");
+  const desde = url.searchParams.get("desde") || fecha || hoyCaja();
+  const hasta = url.searchParams.get("hasta") || fecha || desde;
+  if (!reFecha.test(desde) || !reFecha.test(hasta)) fallo(400, "La fecha no es válida.");
+  if (hasta < desde) fallo(400, "La fecha final es anterior a la inicial.");
+  if ((new Date(hasta) - new Date(desde)) / 864e5 > 366) fallo(400, "El período no puede superar un año.");
+  return [desde, hasta];
 }
 const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS actualizado_por_nombre,
   (SELECT COUNT(*) FROM adjuntos a WHERE a.cita_id = c.id) AS adjuntos,
   p.id AS pago_id, p.medio AS pago_medio, p.copago AS pago_monto, p.folio_bono AS pago_folio, p.fecha AS pago_fecha,
-  p.descuento AS pago_descuento, p.descuento_motivo AS pago_desc_motivo,
+  p.descuento AS pago_descuento, p.descuento_motivo AS pago_desc_motivo, p.boleta AS pago_boleta,
   p.creado AS pago_creado, up.nombre AS pago_usuario
   FROM citas c LEFT JOIN usuarios uc ON uc.id = c.creado_por LEFT JOIN usuarios ua ON ua.id = c.actualizado_por
   LEFT JOIN pagos p ON p.id = (SELECT MAX(id) FROM pagos WHERE cita_id = c.id AND anulado = 0)
@@ -297,6 +325,16 @@ const rutas = [
       WHERE fecha LIKE ? AND estado != 'cancelado' GROUP BY fecha, equipo`).all(mes + "-%"))];
   }],
 
+  // Datos del paciente según su RUT (de su última cita), para no volver a escribirlos
+  ["GET", /^\/api\/paciente$/, "sesion", async (req, u, url) => {
+    const rut = txt(url.searchParams.get("rut"), 20);
+    const limpio = rut.replace(/[^0-9kK]/g, "").toUpperCase();
+    if (limpio.length < 7) return [200, null];
+    const p = db.prepare(`SELECT paciente, rut, telefono, fecha_nac, email, prevision FROM citas
+      WHERE UPPER(REPLACE(REPLACE(REPLACE(rut,'.',''),'-',''),' ','')) = ? ORDER BY fecha DESC, id DESC LIMIT 1`).get(limpio);
+    return [200, plain(p) || null];
+  }],
+
   ["GET", /^\/api\/buscar$/, "sesion", async (req, u, url) => {
     const q = txt(url.searchParams.get("q"), 60).replace(/[%_]/g, "");
     if (q.length < 2) return [200, []];
@@ -307,8 +345,8 @@ const rutas = [
 
   ["POST", /^\/api\/citas$/, "escribir", async (req, u) => {
     const c = validarCita(await leerCuerpo(req));
-    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,examen,prevision,medico,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
-      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@examen,@prevision,@medico,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
+    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,fecha_nac,email,examen,prevision,medico,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
+      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@fecha_nac,@email,@examen,@prevision,@medico,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
       .run({ ...c, uid: u.id });
     return [201, citaPorId(Number(r.lastInsertRowid))];
   }],
@@ -322,7 +360,7 @@ const rutas = [
       Object.assign(c, plain(prev));
     }
     const r = db.prepare(`UPDATE citas SET fecha=@fecha,hora=@hora,duracion=@duracion,equipo=@equipo,paciente=@paciente,rut=@rut,
-      telefono=@telefono,examen=@examen,prevision=@prevision,medico=@medico,estado=@estado,notas=@notas,
+      telefono=@telefono,fecha_nac=@fecha_nac,email=@email,examen=@examen,prevision=@prevision,medico=@medico,estado=@estado,notas=@notas,
       codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");
@@ -360,12 +398,12 @@ const rutas = [
     const aPagar = c.copago - descuento;
     const medio = aPagar === 0 ? "Sin copago" : txt(b.medio, 20);
     if (!MEDIOS.includes(medio)) fallo(400, "Elige el medio de pago.");
-    const folio = txt(b.folio_bono, 40);
+    const folio = txt(b.folio_bono, 40), boleta = txt(b.boleta, 40);
     if (c.prevision === "Fonasa" && c.bonificacion > 0 && !folio) fallo(400, "Ingresa el folio del bono Fonasa.");
     db.prepare(`INSERT INTO pagos (cita_id, fecha, paciente, rut, equipo, codigo, examen, prevision, valor, bonificacion, copago, medio, folio_bono, usuario_id, creado,
-      descuento, descuento_motivo, descuento_detalle, examenes)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
-      c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "");
+      descuento, descuento_motivo, descuento_detalle, examenes, boleta)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
+      c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta);
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
     return [201, citaPorId(id)];
   }],
@@ -383,11 +421,7 @@ const rutas = [
   }],
 
   // ----- caja -----
-  ["GET", /^\/api\/caja$/, "sesion", async (req, u, url) => {
-    const fecha = url.searchParams.get("fecha") || hoyCaja();
-    if (!reFecha.test(fecha)) fallo(400, "La fecha no es válida.");
-    return [200, resumenCaja(fecha)];
-  }],
+  ["GET", /^\/api\/caja$/, "sesion", async (req, u, url) => [200, resumenCaja(...rangoCaja(url))]],
 
   ["POST", /^\/api\/caja\/cerrar$/, "escribir", async (req, u) => {
     const b = await leerCuerpo(req);
@@ -410,13 +444,12 @@ const rutas = [
   }],
 
   ["GET", /^\/api\/caja\/csv$/, "sesion", async (req, u, url) => {
-    const fecha = url.searchParams.get("fecha") || hoyCaja();
-    if (!reFecha.test(fecha)) fallo(400, "La fecha no es válida.");
-    const r = resumenCaja(fecha);
+    const [desde, hasta] = rangoCaja(url);
+    const r = resumenCaja(desde, hasta);
     const esc = (v) => { const t = String(v ?? ""); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const filas = [["Hora", "Paciente", "RUT", "Equipo", "Código", "Examen", "Previsión", "Valor", "Bonificación", "Descuento", "Motivo descuento", "Pagado", "Medio", "Folio bono", "Cajero", "Estado"]];
-    for (const p of r.pagos) filas.push([p.creado.slice(11, 16), p.paciente, p.rut, p.equipo.toUpperCase(), p.codigo, p.examen, p.prevision,
-      p.valor, p.bonificacion, p.descuento, p.descuento_motivo, p.copago, p.medio, p.folio_bono, p.usuario_nombre, p.anulado ? "ANULADO: " + p.motivo_anulacion : "OK"]);
+    const filas = [["Fecha", "Hora", "Paciente", "RUT", "Equipo", "Código", "Examen", "Previsión", "Valor", "Bonificación", "Descuento", "Motivo descuento", "Pagado", "Medio", "Folio bono", "Boleta", "Cajero", "Estado"]];
+    for (const p of r.pagos) filas.push([p.fecha.split("-").reverse().join("-"), p.creado.slice(11, 16), p.paciente, p.rut, p.equipo.toUpperCase(), p.codigo, p.examen, p.prevision,
+      p.valor, p.bonificacion, p.descuento, p.descuento_motivo, p.copago, p.medio, p.folio_bono, p.boleta, p.usuario_nombre, p.anulado ? "ANULADO: " + p.motivo_anulacion : "OK"]);
     filas.push([]);
     filas.push(["Total atenciones", r.totales.atenciones]);
     filas.push(["Total valor", r.totales.valor]);
@@ -426,7 +459,7 @@ const rutas = [
     for (const [k, v] of Object.entries(r.totales.por_medio)) filas.push(["Recaudado " + k, v.copago]);
     if (r.cierre) { filas.push(["Efectivo contado", r.cierre.efectivo_contado]); filas.push(["Diferencia", r.cierre.diferencia]); }
     const csv = "\ufeff" + filas.map((f) => f.map(esc).join(";")).join("\r\n");
-    return ["RAW", csv, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="caja-${fecha}.csv"` }];
+    return ["RAW", csv, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="caja-${desde === hasta ? desde : desde + "_a_" + hasta}.csv"` }];
   }],
 
   // ----- aranceles -----

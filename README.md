@@ -6,13 +6,16 @@ El personal ingresa con usuario y clave, y todos ven la misma agenda (se actuali
 - Vista por **día** (una columna por equipo) o por **semana** (una columna por día), de 08:00 a 21:00 en bloques de 15 minutos.
 - Panel con selector de agenda (TC, RX, Eco o todas), calendario del mes con los días que tienen citas y ocupación del día o semana.
 - **Orden médica adjunta** a cada cita: foto (se reduce automáticamente a ~100–300 KB) o PDF, hasta 10 MB. Se guarda dentro de la base de datos, así que el respaldo la incluye.
-- Ficha de la cita: paciente, RUT, teléfono, uno o **varios exámenes** (cada uno con su código, valor y bonificación; el cobro suma todos), duración, previsión, médico solicitante y notas.
+- Ficha de la cita: paciente, RUT, teléfono, **fecha de nacimiento** (muestra la edad), **correo electrónico**, uno o **varios exámenes** (cada uno con su código, valor y bonificación; el cobro suma todos), duración, previsión, médico solicitante y notas.
+- **Agendar y cobrar por separado**: la cita se agenda sin datos de pago; cuando el paciente llega y paga se abre el panel **Cobrar**, donde se ingresan el medio de pago, el **folio del bono** (obligatorio solo para Fonasa con bonificación) y el **N° de boleta** (opcional). Las citas que llegaron o se atendieron y no se han pagado muestran "por cobrar".
+- Al escribir el RUT de un paciente que ya vino, se completan nombre, teléfono, fecha de nacimiento, correo y previsión de su última cita.
 - Estados: agendado, confirmado, llegó, atendido, no asistió y cancelado.
 - Las citas que se cruzan en el mismo equipo se muestran lado a lado y marcadas en rojo.
 - Búsqueda de pacientes por nombre o RUT.
 - Usuarios con tres roles: **Administrador** (todo, incluye crear usuarios), **Recepción** (agenda y edita citas) y **Solo lectura**.
 - Registro de quién creó y quién editó por última vez cada cita.
 - **Cobro**: al elegir la prestación (código Fonasa) y la previsión, muestra valor, bonificación y copago. Con Fonasa usa el arancel MLE nivel 2; con Particular usa el precio particular del centro; con Isapre o Convenio se ingresa la bonificación del bono.
+- **Resumen de caja por período**: hoy, últimos 3 días, última semana, mes actual, mes pasado o entre dos fechas (hasta un año), con tabla de cierres por día, folio de bono y boleta de cada pago, y descarga en PDF y Excel (hoja extra "Por día").
 - **Cierre de caja** diario: totales por medio de pago, previsión y equipo, cuadre de efectivo (esperado vs contado), observaciones, descarga en PDF (con firmas de cajero y supervisor) y en Excel (.xlsx, hojas Resumen y Pagos), e impresión. Una vez cerrada, la caja de ese día no admite pagos ni anulaciones; solo un administrador puede reabrirla.
 - **Descuentos** al cobrar: por porcentaje o monto, sobre el copago del paciente (la bonificación del bono no cambia), con motivo obligatorio. Quedan en el pago, en la caja (total y "Descuentos por motivo") y en el PDF, Excel y CSV del cierre.
 - **Logos**: cada centro muestra su logo en el ingreso, el encabezado de la agenda, la caja y el PDF del cierre.
