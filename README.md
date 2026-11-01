@@ -61,6 +61,25 @@ npm run usuario -- admin NuevaClave123 admin
 | `CAJA_TZ` | Zona horaria para el día de caja | `America/Santiago` |
 | `CENTRO_NOMBRE` | Nombre del centro que se muestra en la agenda, el ingreso y los cierres de caja | — |
 | `CENTRO_LOGO` | Archivo de logo en `public/logos` (ingreso, agenda, caja y PDF). Si no se indica, se usa el que coincide con el nombre del centro (`rancagua.png`, `insi.png`) | — |
+| `PACS_URL` | Dirección de la app de informes del PACS. Vacía = agenda sin PACS | — |
+| `INTEGRACION_TOKEN` | Clave compartida con el PACS (la misma en ambos) | — |
+| `PORTAL_URL` | Dirección que se imprime en la hoja de retiro | `PACS_URL/paciente` |
+| `ACCESION_PREFIJO` | Letras al inicio del número de acceso | `AG` |
+
+## Unida al PACS
+
+Con `PACS_URL` e `INTEGRACION_TOKEN`, la agenda trabaja junto al PACS (ver `integracion.js`):
+
+- **Número de acceso:** cada cita tiene uno (ej. `RAN00001234`). Viaja al equipo por el worklist y vuelve en las imágenes.
+- **Worklist:** el PACS arma la lista del día con los pacientes pagados o marcados "Llegó", y los equipos la leen.
+- **Clave del paciente:** al cobrar, si el paciente no tenía, se crea una clave y se imprime la **hoja de retiro**
+  (dirección, RUT y clave). Se guarda solo cifrada. Si la olvida, el botón **Nueva clave** crea otra.
+- **Avance:** cada tarjeta muestra *imágenes*, *informado* o *entregado* según lo que pasa en el PACS. Cuando llegan
+  las imágenes, la cita pasa sola a *Atendido*.
+- Si el PACS no responde, los cambios quedan en cola y se reenvían solos.
+
+En el servidor Vultr la instala y configura el comando `pacs agenda` del PACS (ver `AGENDA_Y_PACS.md` en el
+repositorio del PACS).
 
 ## Publicarla en Railway (la forma más rápida)
 
@@ -166,6 +185,7 @@ En `public/index.html`, al inicio del script:
 ```
 server.js          servidor web y API
 db.js              base de datos, claves y arancel inicial
+integracion.js     conexión con el PACS: órdenes, estados y clave del paciente
 data-inicial/      arancel Fonasa MLE 2026 nivel 2 precargado
 scripts/usuario.js crear o restablecer usuarios desde la consola
 public/            páginas (agenda, ingreso y estilos)

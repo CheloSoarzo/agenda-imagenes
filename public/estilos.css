@@ -351,3 +351,14 @@ button.colhead:hover{background:var(--sunk)}
 table.pagos.dias tr.click{cursor:pointer}
 table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background:var(--bg)}
 @media (max-width:640px){.caja-ctrl{flex-wrap:wrap}}
+
+/* ---------- examen en línea (PACS) ---------- */
+.portal-box{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--sunk);display:grid;gap:8px}
+.portal-t{font-weight:700;font-size:14px}
+.clave-grande{font-family:var(--f-mono);font-size:26px;font-weight:600;letter-spacing:.12em;padding:8px 12px;border-radius:8px;background:var(--surface);border:1px dashed var(--accent);text-align:center;color:var(--fg)}
+.portal-acc{display:flex;flex-wrap:wrap;gap:8px}
+#portal-nueva.armed{border-color:var(--warn);color:var(--warn)}
+.appt.pacs-imagenes .st::after,.appt.pacs-informado .st::after,.appt.pacs-entregado .st::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle}
+.appt.pacs-imagenes .st::after{background:var(--warn)}
+.appt.pacs-informado .st::after{background:var(--ok)}
+.appt.pacs-entregado .st::after{background:var(--accent)}

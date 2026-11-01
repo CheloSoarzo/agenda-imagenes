@@ -160,6 +160,42 @@ try {
   console.error("No se pudo cargar el arancel Fonasa:", e.message);
 }
 
+// ---------- integración con el PACS ----------
+// accesion: número de acceso del examen (AccessionNumber DICOM), une la cita con las imágenes y el informe.
+// pacs_estado: avance que informa el PACS (imagenes | informado | entregado).
+{
+  const cols = db.prepare("PRAGMA table_info(citas)").all().map((c) => c.name);
+  for (const [col, def] of [["accesion", "TEXT NOT NULL DEFAULT ''"], ["pacs_estado", "TEXT NOT NULL DEFAULT ''"],
+    ["pacs_detalle", "TEXT NOT NULL DEFAULT ''"]]) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE citas ADD COLUMN ${col} ${def}`);
+  }
+}
+db.exec(`
+CREATE INDEX IF NOT EXISTS idx_citas_accesion ON citas(accesion);
+-- Clave del paciente para ver sus exámenes en línea (una por paciente, se guarda solo el hash)
+CREATE TABLE IF NOT EXISTS portal_claves (
+  rut TEXT PRIMARY KEY,                 -- RUT sin puntos ni guion, en mayúsculas
+  clave_hash TEXT NOT NULL,
+  usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  creado TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- Cambios pendientes de enviar al PACS (si el PACS no responde, se reintenta)
+CREATE TABLE IF NOT EXISTS pacs_cola (
+  cita_id INTEGER PRIMARY KEY,
+  datos TEXT NOT NULL,
+  intentos INTEGER NOT NULL DEFAULT 0,
+  error TEXT NOT NULL DEFAULT '',
+  version INTEGER NOT NULL DEFAULT 0
+);
+`);
+db.PREFIJO_ACCESION = (process.env.ACCESION_PREFIJO || "AG").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "AG";
+db.accesionDe = (id) => db.PREFIJO_ACCESION + String(id).padStart(8, "0");
+{
+  const sin = db.prepare("SELECT id FROM citas WHERE accesion = ''").all();
+  const up = db.prepare("UPDATE citas SET accesion = ? WHERE id = ?");
+  for (const r of sin) up.run(db.accesionDe(r.id), r.id);
+}
+
 // Claves: scrypt con sal aleatoria (incluido en Node, sin dependencias)
 const crypto = require("crypto");
 db.hashClave = (clave) => {

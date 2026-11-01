@@ -160,6 +160,15 @@
         </div>
         <button type="button" class="btn danger" id="anular" hidden>Anular pago</button>
       </div>
+      <div class="portal-box" id="portal-box" hidden>
+        <div class="portal-t">Examen en línea</div>
+        <div id="portal-txt" class="meta"></div>
+        <div class="clave-grande" id="portal-clave" hidden></div>
+        <div class="portal-acc">
+          <button type="button" class="btn primary" id="portal-hoja">Imprimir hoja de retiro</button>
+          <button type="button" class="btn" id="portal-nueva">Nueva clave</button>
+        </div>
+      </div>
       <div id="pago-form">
         <div class="row2">
           <div class="field"><label for="p-medio">Medio de pago</label>
@@ -448,9 +457,10 @@ function render(){
       el.querySelector(".h").textContent=c.hora;
       el.querySelector(".p").textContent=c.paciente;
       el.querySelector(".e").textContent=c.examen||"";
-      el.querySelector(".st").textContent=est.n+(c.pago_id?" · pagado":(c.estado==="llego"||c.estado==="atendido")&&c.valor?" · por cobrar":"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
+      el.querySelector(".st").textContent=est.n+(c.pago_id?" · pagado":(c.estado==="llego"||c.estado==="atendido")&&c.valor?" · por cobrar":"")+(PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
+      if(c.pacs_estado) el.classList.add("pacs-"+c.pacs_estado);
       if(c.pago_id) el.classList.add("paid");
-      el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.adjuntos?" · orden adjunta":""}`;
+      el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.adjuntos?" · orden adjunta":""}${c.accesion?" · N° acceso "+c.accesion:""}${PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:""}`;
       el.addEventListener("click",()=>openForm(c));
       col.appendChild(el);
     }
@@ -715,6 +725,7 @@ function openCobro(c){
   $("#pmsg").textContent=""; $("#pmsg").className="msg";
   if(!canWrite&&!pagada){$("#pmsg").textContent="Tu usuario es solo de lectura."}
   $("#c-editar").hidden=false;
+  pintarPortal(pagada&&PACS_ON?{estado:"pagado"}:null);
   recalcCobro();
   $("#pscrim").hidden=false;
 }
@@ -774,7 +785,7 @@ function openForm(c,preset={}){
   segButtons($("#f-equipo"),EQUIPOS,eq,id=>setEquipo(id,!editId));
   estadoSel=c?.estado||"agendado"; segButtons($("#f-estado"),ESTADOS,estadoSel,id=>estadoSel=id);
   const del=$("#borrar"); del.hidden=!c||!canWrite; del.classList.remove("armed"); del.textContent="Eliminar";
-  $("#fmeta").textContent=c?`Creada por ${c.creado_por_nombre||"—"}${c.actualizado_por_nombre?` · última edición: ${c.actualizado_por_nombre}`:""}`:"";
+  $("#fmeta").textContent=c?`${c.accesion?"N° acceso "+c.accesion+" · ":""}${PACS_TXT[c.pacs_estado]?PACS_LARGO[c.pacs_estado]+" · ":""}Creada por ${c.creado_por_nombre||"—"}${c.actualizado_por_nombre?` · última edición: ${c.actualizado_por_nombre}`:""}`:"";
   $("#fmsg").textContent=canWrite?"":"Tu usuario es solo de lectura."; $("#fmsg").className="msg";
   [...$("#form").elements].forEach(el=>{if(el.id!=="cancelar")el.disabled=!canWrite});
   $("#f-prevision").disabled=!canWrite||citaPagada;
@@ -856,10 +867,11 @@ $("#cobrar").addEventListener("click",async()=>{
   const btn=$("#cobrar"); btn.disabled=true;
   try{
     const desc=ds.monto>0?{descuento_tipo:$("#p-dtipo").value,descuento_valor:$("#p-dtipo").value==="pct"?String(ds.pct):ds.monto,descuento_motivo:$("#p-dmotivo").value.trim()}:{};
-    await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{medio:$("#p-medio").value,folio_bono:$("#p-folio").value.trim(),boleta:$("#p-boleta").value.trim(),...desc}});
-    $("#pscrim").hidden=true; cobroCita=null;
+    const r=await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{medio:$("#p-medio").value,folio_bono:$("#p-folio").value.trim(),boleta:$("#p-boleta").value.trim(),...desc}});
     toast(total>0?`Pago registrado: ${$$(total)}${ds.monto?" (con descuento)":""}`:"Atención registrada sin copago");
-    cargar();
+    await cargar();
+    if(r.portal){openCobro(citas.find(x=>x.id===c.id)||r); pintarPortal(r.portal)}
+    else{$("#pscrim").hidden=true; cobroCita=null}
   }catch(e){msg.textContent=e.message}
   finally{btn.disabled=false}
 });
@@ -875,6 +887,71 @@ $("#anular").addEventListener("click",async()=>{
   }catch(e){$("#pmsg").className="msg err";$("#pmsg").textContent=e.message}
 });
 $("#c-cerrar").addEventListener("click",()=>{$("#pscrim").hidden=true;cobroCita=null});
+
+/* ---------- examen en línea: clave del paciente y hoja de retiro ---------- */
+const PACS_TXT={imagenes:"imágenes",informado:"informado",entregado:"entregado"};
+const PACS_LARGO={imagenes:"Imágenes en el PACS",informado:"Informe listo",entregado:"Informe entregado"};
+let PACS_ON=false, PORTAL_URL="", claveMostrada="";
+function pintarPortal(p){
+  const box=$("#portal-box"); claveMostrada="";
+  if(!p){box.hidden=true;return}
+  box.hidden=false; $("#portal-clave").hidden=true;
+  $("#portal-nueva").hidden=!canWrite; $("#portal-hoja").hidden=false;
+  if(p.estado==="nueva"||p.clave){
+    claveMostrada=p.clave;
+    $("#portal-txt").textContent="Clave del paciente para ver su examen en línea. Imprime la hoja y entrégasela: la clave no se vuelve a mostrar.";
+    $("#portal-clave").textContent=p.clave; $("#portal-clave").hidden=false;
+    $("#portal-hoja").textContent="Imprimir hoja de retiro";
+  }else if(p.estado==="existente"){
+    $("#portal-txt").textContent="El paciente ya tiene clave de una visita anterior y la usa para ver todos sus exámenes. Si no la recuerda, genera una nueva.";
+    $("#portal-hoja").textContent="Imprimir hoja sin clave";
+  }else if(p.estado==="sin_rut"){
+    $("#portal-txt").textContent="La cita no tiene un RUT válido, así que no se creó clave. Corrige el RUT en «Editar cita» y luego pulsa «Nueva clave».";
+    $("#portal-hoja").hidden=true;
+  }else{
+    $("#portal-txt").textContent="Para reimprimir la hoja con clave, genera una nueva (la anterior deja de funcionar).";
+    $("#portal-hoja").textContent="Imprimir hoja sin clave";
+  }
+}
+$("#portal-nueva").addEventListener("click",async()=>{
+  const c=cobroCita, b=$("#portal-nueva"); if(!c) return;
+  if(!b.classList.contains("armed")&&!claveMostrada&&b.dataset.ok!=="1"){b.classList.add("armed");b.textContent="Confirmar: la clave anterior dejará de servir";return}
+  b.disabled=true;
+  try{const r=await api(`/api/citas/${c.id}/clave`,{method:"POST"}); pintarPortal({estado:"nueva",clave:r.clave}); toast("Clave nueva creada")}
+  catch(e){$("#pmsg").className="msg err";$("#pmsg").textContent=e.message}
+  finally{b.disabled=false;b.classList.remove("armed");b.textContent="Nueva clave"}
+});
+$("#portal-hoja").addEventListener("click",()=>{if(cobroCita)imprimirHoja(cobroCita,claveMostrada)});
+function imprimirHoja(c,clave){
+  const esc=t=>String(t??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+  const centro=yo?.centro||"", logo=yo?.logo?location.origin+yo.logo:"";
+  const fecha=parseISO(c.fecha).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  const url=PORTAL_URL||"(dirección pendiente)";
+  const w=window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Hoja de retiro · ${esc(c.paciente)}</title>
+<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#111;margin:32px;font-size:15px;line-height:1.45}
+.top{display:flex;align-items:center;gap:16px;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:18px}.top img{max-height:56px;max-width:180px}
+h1{font-size:20px;margin:0}.sub{color:#555;font-size:13px}table{border-collapse:collapse;width:100%;margin:8px 0 18px}td{padding:6px 8px;border-bottom:1px solid #ddd;vertical-align:top}td:first-child{color:#555;width:38%}
+.acceso{border:2px solid #111;border-radius:10px;padding:16px 18px;margin:12px 0 18px}.acceso h2{margin:0 0 10px;font-size:17px}
+.dato{font-size:15px;margin:6px 0}.dato b{font-family:ui-monospace,Menlo,monospace;font-size:20px;letter-spacing:.08em}
+ol{padding-left:20px}li{margin:4px 0}.pie{margin-top:24px;font-size:12px;color:#555;border-top:1px solid #ccc;padding-top:10px}
+@media print{body{margin:14mm}button{display:none}}</style></head><body>
+<div class="top">${logo?`<img src="${esc(logo)}" alt="">`:""}<div><h1>${esc(centro?"Centro de imágenes "+centro:"Centro de imágenes")}</h1><div class="sub">Comprobante de atención y retiro de examen</div></div></div>
+<table><tr><td>Paciente</td><td><b>${esc(c.paciente)}</b></td></tr><tr><td>RUT</td><td>${esc(c.rut)}</td></tr>
+<tr><td>Examen</td><td>${esc(c.examen||"")}</td></tr><tr><td>Fecha</td><td>${esc(fecha)} · ${esc(c.hora)}</td></tr>
+<tr><td>N° de acceso</td><td>${esc(c.accesion||"")}</td></tr></table>
+<div class="acceso"><h2>Ver su examen en línea</h2>
+<div class="dato">Dirección: <b>${esc(url.replace(/^https?:\/\//,""))}</b></div>
+<div class="dato">Usuario: <b>${esc(c.rut)}</b> (su RUT)</div>
+<div class="dato">Clave: <b>${clave?esc(clave):"la que recibió en su visita anterior"}</b></div></div>
+<ol><li>Entre a la dirección desde su celular o computador.</li><li>Escriba su RUT y su clave.</li>
+<li>Verá su examen con su estado. Cuando el médico radiólogo firme el informe, podrá verlo, descargarlo en PDF y ver sus imágenes.</li>
+<li>Su clave sirve para todos sus exámenes en este centro. Guárdela y no la comparta.</li></ol>
+<p>El informe suele estar disponible dentro de los plazos informados en recepción. Si olvida su clave, pida una nueva en recepción presentando su carnet.</p>
+<div class="pie">Impreso el ${esc(new Date().toLocaleString("es-CL"))}${yo?.nombre?" por "+esc(yo.nombre):""}.</div>
+<script>window.onload=()=>{setTimeout(()=>window.print(),200)}<\/script></body></html>`);
+  w.document.close();
+}
 $("#c-editar").addEventListener("click",()=>{const c=cobroCita;$("#pscrim").hidden=true;cobroCita=null;if(c)openForm(citas.find(x=>x.id===c.id)||c)});
 
 /* ---------- edad y datos del paciente por RUT ---------- */
@@ -1360,6 +1437,7 @@ buildGrid(); render();
     if(yo.logo){centroLogo=yo.logo;
       for(const box of [$("#brand-logo"),$("#k-logo")]){const img=box.querySelector("img");img.alt=yo.centro?"Logo "+yo.centro:"Logo";img.onload=()=>box.hidden=false;img.src=yo.logo}}
     canWrite=yo.rol!=="lectura";
+    PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||"";
     $("#nueva").hidden=!canWrite;
     $("#btnUsuarios").hidden=yo.rol!=="admin";
     $("#btnRespaldo").hidden=yo.rol!=="admin";

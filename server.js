@@ -1,6 +1,7 @@
 // Agenda de Imágenes — servidor web sin dependencias (Node.js 22.13 o superior)
 // Inicio: npm start
 // Variables opcionales: PORT, HOST, DATA_DIR, ADMIN_CLAVE, SESION_HORAS, COOKIE_SECURE=1, TRUST_PROXY=1, CENTRO_NOMBRE
+// Conexión con el PACS (ver integracion.js): PACS_URL, INTEGRACION_TOKEN, PORTAL_URL, ACCESION_PREFIJO
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -237,6 +238,9 @@ const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS ac
   FROM citas c LEFT JOIN usuarios uc ON uc.id = c.creado_por LEFT JOIN usuarios ua ON ua.id = c.actualizado_por
   LEFT JOIN pagos p ON p.id = (SELECT MAX(id) FROM pagos WHERE cita_id = c.id AND anulado = 0)
   LEFT JOIN usuarios up ON up.id = p.usuario_id`;
+// Integración con el PACS (órdenes, estados y clave del paciente). Inactiva si falta PACS_URL.
+const integ = require("./integracion")(db, { ahoraCaja, hoyCaja, fallo, plain });
+
 const pagoActivo = (citaId) => db.prepare("SELECT * FROM pagos WHERE cita_id = ? AND anulado = 0").get(citaId);
 const citaPorId = (id) => plain(db.prepare(`${SELECT_CITA} WHERE c.id = ?`).get(id));
 
@@ -265,10 +269,10 @@ const rutas = [
 
   ["GET", /^\/api\/me$/, "sesion", async (req, u) => {
     const { tokenHash, ...datos } = u;
-    return [200, { ...datos, centro: CENTRO, logo: LOGO }];
+    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl }];
   }],
 
-  ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO }]],
+  ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl }]],
 
   // Citas de un día (?fecha=) o de un rango (?desde=&hasta=, máximo 31 días)
   ["GET", /^\/api\/citas$/, "sesion", async (req, u, url) => {
@@ -348,7 +352,10 @@ const rutas = [
     const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,fecha_nac,email,examen,prevision,medico,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
       VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@fecha_nac,@email,@examen,@prevision,@medico,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
       .run({ ...c, uid: u.id });
-    return [201, citaPorId(Number(r.lastInsertRowid))];
+    const nuevoId = Number(r.lastInsertRowid);
+    db.prepare("UPDATE citas SET accesion = ? WHERE id = ?").run(db.accesionDe(nuevoId), nuevoId);
+    integ.avisar(nuevoId);
+    return [201, citaPorId(nuevoId)];
   }],
 
   ["PUT", /^\/api\/citas\/(\d+)$/, "escribir", async (req, u, url, m) => {
@@ -364,11 +371,13 @@ const rutas = [
       codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");
+    integ.avisar(id);
     return [200, citaPorId(id)];
   }],
 
   ["DELETE", /^\/api\/citas\/(\d+)$/, "escribir", async (req, u, url, m) => {
     if (pagoActivo(Number(m[1]))) fallo(409, "Esta cita tiene un pago registrado. Anula el pago antes de eliminarla.");
+    integ.avisarEliminada(Number(m[1]));
     db.prepare("DELETE FROM citas WHERE id = ?").run(Number(m[1]));
     return [200, { ok: true }];
   }],
@@ -405,7 +414,10 @@ const rutas = [
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
       c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta);
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
-    return [201, citaPorId(id)];
+    // Clave para ver el examen en línea: se crea al pagar (solo la primera vez que viene el paciente)
+    const portal = integ.activa ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;
+    integ.avisar(id);
+    return [201, { ...citaPorId(id), portal }];
   }],
 
   ["POST", /^\/api\/pagos\/(\d+)\/anular$/, "escribir", async (req, u, url, m) => {
@@ -417,6 +429,7 @@ const rutas = [
     const motivo = txt(b.motivo, 200);
     if (!motivo) fallo(400, "Escribe el motivo de la anulación.");
     db.prepare("UPDATE pagos SET anulado = 1, anulado_por = ?, motivo_anulacion = ? WHERE id = ?").run(u.id, motivo, p.id);
+    if (p.cita_id) integ.avisar(p.cita_id);
     return [200, { ok: true }];
   }],
 
@@ -527,6 +540,7 @@ const rutas = [
     }
     return [200, { ok: true }];
   }],
+  ...integ.rutas,
 ];
 
 // ---------- archivos ----------
