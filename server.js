@@ -463,7 +463,7 @@ const rutas = [
     const r = resumenCaja(desde, hasta);
     const esc = (v) => { const t = String(v ?? ""); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
     const filas = [["Fecha", "Hora", "Paciente", "RUT", "Equipo", "Código", "Examen", "Previsión", "Valor", "Bonificación", "Descuento", "Motivo descuento", "Pagado", "Medio", "Folio bono", "Boleta", "Cajero", "Estado"]];
-    for (const p of r.pagos) filas.push([p.fecha.split("-").reverse().join("-"), p.creado.slice(11, 16), p.paciente, p.rut, p.equipo.toUpperCase(), p.codigo, p.examen, p.prevision,
+    for (const p of r.pagos) filas.push([p.fecha.split("-").reverse().join("/"), p.creado.slice(11, 16), p.paciente, p.rut, p.equipo.toUpperCase(), p.codigo, p.examen, p.prevision,
       p.valor, p.bonificacion, p.descuento, p.descuento_motivo, p.copago, p.medio, p.folio_bono, p.boleta, p.usuario_nombre, p.anulado ? "ANULADO: " + p.motivo_anulacion : "OK"]);
     filas.push([]);
     filas.push(["Total atenciones", r.totales.atenciones]);

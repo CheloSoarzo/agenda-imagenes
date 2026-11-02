@@ -366,3 +366,16 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 /* Pie de página: dominio, versión y copyright */
 .pie-sistema{text-align:center;font-size:12px;color:var(--muted);padding:18px 16px 22px}
 @media print{.pie-sistema{display:none}}
+
+/* Fechas en formato chileno dd/mm/aaaa (fecha-cl.js) */
+.fecha-cl{position:relative;display:flex;align-items:center;gap:4px;width:100%;min-width:0}
+.fecha-cl .fecha-cl-txt{flex:1;min-width:0;font-variant-numeric:tabular-nums}
+.fecha-cl-btn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:8px;cursor:pointer}
+.fecha-cl-btn:hover{color:var(--fg);border-color:var(--muted)}
+.fecha-cl-btn:disabled{opacity:.5;cursor:default}
+.fecha-cl-oculto{position:absolute!important;right:0;bottom:0;width:1px!important;height:1px!important;opacity:0;pointer-events:none;border:0!important;padding:0!important;margin:0!important}
+.fecha-cl-txt.fecha-cl-error{border-color:var(--bad)!important;color:var(--bad)}
+.daynav .fecha-cl{width:auto}
+.daynav .fecha-cl-txt{width:7.6em;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px;font-family:var(--f-mono);font-size:13px;color:var(--fg)}
+#k-entre .fecha-cl,.rango .fecha-cl{width:auto;display:inline-flex}
+#k-entre .fecha-cl-txt{width:7.6em;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 8px;color:var(--fg)}

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/estilos.css">
+<script src="/fecha-cl.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -332,7 +333,7 @@ const toMin=h=>{const [a,b]=h.split(":").map(Number);return a*60+b};
 const toHora=m=>pad(Math.floor(m/60))+":"+pad(m%60);
 const isoDate=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 const parseISO=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
-const fmtFecha=s=>parseISO(s).toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit",year:"numeric"});
+const fmtFecha=s=>parseISO(s).toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit",year:"numeric"}).replace(/-/g,"/");
 
 let dia=isoDate(new Date());
 {const h=location.hash.slice(1); if(/^\d{4}-\d{2}-\d{2}$/.test(h)) dia=h;}
@@ -709,7 +710,7 @@ function lineasDe(c){
 function openCobro(c){
   cobroCita=c; const pagada=!!c.pago_id;
   $("#c-paciente").textContent=c.paciente;
-  $("#c-sub").textContent=[c.rut,c.prevision||"Sin previsión",parseISO(c.fecha).toLocaleDateString("es-CL")+" "+c.hora,(EQN[c.equipo]||c.equipo)].filter(Boolean).join(" · ");
+  $("#c-sub").textContent=[c.rut,c.prevision||"Sin previsión",parseISO(c.fecha).toLocaleDateString("es-CL").replace(/-/g,"/")+" "+c.hora,(EQN[c.equipo]||c.equipo)].filter(Boolean).join(" · ");
   const ls=lineasDe(c);
   tabla($("#c-examenes"),[...ls.map(l=>({...l,copago:l.copago??(l.valor-l.bonificacion)})),{_cls:"tot",nombre:"Total",codigo:"",valor:c.valor,bonificacion:c.bonificacion,copago:c.copago}],[
     {t:"Examen",f:l=>(l.codigo?l.codigo+" · ":"")+(l.nombre||"")},{t:"Valor",n:1,f:l=>$$(l.valor)},{t:"Bonif.",n:1,f:l=>$$(l.bonificacion)},{t:"Copago",n:1,f:l=>$$(l.copago)}]);
@@ -719,7 +720,7 @@ function openCobro(c){
   $("#anular-box").hidden=true; $("#anular-motivo").value="";
   $("#pago-hecho").hidden=!pagada; $("#pago-form").hidden=pagada||!canWrite;
   if(pagada){
-    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""} · ${parseISO(c.pago_fecha||c.fecha).toLocaleDateString("es-CL")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
+    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""} · ${parseISO(c.pago_fecha||c.fecha).toLocaleDateString("es-CL").replace(/-/g,"/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
     $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
   }
   $("#pmsg").textContent=""; $("#pmsg").className="msg";
@@ -1113,7 +1114,7 @@ async function abrirCaja(rango){
   $("#k-dias-box").hidden=d.un_dia;
   if(!d.un_dia){
     tabla($("#k-dias"),d.por_dia.map(x=>({...x,_cls:"click"})),[
-      {t:"Fecha",f:x=>parseISO(x.fecha).toLocaleDateString("es-CL",{weekday:"short",day:"2-digit",month:"2-digit"})},
+      {t:"Fecha",f:x=>parseISO(x.fecha).toLocaleDateString("es-CL",{weekday:"short",day:"2-digit",month:"2-digit"}).replace(/-/g,"/")},
       {t:"Atenciones",n:1,f:x=>x.atenciones},{t:"Recaudado",n:1,f:x=>$$(x.recaudado)},{t:"Efectivo esperado",n:1,f:x=>$$(x.efectivo_esperado)},
       {t:"Contado",n:1,f:x=>x.cerrada?$$(x.efectivo_contado):"—"},{t:"Diferencia",n:1,f:x=>x.cerrada?(x.diferencia>0?"+":x.diferencia<0?"−":"")+$$(Math.abs(x.diferencia)):"—"},
       {t:"Estado",f:x=>x.cerrada?"Cerrada":"Abierta"}]);
@@ -1157,7 +1158,7 @@ async function abrirCaja(rango){
       <div><span>Diferencia</span><b id="k-dif">—</b></div></div>
       <div class="field"><label for="k-obs">Observaciones</label><textarea id="k-obs" placeholder="Ej. sencillo inicial, retiros, diferencias"></textarea></div>
       <p class="meta">Al cerrar la caja no se pueden registrar ni anular pagos de este día.</p>
-      <button type="button" class="btn primary" id="k-cerrar">Cerrar caja del ${parseISO(d.fecha).toLocaleDateString("es-CL")}</button>`;
+      <button type="button" class="btn primary" id="k-cerrar">Cerrar caja del ${parseISO(d.fecha).toLocaleDateString("es-CL").replace(/-/g,"/")}</button>`;
     $("#k-esperado").textContent=$$(t.efectivo_esperado);
     $("#k-contado").addEventListener("input",e=>{const v=pesos(e.target.value);const dif=v-t.efectivo_esperado;
       $("#k-dif").textContent=e.target.value?(dif>0?"+":dif<0?"−":"")+$$(Math.abs(dif)):"—";$("#k-dif").className=e.target.value?(dif?"bad":"ok"):""});
