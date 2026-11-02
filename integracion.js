@@ -124,6 +124,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
 
   // ---------- avance de los exámenes desde el PACS ----------
   let ultimoOk = "", ultimoError = "";
+  let pacsDelPacs = (db.prepare("SELECT valor FROM meta WHERE clave = 'pacs_url'").get() || {}).valor || "";
   async function traerEstados() {
     if (!ACTIVA) return;
     const desde = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
@@ -131,6 +132,12 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     try { data = await llamar("GET", "/api/integracion/estados?desde=" + desde); }
     catch (e) { ultimoError = String(e.message); return; }
     ultimoOk = ahoraCaja();
+    // El PACS informa su dirección pública (para el botón «Ver en el PACS»)
+    const pu = String((data && data.pacs_url) || "").trim().replace(/\/+$/, "");
+    if (/^https?:\/\/[^\s]+$/.test(pu) && pu !== pacsDelPacs) {
+      pacsDelPacs = pu;
+      db.prepare("INSERT INTO meta (clave, valor) VALUES ('pacs_url', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").run(pu);
+    }
     const porAcc = db.prepare("SELECT id, estado, pacs_estado, pacs_detalle FROM citas WHERE accesion = ?");
     const up = db.prepare("UPDATE citas SET pacs_estado = ?, pacs_detalle = ? WHERE id = ?");
     const atendido = db.prepare("UPDATE citas SET estado = 'atendido' WHERE id = ? AND estado IN ('llego','confirmado','agendado')");
@@ -197,5 +204,5 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     }],
   ];
 
-  return { activa: ACTIVA, portalUrl: PORTAL_URL, pacsPublico: ACTIVA ? PACS_PUBLICO : "", avisar, avisarEliminada, asegurarClave, rutas, normRut, rutValido };
+  return { activa: ACTIVA, portalUrl: PORTAL_URL, get pacsPublico() { return ACTIVA ? (PACS_PUBLICO || pacsDelPacs) : ""; }, avisar, avisarEliminada, asegurarClave, rutas, normRut, rutValido };
 };

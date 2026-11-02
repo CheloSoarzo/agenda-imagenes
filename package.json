@@ -1,6 +1,6 @@
 {
   "name": "agenda-imagenes",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Agenda de pacientes por equipo (TC, RX, Ecografía) para centros de imágenes",
   "main": "server.js",
   "private": true,

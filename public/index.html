@@ -788,7 +788,9 @@ function openForm(c,preset={}){
   estadoSel=c?.estado||"agendado"; segButtons($("#f-estado"),ESTADOS,estadoSel,id=>estadoSel=id);
   const del=$("#borrar"); del.hidden=!c||!canWrite; del.classList.remove("armed"); del.textContent="Eliminar";
   $("#fmeta").textContent=c?`${c.accesion?"N° acceso "+c.accesion+" · ":""}${PACS_TXT[c.pacs_estado]?PACS_LARGO[c.pacs_estado]+" · ":""}Creada por ${c.creado_por_nombre||"—"}${c.actualizado_por_nombre?` · última edición: ${c.actualizado_por_nombre}`:""}`:"";
-  const vp=$("#ver-pacs"); vp.hidden=!(c&&c.pacs_estado&&c.accesion&&PACS_PUBLICO);
+  const vp=$("#ver-pacs"); vp.hidden=!(c&&c.accesion&&PACS_PUBLICO);
+  vp.classList.toggle("sin-imagenes",!!(c&&!c.pacs_estado));
+  vp.title=c&&c.pacs_estado?"Abrir este examen en el PACS (imágenes e informe)":"Abrir en el PACS (las imágenes de este examen aún no llegan)";
   if(!vp.hidden) vp.href=PACS_PUBLICO+"/agenda/"+encodeURIComponent(c.accesion);
   $("#fmsg").textContent=canWrite?"":"Tu usuario es solo de lectura."; $("#fmsg").className="msg";
   [...$("#form").elements].forEach(el=>{if(el.id!=="cancelar")el.disabled=!canWrite});
