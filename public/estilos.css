@@ -362,3 +362,7 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 .appt.pacs-imagenes .st::after{background:var(--warn)}
 .appt.pacs-informado .st::after{background:var(--ok)}
 .appt.pacs-entregado .st::after{background:var(--accent)}
+
+/* Pie de página: dominio, versión y copyright */
+.pie-sistema{text-align:center;font-size:12px;color:var(--muted);padding:18px 16px 22px}
+@media print{.pie-sistema{display:none}}

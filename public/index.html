@@ -1446,5 +1446,7 @@ buildGrid(); render();
   }catch(e){}
 })();
 </script>
+<footer class="pie-sistema" id="pie-sistema"></footer>
+<script>fetch("/api/config").then(r=>r.json()).then(c=>{document.getElementById("pie-sistema").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 MSC26"}).catch(()=>{})</script>
 </body>
 </html>

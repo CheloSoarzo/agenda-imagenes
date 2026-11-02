@@ -29,6 +29,8 @@ const LOGO = (() => {
   return f ? "/logos/" + f : "";
 })();
 const PUBLIC = path.join(__dirname, "public");
+// Versión del sistema (package.json) que se muestra al pie de cada página
+const VERSION = (() => { try { return require("./package.json").version || "1.0.0"; } catch { return "1.0.0"; } })();
 
 // ---------- primer usuario ----------
 if (db.prepare("SELECT COUNT(*) AS n FROM usuarios").get().n === 0) {
@@ -269,10 +271,10 @@ const rutas = [
 
   ["GET", /^\/api\/me$/, "sesion", async (req, u) => {
     const { tokenHash, ...datos } = u;
-    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl }];
+    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, version: VERSION }];
   }],
 
-  ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl }]],
+  ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, version: VERSION }]],
 
   // Citas de un día (?fecha=) o de un rango (?desde=&hasta=, máximo 31 días)
   ["GET", /^\/api\/citas$/, "sesion", async (req, u, url) => {
