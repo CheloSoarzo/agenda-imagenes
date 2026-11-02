@@ -132,9 +132,11 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     const up = db.prepare("UPDATE citas SET pacs_estado = ?, pacs_detalle = ? WHERE id = ?");
     const atendido = db.prepare("UPDATE citas SET estado = 'atendido' WHERE id = ? AND estado IN ('llego','confirmado','agendado')");
     for (const e of (data && data.estados) || []) {
-      if (!ESTADOS_PACS.includes(e.estado)) continue;
       const c = porAcc.get(String(e.accesion || ""));
       if (!c) continue;
+      // El estudio se borró del PACS: la cita vuelve a quedar sin imágenes (hasta que llegue uno nuevo)
+      if (e.estado === "sin_imagenes") { if (c.pacs_estado !== "" || c.pacs_detalle !== "") up.run("", "", c.id); continue; }
+      if (!ESTADOS_PACS.includes(e.estado)) continue;
       const det = JSON.stringify(e.detalle || {});
       if (c.pacs_estado !== e.estado || c.pacs_detalle !== det) up.run(e.estado, det, c.id);
       if (c.pacs_estado === "" && e.estado) atendido.run(c.id);   // llegaron las imágenes: el examen se hizo
