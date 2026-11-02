@@ -271,7 +271,7 @@ const rutas = [
 
   ["GET", /^\/api\/me$/, "sesion", async (req, u) => {
     const { tokenHash, ...datos } = u;
-    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, version: VERSION }];
+    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, pacs_publico: integ.pacsPublico, version: VERSION }];
   }],
 
   ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, version: VERSION }]],

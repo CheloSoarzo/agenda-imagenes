@@ -12,12 +12,15 @@
 //   INTEGRACION_TOKEN   clave compartida con el PACS (la misma en ambos lados)
 //   PORTAL_URL          dirección que se imprime en la hoja de retiro (por defecto PACS_URL/paciente)
 //   ACCESION_PREFIJO    letras al inicio del número de acceso (por defecto AG)
+//   PACS_PUBLICO_URL    dirección del PACS que abre el navegador (botón «Ver en el PACS»). Por defecto PACS_URL
+//                       si es https.
 const crypto = require("crypto");
 
 const PACS_URL = String(process.env.PACS_URL || "").trim().replace(/\/+$/, "");
 const TOKEN = String(process.env.INTEGRACION_TOKEN || "").trim();
 const PORTAL_URL = String(process.env.PORTAL_URL || "").trim().replace(/\/+$/, "") || (PACS_URL && !/^http:\/\//.test(PACS_URL) ? PACS_URL + "/paciente" : "");
 const ACTIVA = !!(PACS_URL && TOKEN);
+const PACS_PUBLICO = String(process.env.PACS_PUBLICO_URL || "").trim().replace(/\/+$/, "") || (/^https:\/\//.test(PACS_URL) ? PACS_URL : "");
 const ESTADOS_PACS = ["imagenes", "informado", "entregado"];
 const INTERVALO = Math.max(5, Number(process.env.PACS_INTERVALO_SEG) || 60);   // cada cuánto se consulta el avance
 
@@ -194,5 +197,5 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     }],
   ];
 
-  return { activa: ACTIVA, portalUrl: PORTAL_URL, avisar, avisarEliminada, asegurarClave, rutas, normRut, rutValido };
+  return { activa: ACTIVA, portalUrl: PORTAL_URL, pacsPublico: ACTIVA ? PACS_PUBLICO : "", avisar, avisarEliminada, asegurarClave, rutas, normRut, rutValido };
 };

@@ -379,3 +379,4 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 .daynav .fecha-cl-txt{width:7.6em;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px;font-family:var(--f-mono);font-size:13px;color:var(--fg)}
 #k-entre .fecha-cl,.rango .fecha-cl{width:auto;display:inline-flex}
 #k-entre .fecha-cl-txt{width:7.6em;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 8px;color:var(--fg)}
+.btn.ver-pacs{text-decoration:none;color:var(--accent);display:inline-flex;align-items:center}

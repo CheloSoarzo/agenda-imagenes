@@ -139,6 +139,7 @@
     <div class="msg" id="fmsg"></div>
     <div class="actions">
       <button type="button" class="btn danger" id="borrar" hidden>Eliminar</button>
+      <a class="btn ver-pacs" id="ver-pacs" target="_blank" rel="noopener" hidden title="Abrir este examen en el PACS (imágenes e informe)">Ver en el PACS ↗</a>
       <span class="spacer"></span>
       <button type="button" class="btn" id="cancelar">Cancelar</button>
       <button type="submit" class="btn primary" id="guardar">Guardar cita</button>
@@ -787,6 +788,8 @@ function openForm(c,preset={}){
   estadoSel=c?.estado||"agendado"; segButtons($("#f-estado"),ESTADOS,estadoSel,id=>estadoSel=id);
   const del=$("#borrar"); del.hidden=!c||!canWrite; del.classList.remove("armed"); del.textContent="Eliminar";
   $("#fmeta").textContent=c?`${c.accesion?"N° acceso "+c.accesion+" · ":""}${PACS_TXT[c.pacs_estado]?PACS_LARGO[c.pacs_estado]+" · ":""}Creada por ${c.creado_por_nombre||"—"}${c.actualizado_por_nombre?` · última edición: ${c.actualizado_por_nombre}`:""}`:"";
+  const vp=$("#ver-pacs"); vp.hidden=!(c&&c.pacs_estado&&c.accesion&&PACS_PUBLICO);
+  if(!vp.hidden) vp.href=PACS_PUBLICO+"/agenda/"+encodeURIComponent(c.accesion);
   $("#fmsg").textContent=canWrite?"":"Tu usuario es solo de lectura."; $("#fmsg").className="msg";
   [...$("#form").elements].forEach(el=>{if(el.id!=="cancelar")el.disabled=!canWrite});
   $("#f-prevision").disabled=!canWrite||citaPagada;
@@ -892,7 +895,7 @@ $("#c-cerrar").addEventListener("click",()=>{$("#pscrim").hidden=true;cobroCita=
 /* ---------- examen en línea: clave del paciente y hoja de retiro ---------- */
 const PACS_TXT={imagenes:"imágenes",informado:"informado",entregado:"entregado"};
 const PACS_LARGO={imagenes:"Imágenes en el PACS",informado:"Informe listo",entregado:"Informe entregado"};
-let PACS_ON=false, PORTAL_URL="", claveMostrada="";
+let PACS_ON=false, PORTAL_URL="", PACS_PUBLICO="", claveMostrada="";
 function pintarPortal(p){
   const box=$("#portal-box"); claveMostrada="";
   if(!p){box.hidden=true;return}
@@ -1438,7 +1441,7 @@ buildGrid(); render();
     if(yo.logo){centroLogo=yo.logo;
       for(const box of [$("#brand-logo"),$("#k-logo")]){const img=box.querySelector("img");img.alt=yo.centro?"Logo "+yo.centro:"Logo";img.onload=()=>box.hidden=false;img.src=yo.logo}}
     canWrite=yo.rol!=="lectura";
-    PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||"";
+    PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||""; PACS_PUBLICO=yo.pacs_publico||"";
     $("#nueva").hidden=!canWrite;
     $("#btnUsuarios").hidden=yo.rol!=="admin";
     $("#btnRespaldo").hidden=yo.rol!=="admin";
