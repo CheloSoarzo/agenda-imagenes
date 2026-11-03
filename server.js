@@ -49,6 +49,8 @@ if (db.prepare("SELECT COUNT(*) AS n FROM usuarios").get().n === 0) {
 const plain = (o) => (o ? { ...o } : o);
 const plainAll = (a) => a.map(plain);
 const txt = (v, max) => String(v ?? "").trim().slice(0, max);
+// Nombres de exámenes siempre en MAYÚSCULAS (así se ven en los equipos y en el PACS)
+const mayus = (v) => String(v ?? "").toLocaleUpperCase("es-CL");
 const sha = (t) => crypto.createHash("sha256").update(t).digest("hex");
 
 function enviarJSON(res, status, data, headers = {}) {
@@ -137,6 +139,7 @@ function validarCita(b) {
   lineas = lineas.map((l) => precioLinea({ codigo: txt(l?.codigo, 20), nombre: txt(l?.nombre ?? l?.examen, 160),
     valor: entero(l?.valor), bonificacion: entero(l?.bonificacion) }, c.prevision))
     .filter((l) => l.codigo || l.nombre || l.valor);
+  for (const l of lineas) l.nombre = mayus(l.nombre);
   c.codigo = lineas.map((l) => l.codigo).filter(Boolean).join("+");
   c.examen = lineas.map((l) => l.nombre).filter(Boolean).join(" + ").slice(0, 600);
   c.valor = lineas.reduce((t, l) => t + l.valor, 0);
@@ -483,7 +486,7 @@ const rutas = [
 
   ["PUT", /^\/api\/aranceles\/([\w.-]{1,20})$/, "admin", async (req, u, url, m) => {
     const b = await leerCuerpo(req);
-    const a = { codigo: m[1], nombre: txt(b.nombre, 200), equipo: txt(b.equipo, 5), fonasa_total: entero(b.fonasa_total),
+    const a = { codigo: m[1], nombre: mayus(txt(b.nombre, 200)), equipo: txt(b.equipo, 5), fonasa_total: entero(b.fonasa_total),
       fonasa_bonif: entero(b.fonasa_bonif), particular: entero(b.particular), activo: b.activo === false || b.activo === 0 ? 0 : 1 };
     if (!a.nombre) fallo(400, "Escribe el nombre de la prestación.");
     if (!EQUIPOS.includes(a.equipo)) fallo(400, "Elige el equipo.");

@@ -143,7 +143,7 @@ try {
       ON CONFLICT(codigo) DO UPDATE SET nombre = excluded.nombre, equipo = excluded.equipo,
       fonasa_total = excluded.fonasa_total, fonasa_bonif = excluded.fonasa_bonif`);
     db.exec("BEGIN");
-    for (const a of ini.prestaciones) up.run(a.codigo, a.nombre, a.equipo, a.fonasa_total, a.fonasa_bonif);
+    for (const a of ini.prestaciones) up.run(a.codigo, String(a.nombre).toLocaleUpperCase("es-CL"), a.equipo, a.fonasa_total, a.fonasa_bonif);
     const r = db.prepare(`UPDATE citas SET
         valor = (SELECT fonasa_total FROM aranceles a WHERE a.codigo = citas.codigo),
         bonificacion = (SELECT fonasa_bonif FROM aranceles a WHERE a.codigo = citas.codigo),
@@ -158,6 +158,27 @@ try {
 } catch (e) {
   try { db.exec("ROLLBACK"); } catch {}
   console.error("No se pudo cargar el arancel Fonasa:", e.message);
+}
+
+// Exámenes en MAYÚSCULAS (una vez): aranceles y citas guardadas antes de este cambio
+if (!db.prepare("SELECT 1 FROM meta WHERE clave = 'examenes_mayusculas'").get()) {
+  const M = (v) => String(v ?? "").toLocaleUpperCase("es-CL");
+  try {
+    db.exec("BEGIN");
+    const upA = db.prepare("UPDATE aranceles SET nombre = ? WHERE codigo = ?");
+    for (const a of db.prepare("SELECT codigo, nombre FROM aranceles").all()) if (a.nombre !== M(a.nombre)) upA.run(M(a.nombre), a.codigo);
+    const upC = db.prepare("UPDATE citas SET examen = ?, examenes = ? WHERE id = ?");
+    for (const c of db.prepare("SELECT id, examen, examenes FROM citas").all()) {
+      let exs = c.examenes || "";
+      try { if (exs) exs = JSON.stringify(JSON.parse(exs).map((l) => ({ ...l, nombre: M(l.nombre) }))); } catch {}
+      if (c.examen !== M(c.examen) || exs !== (c.examenes || "")) upC.run(M(c.examen), exs, c.id);
+    }
+    db.prepare("INSERT INTO meta (clave, valor) VALUES ('examenes_mayusculas', '1')").run();
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch {}
+    console.error("No se pudieron pasar los exámenes a mayúsculas:", e.message);
+  }
 }
 
 // ---------- integración con el PACS ----------

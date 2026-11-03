@@ -380,3 +380,5 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 #k-entre .fecha-cl,.rango .fecha-cl{width:auto;display:inline-flex}
 #k-entre .fecha-cl-txt{width:7.6em;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 8px;color:var(--fg)}
 .btn.ver-pacs{text-decoration:none;color:var(--accent);display:inline-flex;align-items:center}
+/* Exámenes siempre en mayúsculas (el servidor también los guarda así) */
+.ex-nom,#a-nombre{text-transform:uppercase}
