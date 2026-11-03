@@ -98,6 +98,10 @@
         <div class="nac"><input id="f-nac" type="date" min="1900-01-01"><span class="edad" id="f-edad"></span></div></div>
       <div class="field"><label for="f-email">Correo electrónico</label><input id="f-email" type="email" autocomplete="off" placeholder="nombre@correo.cl"></div>
     </div>
+    <div class="row2">
+      <div class="field"><label for="f-tel2">Segundo teléfono <span class="opc">(opcional)</span></label><input id="f-tel2" type="tel" autocomplete="off" placeholder="Familiar o trabajo"></div>
+      <div class="field"><label for="f-email2">Segundo correo <span class="opc">(opcional)</span></label><input id="f-email2" type="email" autocomplete="off" placeholder="nombre@correo.cl"></div>
+    </div>
     <div class="field"><label>Equipo</label><div class="seg" id="f-equipo"></div></div>
     <div class="row2">
       <div class="field"><label for="f-prevision">Previsión</label>
@@ -187,7 +191,7 @@
             <div class="field" id="p-dvalor-f" hidden><label for="p-dvalor" id="p-dvalor-l">Porcentaje</label><input id="p-dvalor" inputmode="decimal" autocomplete="off"></div>
             <div class="field" id="p-dmotivo-f" hidden><label for="p-dmotivo">Motivo</label><input id="p-dmotivo" list="motivos-desc" autocomplete="off" placeholder="Ej. convenio"></div>
           </div>
-          <datalist id="motivos-desc"><option value="Funcionario"><option value="Convenio"><option value="Adulto mayor"><option value="Cortesía"><option value="Paciente frecuente"><option value="Campaña"></datalist>
+          <datalist id="motivos-desc"><option value="Seguro complementario"><option value="Funcionario"><option value="Convenio"><option value="Adulto mayor"><option value="Cortesía"><option value="Paciente frecuente"><option value="Campaña"></datalist>
         </div>
         <div class="total-pagar"><div><span>Total a pagar</span><small id="p-desc-txt"></small></div><b id="p-total">$0</b></div>
         <button type="button" class="btn pay" id="cobrar">Cobrar</button>
@@ -648,14 +652,20 @@ function addLinea(l={}){
       <button type="button" class="ex-del" aria-label="Quitar este examen" title="Quitar este examen">×</button></div>
     <input class="ex-nom" list="examenes" autocomplete="off" placeholder="Nombre del examen" aria-label="Nombre del examen">
     <div class="ex-vals">
-      <label>Valor<input class="ex-val" inputmode="numeric" autocomplete="off" placeholder="$0"></label>
+      <label title="Cuántas veces se hace este mismo examen">Cant.<input class="ex-cant" type="number" min="1" max="20" step="1" inputmode="numeric" value="1"></label>
+      <label>Valor c/u<input class="ex-val" inputmode="numeric" autocomplete="off" placeholder="$0"></label>
       <label>Bonificación<input class="ex-bon" inputmode="numeric" autocomplete="off" placeholder="$0"></label>
       <div class="ex-copw"><span>Copago</span><b class="ex-cop">$0</b></div>
     </div>
     <div class="ex-hint meta"></div>`;
-  const cod=row.querySelector(".ex-cod"), nom=row.querySelector(".ex-nom"), val=row.querySelector(".ex-val"), bon=row.querySelector(".ex-bon");
+  const cod=row.querySelector(".ex-cod"), nom=row.querySelector(".ex-nom"), val=row.querySelector(".ex-val"), bon=row.querySelector(".ex-bon"), cant=row.querySelector(".ex-cant");
   llenarCodigos(cod,equipoSel,l.codigo||"");
-  nom.value=l.nombre||""; val.value=l.valor?$$(l.valor):""; bon.value=l.valor?$$(l.bonificacion||0):"";
+  // valores por unidad (las citas guardan el total de la línea y la cantidad)
+  const n=Math.max(1,Number(l.cantidad)||1), vu=l.valor_unit??Math.round((l.valor||0)/n), bu=l.bonif_unit??Math.round((l.bonificacion||0)/n);
+  cant.value=String(n);
+  nom.value=l.nombre||""; val.value=l.valor?$$(vu):""; bon.value=l.valor?$$(bu||0):"";
+  cant.addEventListener("input",()=>recalcular(false));
+  cant.addEventListener("blur",()=>{cant.value=String(Math.min(20,Math.max(1,Math.round(Number(cant.value))||1)));recalcular(false)});
   cod.addEventListener("change",()=>{const a=ARANCEL.find(x=>x.codigo===cod.value);if(a)nom.value=a.nombre;recalcLinea(row,true);recalcular(false)});
   for(const inp of [val,bon]){
     inp.addEventListener("input",()=>recalcular(false));
@@ -667,9 +677,11 @@ function addLinea(l={}){
 }
 function numerar(){const rs=$$rows();rs.forEach((r,i)=>{r.querySelector(".ex-n").textContent=rs.length>1?`Examen ${i+1}`:"";r.querySelector(".ex-del").hidden=rs.length<2||!canWrite||citaPagada})}
 $("#ex-add").addEventListener("click",()=>{const r=addLinea();recalcLinea(r,true);recalcular(false);r.querySelector(".ex-cod").focus()});
+const cantDe=r=>Math.min(20,Math.max(1,Math.round(Number(r.querySelector(".ex-cant").value))||1));
 function lineas(){
-  return $$rows().map(r=>({codigo:r.querySelector(".ex-cod").value,nombre:r.querySelector(".ex-nom").value.trim(),
-    valor:pesos(r.querySelector(".ex-val").value),bonificacion:pesos(r.querySelector(".ex-bon").value)}))
+  return $$rows().map(r=>{const n=cantDe(r), vu=pesos(r.querySelector(".ex-val").value), bu=pesos(r.querySelector(".ex-bon").value);
+    return {codigo:r.querySelector(".ex-cod").value,nombre:r.querySelector(".ex-nom").value.trim(),cantidad:n,
+      valor_unit:vu,bonif_unit:bu,valor:vu*n,bonificacion:bu*n};})
     .filter(l=>l.codigo||l.nombre||l.valor);
 }
 // Valores de una línea según la prestación y la previsión
@@ -683,9 +695,10 @@ function recalcLinea(row,reset){
   else{if(reset&&a){v.value=$$(a.particular||a.fonasa_total);b.value=""}h=prev&&a?"Ingresa la bonificación del bono de "+prev+".":""}
   const disabled=!canWrite||citaPagada;
   v.readOnly=lockV||disabled; b.readOnly=lockB||disabled;
-  row.querySelector(".ex-cod").disabled=disabled; row.querySelector(".ex-nom").readOnly=disabled;
-  const val=pesos(v.value), bon=pesos(b.value);
-  row.querySelector(".ex-cop").textContent=$$(Math.max(0,val-bon));
+  row.querySelector(".ex-cod").disabled=disabled; row.querySelector(".ex-nom").readOnly=disabled; row.querySelector(".ex-cant").readOnly=disabled;
+  const val=pesos(v.value), bon=pesos(b.value), n=cantDe(row);
+  row.querySelector(".ex-cop").textContent=$$(Math.max(0,val-bon)*n);
+  if(n>1) h=(h?h+" · ":"")+`${n} × ${$$(Math.max(0,val-bon))} de copago`;
   row.querySelector(".ex-hint").textContent=bon>val?"La bonificación no puede ser mayor que el valor.":h;
   row.classList.toggle("bad",bon>val);
 }
@@ -714,7 +727,7 @@ function openCobro(c){
   $("#c-sub").textContent=[c.rut,c.prevision||"Sin previsión",parseISO(c.fecha).toLocaleDateString("es-CL").replace(/-/g,"/")+" "+c.hora,(EQN[c.equipo]||c.equipo)].filter(Boolean).join(" · ");
   const ls=lineasDe(c);
   tabla($("#c-examenes"),[...ls.map(l=>({...l,copago:l.copago??(l.valor-l.bonificacion)})),{_cls:"tot",nombre:"Total",codigo:"",valor:c.valor,bonificacion:c.bonificacion,copago:c.copago}],[
-    {t:"Examen",f:l=>(l.codigo?l.codigo+" · ":"")+(l.nombre||"")},{t:"Valor",n:1,f:l=>$$(l.valor)},{t:"Bonif.",n:1,f:l=>$$(l.bonificacion)},{t:"Copago",n:1,f:l=>$$(l.copago)}]);
+    {t:"Examen",f:l=>(l.codigo?l.codigo+" · ":"")+(l.nombre||"")+(l.cantidad>1?" × "+l.cantidad:"")},{t:"Valor",n:1,f:l=>$$(l.valor)},{t:"Bonif.",n:1,f:l=>$$(l.bonificacion)},{t:"Copago",n:1,f:l=>$$(l.copago)}]);
   if(!ls.length) $("#c-examenes").innerHTML='<tr><td class="meta">La cita no tiene exámenes. Usa "Editar cita" para agregarlos.</td></tr>';
   $("#p-medio").value=""; $("#p-folio").value=""; $("#p-boleta").value="";
   $("#p-dtipo").value=""; $("#p-dvalor").value=""; $("#p-dmotivo").value=""; $("#p-dvalor-f").hidden=true; $("#p-dmotivo-f").hidden=true;
@@ -772,7 +785,7 @@ async function cargarAranceles(){try{ARANCEL=await api("/api/aranceles")}catch(e
 function openForm(c,preset={}){
   editId=c?c.id:null;
   $("#ftitle").textContent=c?"Editar cita":"Nueva cita";
-  $("#f-paciente").value=c?.paciente||preset.paciente||""; $("#f-rut").value=c?.rut||preset.rut||""; $("#f-tel").value=c?.telefono||preset.telefono||"";
+  $("#f-paciente").value=c?.paciente||preset.paciente||""; $("#f-rut").value=c?.rut||preset.rut||""; $("#f-tel").value=c?.telefono||preset.telefono||""; $("#f-tel2").value=c?.telefono2||""; $("#f-email2").value=c?.email2||"";
   $("#f-nac").value=c?.fecha_nac||""; $("#f-email").value=c?.email||""; mostrarEdad();
   $("#f-fecha").value=c?.fecha||preset.fecha||dia;
   $("#f-hora").value=c?.hora||preset.hora||"09:00";
@@ -811,6 +824,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")for(const id of SCRI
 function datosForm(){
   const d={paciente:$("#f-paciente").value.trim(),rut:$("#f-rut").value.trim(),telefono:$("#f-tel").value.trim(),
     fecha_nac:$("#f-nac").value,email:$("#f-email").value.trim(),
+    telefono2:$("#f-tel2").value.trim(),email2:$("#f-email2").value.trim(),
     equipo:equipoSel,fecha:$("#f-fecha").value,hora:$("#f-hora").value,
     duracion:Number($("#f-dur").value),prevision:$("#f-prevision").value,medico:$("#f-medico").value.trim(),
     estado:estadoSel,notas:$("#f-notas").value.trim(),examenes:lineas()};
@@ -822,6 +836,7 @@ function validarForm(data){
   if(!data.fecha||!data.hora) return "Elige fecha y hora.";
   if(data.fecha_nac&&(data.fecha_nac>isoDate(new Date())||data.fecha_nac<"1900-01-01")) return "Revisa la fecha de nacimiento.";
   if(data.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email)) return "Revisa el correo electrónico.";
+  if(data.email2&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email2)) return "Revisa el segundo correo electrónico.";
   if(data.examenes.some(l=>l.bonificacion>l.valor)) return "En un examen la bonificación es mayor que el valor.";
   return "";
 }
@@ -978,7 +993,7 @@ $("#f-rut").addEventListener("blur",async()=>{
   try{
     const p=await api("/api/paciente?rut="+encodeURIComponent(rut)); if(!p) return;
     let n=0; const poner=(id,v)=>{if(v&&!$(id).value){$(id).value=v;n++}};
-    poner("#f-paciente",p.paciente); poner("#f-tel",p.telefono); poner("#f-nac",p.fecha_nac); poner("#f-email",p.email);
+    poner("#f-paciente",p.paciente); poner("#f-tel",p.telefono); poner("#f-nac",p.fecha_nac); poner("#f-email",p.email); poner("#f-tel2",p.telefono2); poner("#f-email2",p.email2);
     if(p.prevision&&!$("#f-prevision").value){$("#f-prevision").value=p.prevision;n++;recalcular(true)}
     mostrarEdad(); if(n) toast("Datos del paciente cargados de su última cita");
   }catch(e){}

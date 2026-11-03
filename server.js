@@ -123,6 +123,7 @@ function validarCita(b) {
     telefono: txt(b.telefono, 30), examen: txt(b.examen, 160), prevision: txt(b.prevision, 40),
     medico: txt(b.medico, 120), estado: txt(b.estado, 20) || "agendado", notas: txt(b.notas, 2000),
     fecha_nac: txt(b.fecha_nac, 10), email: txt(b.email, 120).toLowerCase(),
+    telefono2: txt(b.telefono2, 30), email2: txt(b.email2, 120).toLowerCase(),
     codigo: "", valor: 0, bonificacion: 0, copago: 0, examenes: "",
   };
   if (!c.paciente) fallo(400, "Escribe el nombre del paciente.");
@@ -133,19 +134,26 @@ function validarCita(b) {
   if (c.duracion < 5 || c.duracion > 240) fallo(400, "La duración debe estar entre 5 y 240 minutos.");
   if (c.fecha_nac && (!reFecha.test(c.fecha_nac) || c.fecha_nac > hoyCaja() || c.fecha_nac < "1900-01-01")) fallo(400, "La fecha de nacimiento no es válida.");
   if (c.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email)) fallo(400, "El correo electrónico no es válido.");
+  if (c.email2 && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email2)) fallo(400, "El segundo correo electrónico no es válido.");
   // Uno o varios exámenes (cada uno con su código y valores). Se aceptan también los campos sueltos de versiones anteriores.
   let lineas = Array.isArray(b.examenes) ? b.examenes : [{ codigo: b.codigo, nombre: b.examen, valor: b.valor, bonificacion: b.bonificacion }];
   if (lineas.length > 10) fallo(400, "Una cita puede tener hasta 10 exámenes.");
-  lineas = lineas.map((l) => precioLinea({ codigo: txt(l?.codigo, 20), nombre: txt(l?.nombre ?? l?.examen, 160),
-    valor: entero(l?.valor), bonificacion: entero(l?.bonificacion) }, c.prevision))
-    .filter((l) => l.codigo || l.nombre || l.valor);
+  // valor y bonificación llegan por unidad; con «cantidad» (mismo examen varias veces) se multiplican
+  lineas = lineas.map((l) => {
+    const cant = Math.min(20, Math.max(1, Math.round(Number(l?.cantidad)) || 1));
+    const x = precioLinea({ codigo: txt(l?.codigo, 20), nombre: txt(l?.nombre ?? l?.examen, 160),
+      valor: entero(l?.valor_unit ?? l?.valor), bonificacion: entero(l?.bonif_unit ?? l?.bonificacion) }, c.prevision);
+    return { ...x, cantidad: cant, valor_unit: x.valor, bonif_unit: x.bonificacion,
+      valor: x.valor * cant, bonificacion: x.bonificacion * cant, copago: x.copago * cant };
+  }).filter((l) => l.codigo || l.nombre || l.valor);
   for (const l of lineas) l.nombre = mayus(l.nombre);
-  c.codigo = lineas.map((l) => l.codigo).filter(Boolean).join("+");
-  c.examen = lineas.map((l) => l.nombre).filter(Boolean).join(" + ").slice(0, 600);
+  const veces = (l) => (l.cantidad > 1 ? ` (X${l.cantidad})` : "");
+  c.codigo = lineas.filter((l) => l.codigo).map((l) => l.codigo + (l.cantidad > 1 ? "x" + l.cantidad : "")).join("+");
+  c.examen = lineas.filter((l) => l.nombre).map((l) => l.nombre + veces(l)).join(" + ").slice(0, 600);
   c.valor = lineas.reduce((t, l) => t + l.valor, 0);
   c.bonificacion = lineas.reduce((t, l) => t + l.bonificacion, 0);
   c.copago = c.valor - c.bonificacion;
-  c.examenes = lineas.length > 1 ? JSON.stringify(lineas) : "";
+  c.examenes = lineas.length > 1 || lineas.some((l) => l.cantidad > 1) ? JSON.stringify(lineas) : "";
   return c;
 }
 // Montos en pesos: se ignoran puntos de miles, "$" y espacios
@@ -339,7 +347,7 @@ const rutas = [
     const rut = txt(url.searchParams.get("rut"), 20);
     const limpio = rut.replace(/[^0-9kK]/g, "").toUpperCase();
     if (limpio.length < 7) return [200, null];
-    const p = db.prepare(`SELECT paciente, rut, telefono, fecha_nac, email, prevision FROM citas
+    const p = db.prepare(`SELECT paciente, rut, telefono, telefono2, fecha_nac, email, email2, prevision FROM citas
       WHERE UPPER(REPLACE(REPLACE(REPLACE(rut,'.',''),'-',''),' ','')) = ? ORDER BY fecha DESC, id DESC LIMIT 1`).get(limpio);
     return [200, plain(p) || null];
   }],
@@ -354,8 +362,8 @@ const rutas = [
 
   ["POST", /^\/api\/citas$/, "escribir", async (req, u) => {
     const c = validarCita(await leerCuerpo(req));
-    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,fecha_nac,email,examen,prevision,medico,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
-      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@fecha_nac,@email,@examen,@prevision,@medico,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
+    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,telefono2,fecha_nac,email,email2,examen,prevision,medico,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
+      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@telefono2,@fecha_nac,@email,@email2,@examen,@prevision,@medico,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
       .run({ ...c, uid: u.id });
     const nuevoId = Number(r.lastInsertRowid);
     db.prepare("UPDATE citas SET accesion = ? WHERE id = ?").run(db.accesionDe(nuevoId), nuevoId);
@@ -372,7 +380,7 @@ const rutas = [
       Object.assign(c, plain(prev));
     }
     const r = db.prepare(`UPDATE citas SET fecha=@fecha,hora=@hora,duracion=@duracion,equipo=@equipo,paciente=@paciente,rut=@rut,
-      telefono=@telefono,fecha_nac=@fecha_nac,email=@email,examen=@examen,prevision=@prevision,medico=@medico,estado=@estado,notas=@notas,
+      telefono=@telefono,telefono2=@telefono2,fecha_nac=@fecha_nac,email=@email,email2=@email2,examen=@examen,prevision=@prevision,medico=@medico,estado=@estado,notas=@notas,
       codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");

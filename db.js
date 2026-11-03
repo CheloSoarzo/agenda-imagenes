@@ -187,7 +187,9 @@ if (!db.prepare("SELECT 1 FROM meta WHERE clave = 'examenes_mayusculas'").get())
 {
   const cols = db.prepare("PRAGMA table_info(citas)").all().map((c) => c.name);
   for (const [col, def] of [["accesion", "TEXT NOT NULL DEFAULT ''"], ["pacs_estado", "TEXT NOT NULL DEFAULT ''"],
-    ["pacs_detalle", "TEXT NOT NULL DEFAULT ''"]]) {
+    ["pacs_detalle", "TEXT NOT NULL DEFAULT ''"],
+    // segundo teléfono y segundo correo del paciente (o de un familiar)
+    ["telefono2", "TEXT NOT NULL DEFAULT ''"], ["email2", "TEXT NOT NULL DEFAULT ''"]]) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE citas ADD COLUMN ${col} ${def}`);
   }
 }

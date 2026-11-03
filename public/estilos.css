@@ -322,7 +322,7 @@ button.colhead:hover{background:var(--sunk)}
 .ex-nom[readonly]{background:transparent;border-color:transparent;padding-left:0;font-weight:600}
 .ex-del{flex:none;width:32px;height:32px;border:1px solid var(--line);background:var(--surface);border-radius:8px;font-size:18px;line-height:1;color:var(--bad)}
 .ex-del:hover{border-color:var(--bad)}
-.ex-vals{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+.ex-vals{display:grid;grid-template-columns:64px 1fr 1fr auto;gap:8px;align-items:end}
 .ex-vals label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .ex-vals input{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 9px;width:100%;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:14px;color:var(--fg);text-transform:none;letter-spacing:0;font-weight:400}
 .ex-vals input[readonly]{background:transparent;border-color:transparent;padding-left:0;font-weight:700}
@@ -382,3 +382,6 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 .btn.ver-pacs{text-decoration:none;color:var(--accent);display:inline-flex;align-items:center}
 /* Exámenes siempre en mayúsculas (el servidor también los guarda así) */
 .ex-nom,#a-nombre{text-transform:uppercase}
+
+.ex-vals .ex-cant{text-align:center}
+.opc{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
