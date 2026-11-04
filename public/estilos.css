@@ -4,6 +4,10 @@
   --fg:#16212c; --muted:#5d6b78; --accent:#1f5f8b; --accent-fg:#ffffff;
   --tc:#2f5fd0; --tc-bg:#e6edfc; --rx:#b26a00; --rx-bg:#fbf0de; --eco:#0f8a7a; --eco-bg:#ddf4f0;
   --ok:#2d7a3e; --warn:#a45d00; --bad:#b4342e; --now:#d23b3b;
+  /* estados de la cita: color del punto/borde (e-*) y fondo del bloque (eb-*) */
+  --e-agendado:#5b7fa6; --eb-agendado:#e8eef6; --e-confirmado:#2d8a46; --eb-confirmado:#d9f2df;
+  --e-llego:#c99700; --eb-llego:#fff3bf; --e-atendido:#9a6b3f; --eb-atendido:#eedfcc;
+  --e-ausente:#c0392b; --eb-ausente:#fbe0dd; --e-cancelado:#7d8790; --eb-cancelado:#eceff2;
   --f-ui:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --row:26px;
@@ -12,12 +16,18 @@
   --bg:#0f151b; --surface:#16202a; --sunk:#1b2733; --line:#2a3846; --line-soft:#212e3b;
   --fg:#e6edf3; --muted:#93a3b2; --accent:#6fb1e0; --accent-fg:#0b1620;
   --tc:#86a8ff; --tc-bg:#1d2a4a; --rx:#f0b45a; --rx-bg:#3a2a12; --eco:#4fd1bd; --eco-bg:#123832;
-  --ok:#6cc47e; --warn:#f0b45a; --bad:#ff8a80; --now:#ff6b6b; color-scheme:dark}}
+  --ok:#6cc47e; --warn:#f0b45a; --bad:#ff8a80; --now:#ff6b6b; color-scheme:dark;
+  --e-agendado:#8fb3dc; --eb-agendado:#1f2d3d; --e-confirmado:#6cc47e; --eb-confirmado:#16331f;
+  --e-llego:#f2cf5b; --eb-llego:#3a3110; --e-atendido:#d4a77a; --eb-atendido:#3a2b1d;
+  --e-ausente:#ff8a80; --eb-ausente:#3d1a18; --e-cancelado:#9aa5af; --eb-cancelado:#222b33;}}
 :root[data-theme="dark"]{
   --bg:#0f151b; --surface:#16202a; --sunk:#1b2733; --line:#2a3846; --line-soft:#212e3b;
   --fg:#e6edf3; --muted:#93a3b2; --accent:#6fb1e0; --accent-fg:#0b1620;
   --tc:#86a8ff; --tc-bg:#1d2a4a; --rx:#f0b45a; --rx-bg:#3a2a12; --eco:#4fd1bd; --eco-bg:#123832;
-  --ok:#6cc47e; --warn:#f0b45a; --bad:#ff8a80; --now:#ff6b6b; color-scheme:dark}
+  --ok:#6cc47e; --warn:#f0b45a; --bad:#ff8a80; --now:#ff6b6b; color-scheme:dark;
+  --e-agendado:#8fb3dc; --eb-agendado:#1f2d3d; --e-confirmado:#6cc47e; --eb-confirmado:#16331f;
+  --e-llego:#f2cf5b; --eb-llego:#3a3110; --e-atendido:#d4a77a; --eb-atendido:#3a2b1d;
+  --e-ausente:#ff8a80; --eb-ausente:#3d1a18; --e-cancelado:#9aa5af; --eb-cancelado:#222b33;}
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--f-ui);font-size:14px;line-height:1.45}
@@ -75,15 +85,20 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-
 .appt .p{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .appt .e{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .appt .st{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
-.appt.s-atendido{opacity:.6}
-.appt.s-ausente,.appt.s-cancelado{opacity:.55}
+/* El color del bloque sigue el estado de la cita (el borde izquierdo sigue indicando el equipo) */
+.appt.s-agendado{background:var(--eb-agendado)}
+.appt.s-confirmado{background:var(--eb-confirmado);border-color:var(--e-confirmado)}
+.appt.s-llego{background:var(--eb-llego);border-color:var(--e-llego)}
+.appt.s-atendido{background:var(--eb-atendido);border-color:var(--e-atendido)}
+.appt.s-ausente{background:var(--eb-ausente);opacity:.8}
+.appt.s-cancelado{background:var(--eb-cancelado);opacity:.65}
 .appt.s-ausente .p,.appt.s-cancelado .p{text-decoration:line-through}
 .appt.clash{outline:2px dashed var(--bad);outline-offset:-2px}
 .nowline{position:absolute;left:0;right:0;height:2px;background:var(--now);z-index:4;pointer-events:none}
 .nowline::before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--now)}
 
-.st-agendado{color:var(--muted)} .st-confirmado{color:var(--accent)} .st-llego{color:var(--warn)}
-.st-atendido{color:var(--ok)} .st-ausente{color:var(--bad)} .st-cancelado{color:var(--bad)}
+.st-agendado{color:var(--e-agendado)} .st-confirmado{color:var(--e-confirmado)} .st-llego{color:var(--warn)}
+.st-atendido{color:var(--e-atendido)} .st-ausente{color:var(--e-ausente)} .st-cancelado{color:var(--e-cancelado)}
 
 /* panel de edición */
 .scrim{position:fixed;inset:0;background:rgba(10,18,26,.45);z-index:20;display:flex;justify-content:flex-end}
@@ -386,3 +401,17 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 .ex-vals .ex-cant{text-align:center}
 .opc{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
 #f-medico-sel:not([hidden]) + #f-medico{margin-top:6px}
+
+/* Botones de estado en la cita, con su color */
+#f-estado button[aria-pressed="true"].est-agendado{background:var(--e-agendado);border-color:var(--e-agendado);color:#fff}
+#f-estado button[aria-pressed="true"].est-confirmado{background:var(--e-confirmado);border-color:var(--e-confirmado);color:#fff}
+#f-estado button[aria-pressed="true"].est-llego{background:var(--e-llego);border-color:var(--e-llego);color:#1b1500}
+#f-estado button[aria-pressed="true"].est-atendido{background:var(--e-atendido);border-color:var(--e-atendido);color:#fff}
+#f-estado button[aria-pressed="true"].est-ausente{background:var(--e-ausente);border-color:var(--e-ausente);color:#fff}
+#f-estado button[aria-pressed="true"].est-cancelado{background:var(--e-cancelado);border-color:var(--e-cancelado);color:#fff}
+#f-estado button[class^="est-"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
+#f-estado button[aria-pressed="true"][class^="est-"]::before{background:currentColor!important;opacity:.85}
+#f-estado .est-agendado::before{background:var(--e-agendado)} #f-estado .est-confirmado::before{background:var(--e-confirmado)}
+#f-estado .est-llego::before{background:var(--e-llego)} #f-estado .est-atendido::before{background:var(--e-atendido)}
+#f-estado .est-ausente::before{background:var(--e-ausente)} #f-estado .est-cancelado::before{background:var(--e-cancelado)}
+.msg.ok{color:var(--ok)}

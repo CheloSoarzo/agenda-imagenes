@@ -253,6 +253,7 @@ const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS ac
   LEFT JOIN usuarios up ON up.id = p.usuario_id`;
 // Integración con el PACS (órdenes, estados y clave del paciente). Inactiva si falta PACS_URL.
 const integ = require("./integracion")(db, { ahoraCaja, hoyCaja, fallo, plain });
+const resp = require("./respaldo")(db, { ahoraCaja, fallo, integ });
 
 const pagoActivo = (citaId) => db.prepare("SELECT * FROM pagos WHERE cita_id = ? AND anulado = 0").get(citaId);
 const citaPorId = (id) => plain(db.prepare(`${SELECT_CITA} WHERE c.id = ?`).get(id));
@@ -554,6 +555,7 @@ const rutas = [
     return [200, { ok: true }];
   }],
   ...integ.rutas,
+  ...resp.rutas,
 ];
 
 // ---------- archivos ----------

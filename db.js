@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS pacs_cola (
 );
 `);
 db.PREFIJO_ACCESION = (process.env.ACCESION_PREFIJO || "AG").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "AG";
+db.dataDir = DATA_DIR;
 db.accesionDe = (id) => db.PREFIJO_ACCESION + String(id).padStart(8, "0");
 {
   const sin = db.prepare("SELECT id FROM citas WHERE accesion = ''").all();

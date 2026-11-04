@@ -166,6 +166,21 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     }
   }
 
+  // Después de restaurar un respaldo: el PACS borra las órdenes que ya no existen y recibe todas las citas
+  function resincronizar(anteriores) {
+    if (!ACTIVA) return;
+    db.exec("DELETE FROM pacs_cola");
+    const existe = db.prepare("SELECT 1 FROM citas WHERE accesion = ?");
+    for (const o of anteriores || []) {
+      if (!o.accesion || existe.get(o.accesion)) continue;
+      encolar.run(-Math.abs(o.id), JSON.stringify({ accesion: o.accesion, cita_id: o.id, fecha: o.fecha, hora: o.hora || "",
+        equipo: o.equipo || "tc", paciente: "", rut: "", rut_norm: "", examenes: [], eliminada: true, pagado: false }));
+    }
+    const ids = db.prepare("SELECT id FROM citas WHERE fecha >= date('now','-60 day')").all();
+    for (const { id } of ids) { const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id); encolar.run(id, JSON.stringify(datosOrden(c))); }
+    enviarPronto();
+  }
+
   // ---------- clave del paciente ----------
   // Si el paciente aún no tiene clave, la crea. Devuelve la clave nueva (solo esa vez) o null si ya tenía.
   function asegurarClave(rut, usuarioId) {
@@ -218,5 +233,5 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     }],
   ];
 
-  return { activa: ACTIVA, portalUrl: PORTAL_URL, get pacsPublico() { return ACTIVA ? (PACS_PUBLICO || pacsDelPacs) : ""; }, avisar, avisarEliminada, asegurarClave, rutas, normRut, rutValido };
+  return { activa: ACTIVA, resincronizar, portalUrl: PORTAL_URL, get pacsPublico() { return ACTIVA ? (PACS_PUBLICO || pacsDelPacs) : ""; }, avisar, avisarEliminada, asegurarClave, rutas, normRut, rutValido };
 };

@@ -39,6 +39,7 @@
       <button class="linkbtn" id="btnAranceles">Aranceles</button>
       <button class="linkbtn" id="btnUsuarios" hidden>Usuarios</button>
       <a class="linkbtn" id="btnRespaldo" href="/api/respaldo" hidden title="Descarga una copia completa de la base de datos">Respaldo</a>
+      <button class="linkbtn" id="btnCargarResp" hidden title="Reemplaza los datos de esta agenda por los de un respaldo">Cargar respaldo</button>
       <button class="linkbtn" id="btnClave">Cambiar clave</button>
       <button class="linkbtn" id="salir">Salir</button>
     </div>
@@ -209,6 +210,24 @@
 </div>
 
 <!-- Panel de usuarios -->
+<div class="scrim" id="rscrim" hidden>
+  <div class="panel">
+    <h2>Cargar respaldo</h2>
+    <p class="meta">Reemplaza <b>todos los datos de esta agenda</b> (citas, pagos, caja, usuarios y aranceles) por los del archivo de respaldo (.db).
+      Antes se guarda automáticamente una copia de lo que hay ahora en el servidor, para poder volver atrás.</p>
+    <div class="field"><label for="r-archivo">Archivo de respaldo</label><input id="r-archivo" type="file" accept=".db,application/octet-stream"></div>
+    <div id="r-comparar" hidden>
+      <table class="pagos"><thead><tr><th></th><th>Esta agenda (se reemplaza)</th><th>Respaldo (queda)</th></tr></thead><tbody id="r-tabla"></tbody></table>
+      <p class="msg err" style="margin-top:8px">Todo lo que tiene ahora esta agenda se reemplaza. Después todos deben volver a iniciar sesión con los usuarios del respaldo.</p>
+      <div class="field"><label for="r-confirmar">Escribe RESTAURAR para confirmar</label><input id="r-confirmar" autocomplete="off" autocapitalize="characters"></div>
+    </div>
+    <div class="msg" id="r-msg"></div>
+    <div class="actions"><span class="spacer"></span>
+      <button type="button" class="btn" id="r-cancelar">Cancelar</button>
+      <button type="button" class="btn danger" id="r-ok" disabled>Restaurar respaldo</button></div>
+  </div>
+</div>
+
 <div class="scrim" id="uscrim" hidden>
   <div class="panel">
     <h2>Usuarios</h2>
@@ -326,7 +345,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const EQUIPOS=[{id:"tc",nombre:"TC",largo:"Tomografía"},{id:"rx",nombre:"RX",largo:"Rayos X"},{id:"eco",nombre:"ECO",largo:"Ecografía"}];
-const ESTADOS=[{id:"agendado",n:"Agendado"},{id:"confirmado",n:"Confirmado"},{id:"llego",n:"Llegó"},{id:"atendido",n:"Atendido"},{id:"ausente",n:"No asistió"},{id:"cancelado",n:"Cancelado"}];
+const ESTADOS=[{id:"agendado",n:"Agendado"},{id:"confirmado",n:"Confirmado"},{id:"llego",n:"En espera"},{id:"atendido",n:"Atendido"},{id:"ausente",n:"No asistió"},{id:"cancelado",n:"Cancelado"}];
 const ROLES={admin:"Administrador",recepcion:"Recepción",lectura:"Solo lectura"};
 const EXAMENES={tc:["TC de cerebro","TC de tórax","TC de abdomen y pelvis","TC de columna lumbar","AngioTC","TC de cavidades paranasales"],
   rx:["RX de tórax AP y lateral","RX de columna lumbar","RX de rodilla","RX de cadera","RX de mano","RX de pelvis"],
@@ -482,8 +501,7 @@ function render(){
   const mias=citas.filter(delAgenda), misActivas=mias.filter(c=>c.estado!=="cancelado");
   const periodo=vista==="semana"?"de la semana":"del día";
   chip("var(--fg)",agendaSel==="todas"?"Total "+periodo:"Citas "+EQUIPOS.find(e=>e.id===agendaSel).nombre+" "+periodo,misActivas.length);
-  const colEst={agendado:"muted",confirmado:"accent",llego:"warn",atendido:"ok",ausente:"bad"};
-  for(const e of ESTADOS.filter(e=>e.id!=="cancelado")){const n=mias.filter(c=>c.estado===e.id).length;if(n)chip(`var(--${colEst[e.id]})`,e.n,n)}
+  for(const e of ESTADOS.filter(e=>e.id!=="cancelado")){const n=mias.filter(c=>c.estado===e.id).length;if(n)chip(`var(--e-${e.id})`,e.n,n)}
   // ocupación: minutos agendados / minutos de atención (en semana: lunes a sábado, y domingo si tiene citas)
   const dias=vista==="semana"?6+(misActivas.some(c=>parseISO(c.fecha).getDay()===0)?1:0):1;
   const ocup=misActivas.reduce((t,c)=>t+(Number(c.duracion)||15),0), cap=(END-START)*visibles().length*dias;
@@ -627,6 +645,7 @@ $("#adj-file").addEventListener("change",async e=>{
 function segButtons(cont,items,sel,onPick){
   cont.innerHTML="";
   for(const it of items){const b=document.createElement("button");b.type="button";b.textContent=it.n||it.nombre;b.setAttribute("aria-pressed",String(it.id===sel));
+    if(cont.id==="f-estado")b.className="est-"+it.id;
     b.addEventListener("click",()=>{onPick(it.id);[...cont.children].forEach(x=>x.setAttribute("aria-pressed",String(x===b)))});cont.appendChild(b)}
 }
 function setEquipo(id,changeDur){
@@ -818,6 +837,33 @@ function openForm(c,preset={}){
   $("#scrim").hidden=false; setTimeout(()=>$("#f-paciente").focus(),30);
 }
 function closeForm(){$("#scrim").hidden=true;editId=null}
+/* ---------- cargar respaldo (reemplaza los datos de esta agenda) ---------- */
+let restToken="";
+$("#btnCargarResp").addEventListener("click",()=>{restToken="";$("#r-archivo").value="";$("#r-comparar").hidden=true;$("#r-confirmar").value="";
+  $("#r-msg").textContent="";$("#r-msg").className="msg";$("#r-ok").disabled=true;$("#rscrim").hidden=false});
+$("#r-cancelar").addEventListener("click",()=>$("#rscrim").hidden=true);
+$("#r-archivo").addEventListener("change",async()=>{
+  const f=$("#r-archivo").files[0]; restToken=""; $("#r-ok").disabled=true; $("#r-comparar").hidden=true; if(!f) return;
+  $("#r-msg").textContent="Revisando el archivo…"; $("#r-msg").className="msg";
+  try{
+    const d=await api("/api/respaldo/revisar",{archivo:f});
+    restToken=d.token;
+    const fecha=x=>x?x.split("-").reverse().join("/"):"—";
+    const filas=[["Citas",d.actual.citas,d.respaldo.citas],["Pagos",d.actual.pagos,d.respaldo.pagos],["Usuarios",d.actual.usuarios,d.respaldo.usuarios],
+      ["Fechas",fecha(d.actual.desde)+" a "+fecha(d.actual.hasta),fecha(d.respaldo.desde)+" a "+fecha(d.respaldo.hasta)]];
+    $("#r-tabla").innerHTML=""; for(const f of filas){const tr=document.createElement("tr");for(const v of f){const td=document.createElement("td");td.textContent=v;tr.appendChild(td)}$("#r-tabla").appendChild(tr)}
+    $("#r-comparar").hidden=false; $("#r-msg").textContent=""; $("#r-confirmar").focus();
+  }catch(e){$("#r-msg").textContent=e.message;$("#r-msg").className="msg err"}
+});
+$("#r-confirmar").addEventListener("input",()=>{$("#r-ok").disabled=!restToken||$("#r-confirmar").value.trim().toUpperCase()!=="RESTAURAR"});
+$("#r-ok").addEventListener("click",async()=>{
+  $("#r-ok").disabled=true; $("#r-msg").textContent="Restaurando…"; $("#r-msg").className="msg";
+  try{
+    const d=await api("/api/respaldo/restaurar?token="+restToken+"&confirmar="+encodeURIComponent($("#r-confirmar").value.trim()),{method:"POST"});
+    $("#r-msg").textContent=`Listo: ${d.citas} citas restauradas. Copia de lo anterior: ${d.copia}. Vuelve a iniciar sesión.`; $("#r-msg").className="msg ok";
+    setTimeout(()=>location.href="/login",4000);
+  }catch(e){$("#r-msg").textContent=e.message;$("#r-msg").className="msg err";$("#r-ok").disabled=false}
+});
 /* ---------- médico solicitante: lista de médicos del centro (del PACS) u otro escrito a mano ---------- */
 let MEDICOS=[];
 async function cargarMedicos(){try{MEDICOS=await api("/api/medicos")||[]}catch(e){MEDICOS=[]}}
@@ -849,7 +895,7 @@ function medicoForm(){
 }
 $("#f-medico-sel").addEventListener("change",verMedico);
 $("#cancelar").addEventListener("click",closeForm);
-const SCRIMS=["scrim","uscrim","cscrim","kscrim","ascrim","pscrim"];
+const SCRIMS=["scrim","uscrim","cscrim","kscrim","ascrim","pscrim","rscrim"];
 for(const id of SCRIMS) $("#"+id).addEventListener("click",e=>{if(e.target.id===id)$("#"+id).hidden=true});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")for(const id of SCRIMS)$("#"+id).hidden=true});
 
@@ -1493,7 +1539,7 @@ buildGrid(); render();
     if(PACS_ON) cargarMedicos();
     $("#nueva").hidden=!canWrite;
     $("#btnUsuarios").hidden=yo.rol!=="admin";
-    $("#btnRespaldo").hidden=yo.rol!=="admin";
+    $("#btnRespaldo").hidden=yo.rol!=="admin"; $("#btnCargarResp").hidden=yo.rol!=="admin";
     await cargarAranceles();
     cargar();
   }catch(e){}
