@@ -189,7 +189,9 @@ if (!db.prepare("SELECT 1 FROM meta WHERE clave = 'examenes_mayusculas'").get())
   for (const [col, def] of [["accesion", "TEXT NOT NULL DEFAULT ''"], ["pacs_estado", "TEXT NOT NULL DEFAULT ''"],
     ["pacs_detalle", "TEXT NOT NULL DEFAULT ''"],
     // segundo teléfono y segundo correo del paciente (o de un familiar)
-    ["telefono2", "TEXT NOT NULL DEFAULT ''"], ["email2", "TEXT NOT NULL DEFAULT ''"]]) {
+    ["telefono2", "TEXT NOT NULL DEFAULT ''"], ["email2", "TEXT NOT NULL DEFAULT ''"],
+    // médico solicitante elegido de la lista del PACS (0 = escrito a mano, sin acceso al PACS)
+    ["medico_id", "INTEGER NOT NULL DEFAULT 0"]]) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE citas ADD COLUMN ${col} ${def}`);
   }
 }

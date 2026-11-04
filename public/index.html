@@ -106,7 +106,9 @@
     <div class="row2">
       <div class="field"><label for="f-prevision">Previsión</label>
         <select id="f-prevision"><option value="">—</option><option>Fonasa</option><option>Isapre</option><option>Particular</option><option>Convenio</option></select></div>
-      <div class="field"><label for="f-medico">Médico solicitante</label><input id="f-medico" autocomplete="off"></div>
+      <div class="field"><label for="f-medico-sel">Médico solicitante</label>
+        <select id="f-medico-sel" hidden></select>
+        <input id="f-medico" autocomplete="off" placeholder="Nombre del médico"></div>
     </div>
     <div class="field">
       <label>Exámenes</label>
@@ -789,7 +791,7 @@ function openForm(c,preset={}){
   $("#f-nac").value=c?.fecha_nac||""; $("#f-email").value=c?.email||""; mostrarEdad();
   $("#f-fecha").value=c?.fecha||preset.fecha||dia;
   $("#f-hora").value=c?.hora||preset.hora||"09:00";
-  $("#f-prevision").value=c?.prevision||preset.prevision||""; $("#f-medico").value=c?.medico||""; $("#f-notas").value=c?.notas||"";
+  $("#f-prevision").value=c?.prevision||preset.prevision||""; ponerMedico(c); $("#f-notas").value=c?.notas||"";
   citaPagada=!!c?.pago_id;
   $("#ex-list").innerHTML="";
   const eq=c?.equipo||preset.equipo||"tc"; setEquipo(eq,!c); if(c) $("#f-dur").value=String(c.duracion||15);
@@ -816,6 +818,36 @@ function openForm(c,preset={}){
   $("#scrim").hidden=false; setTimeout(()=>$("#f-paciente").focus(),30);
 }
 function closeForm(){$("#scrim").hidden=true;editId=null}
+/* ---------- médico solicitante: lista de médicos del centro (del PACS) u otro escrito a mano ---------- */
+let MEDICOS=[];
+async function cargarMedicos(){try{MEDICOS=await api("/api/medicos")||[]}catch(e){MEDICOS=[]}}
+function llenarMedicos(){
+  const s=$("#f-medico-sel"); s.innerHTML="";
+  const op=(v,t)=>{const o=document.createElement("option");o.value=v;o.textContent=t;return o};
+  s.appendChild(op("","—"));
+  const g=document.createElement("optgroup"); g.label="Médicos del centro (verán las imágenes en el PACS)";
+  for(const m of MEDICOS) g.appendChild(op(String(m.id),m.nombre));
+  s.appendChild(g);
+  const g2=document.createElement("optgroup"); g2.label="Sin acceso al PACS"; g2.appendChild(op("otro","✎ Otro médico (escribir el nombre)…")); s.appendChild(g2);
+}
+function verMedico(){const s=$("#f-medico-sel"), t=$("#f-medico"); if(s.hidden)return; t.hidden=s.value!=="otro"; if(!t.hidden&&document.activeElement===s)t.focus()}
+function ponerMedico(c){
+  const s=$("#f-medico-sel"), t=$("#f-medico");
+  if(!MEDICOS.length){s.hidden=true;t.hidden=false;t.value=c?.medico||"";return}
+  llenarMedicos(); s.hidden=false;
+  const m=c?.medico_id&&MEDICOS.find(x=>x.id===Number(c.medico_id));
+  if(m){s.value=String(m.id);t.value=""}
+  else if(c?.medico){s.value="otro";t.value=c.medico}
+  else{s.value="";t.value=""}
+  verMedico();
+}
+function medicoForm(){
+  const s=$("#f-medico-sel"), t=$("#f-medico");
+  if(s.hidden||s.value==="otro"||!s.value) return {medico:s.hidden||s.value==="otro"?t.value.trim():"",medico_id:0};
+  const m=MEDICOS.find(x=>String(x.id)===s.value);
+  return {medico:m?m.nombre:"",medico_id:m?m.id:0};
+}
+$("#f-medico-sel").addEventListener("change",verMedico);
 $("#cancelar").addEventListener("click",closeForm);
 const SCRIMS=["scrim","uscrim","cscrim","kscrim","ascrim","pscrim"];
 for(const id of SCRIMS) $("#"+id).addEventListener("click",e=>{if(e.target.id===id)$("#"+id).hidden=true});
@@ -826,7 +858,7 @@ function datosForm(){
     fecha_nac:$("#f-nac").value,email:$("#f-email").value.trim(),
     telefono2:$("#f-tel2").value.trim(),email2:$("#f-email2").value.trim(),
     equipo:equipoSel,fecha:$("#f-fecha").value,hora:$("#f-hora").value,
-    duracion:Number($("#f-dur").value),prevision:$("#f-prevision").value,medico:$("#f-medico").value.trim(),
+    duracion:Number($("#f-dur").value),prevision:$("#f-prevision").value,...medicoForm(),
     estado:estadoSel,notas:$("#f-notas").value.trim(),examenes:lineas()};
   // totales para validar y cobrar
   return Object.assign(d,{valor:d.examenes.reduce((t,l)=>t+l.valor,0),bonificacion:d.examenes.reduce((t,l)=>t+l.bonificacion,0)});
@@ -1458,6 +1490,7 @@ buildGrid(); render();
       for(const box of [$("#brand-logo"),$("#k-logo")]){const img=box.querySelector("img");img.alt=yo.centro?"Logo "+yo.centro:"Logo";img.onload=()=>box.hidden=false;img.src=yo.logo}}
     canWrite=yo.rol!=="lectura";
     PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||""; PACS_PUBLICO=yo.pacs_publico||"";
+    if(PACS_ON) cargarMedicos();
     $("#nueva").hidden=!canWrite;
     $("#btnUsuarios").hidden=yo.rol!=="admin";
     $("#btnRespaldo").hidden=yo.rol!=="admin";

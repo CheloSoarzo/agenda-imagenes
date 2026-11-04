@@ -385,3 +385,4 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 
 .ex-vals .ex-cant{text-align:center}
 .opc{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
+#f-medico-sel:not([hidden]) + #f-medico{margin-top:6px}

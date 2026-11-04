@@ -121,7 +121,7 @@ function validarCita(b) {
     fecha: txt(b.fecha, 10), hora: txt(b.hora, 5), duracion: Math.round(Number(b.duracion)) || 15,
     equipo: txt(b.equipo, 5), paciente: txt(b.paciente, 120), rut: txt(b.rut, 20),
     telefono: txt(b.telefono, 30), examen: txt(b.examen, 160), prevision: txt(b.prevision, 40),
-    medico: txt(b.medico, 120), estado: txt(b.estado, 20) || "agendado", notas: txt(b.notas, 2000),
+    medico: mayus(txt(b.medico, 120)), medico_id: Math.max(0, Math.round(Number(b.medico_id)) || 0), estado: txt(b.estado, 20) || "agendado", notas: txt(b.notas, 2000),
     fecha_nac: txt(b.fecha_nac, 10), email: txt(b.email, 120).toLowerCase(),
     telefono2: txt(b.telefono2, 30), email2: txt(b.email2, 120).toLowerCase(),
     codigo: "", valor: 0, bonificacion: 0, copago: 0, examenes: "",
@@ -362,8 +362,8 @@ const rutas = [
 
   ["POST", /^\/api\/citas$/, "escribir", async (req, u) => {
     const c = validarCita(await leerCuerpo(req));
-    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,telefono2,fecha_nac,email,email2,examen,prevision,medico,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
-      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@telefono2,@fecha_nac,@email,@email2,@examen,@prevision,@medico,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
+    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,telefono2,fecha_nac,email,email2,examen,prevision,medico,medico_id,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
+      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@telefono2,@fecha_nac,@email,@email2,@examen,@prevision,@medico,@medico_id,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
       .run({ ...c, uid: u.id });
     const nuevoId = Number(r.lastInsertRowid);
     db.prepare("UPDATE citas SET accesion = ? WHERE id = ?").run(db.accesionDe(nuevoId), nuevoId);
@@ -380,7 +380,7 @@ const rutas = [
       Object.assign(c, plain(prev));
     }
     const r = db.prepare(`UPDATE citas SET fecha=@fecha,hora=@hora,duracion=@duracion,equipo=@equipo,paciente=@paciente,rut=@rut,
-      telefono=@telefono,telefono2=@telefono2,fecha_nac=@fecha_nac,email=@email,email2=@email2,examen=@examen,prevision=@prevision,medico=@medico,estado=@estado,notas=@notas,
+      telefono=@telefono,telefono2=@telefono2,fecha_nac=@fecha_nac,email=@email,email2=@email2,examen=@examen,prevision=@prevision,medico=@medico,medico_id=@medico_id,estado=@estado,notas=@notas,
       codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");

@@ -56,7 +56,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
       accesion: cita.accesion || db.accesionDe(cita.id), cita_id: cita.id,
       fecha: cita.fecha, hora: cita.hora, duracion: cita.duracion, equipo: cita.equipo,
       paciente: cita.paciente, rut: cita.rut, rut_norm: rut, fecha_nac: cita.fecha_nac || "",
-      email: cita.email || "", telefono: cita.telefono || "", medico: cita.medico || "", prevision: cita.prevision || "",
+      email: cita.email || "", telefono: cita.telefono || "", medico: cita.medico || "", medico_id: Number(cita.medico_id) || 0, prevision: cita.prevision || "",
       examen: cita.examen || "", examenes: examenes.map((l) => ({ codigo: l.codigo || "", nombre: l.nombre || "" })),
       notas: cita.notas || "", estado: cita.estado, pagado, eliminada: false,
       clave_hash: clave ? clave.clave_hash : "",
@@ -187,8 +187,22 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     return clave;
   }
 
+  // ---------- médicos solicitantes del PACS (para la lista de la cita) ----------
+  let medicosCache = { t: 0, lista: [] };
+  async function medicos() {
+    if (!ACTIVA) return [];
+    if (Date.now() - medicosCache.t < 60000) return medicosCache.lista;
+    try {
+      const d = await llamar("GET", "/api/integracion/medicos");
+      medicosCache = { t: Date.now(), lista: (d && d.medicos) || [] };
+    } catch (e) { medicosCache.t = Date.now() - 50000; }   // reintenta en 10 s
+    return medicosCache.lista;
+  }
+
   // ---------- rutas para la pantalla ----------
   const rutas = [
+    // Médicos del centro (usuarios del PACS con perfil «Médicos solicitantes»)
+    ["GET", /^\/api\/medicos$/, "sesion", async () => [200, await medicos()]],
     // Nueva clave del paciente (si la olvidó). La anterior deja de funcionar.
     ["POST", /^\/api\/citas\/(\d+)\/clave$/, "escribir", async (req, u, url, m) => {
       const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(Number(m[1]));
