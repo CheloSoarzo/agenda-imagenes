@@ -113,6 +113,12 @@ for (const [col, def] of [["codigo", "TEXT NOT NULL DEFAULT ''"], ["valor", "INT
   if (!colsPagos.includes("descuento_detalle")) db.exec("ALTER TABLE pagos ADD COLUMN descuento_detalle TEXT NOT NULL DEFAULT ''");
   if (!colsPagos.includes("examenes")) db.exec("ALTER TABLE pagos ADD COLUMN examenes TEXT NOT NULL DEFAULT ''");
   if (!colsPagos.includes("boleta")) db.exec("ALTER TABLE pagos ADD COLUMN boleta TEXT NOT NULL DEFAULT ''");
+  // segundo medio de pago (pago dividido): monto2 se paga con medio2 y el resto con medio
+  if (!colsPagos.includes("medio2")) db.exec("ALTER TABLE pagos ADD COLUMN medio2 TEXT NOT NULL DEFAULT ''");
+  if (!colsPagos.includes("monto2")) db.exec("ALTER TABLE pagos ADD COLUMN monto2 INTEGER NOT NULL DEFAULT 0");
+  // agendas que ve el usuario (tc,rx,eco separadas por coma); vacío = todas
+  const colsU = db.prepare("PRAGMA table_info(usuarios)").all().map((c) => c.name);
+  if (!colsU.includes("agendas")) db.exec("ALTER TABLE usuarios ADD COLUMN agendas TEXT NOT NULL DEFAULT ''");
 }
 
 // ---------- adjuntos (orden médica) ----------

@@ -93,10 +93,10 @@ function usuarioDeSesion(req) {
   const token = leerCookie(req, COOKIE);
   if (!token) return null;
   const hash = sha(token);
-  const s = db.prepare(`SELECT u.id, u.usuario, u.nombre, u.rol, s.expira FROM sesiones s
+  const s = db.prepare(`SELECT u.id, u.usuario, u.nombre, u.rol, u.agendas, s.expira FROM sesiones s
     JOIN usuarios u ON u.id = s.usuario_id WHERE s.token = ? AND u.activo = 1`).get(hash);
   if (!s || s.expira < Date.now()) return null;
-  return { id: s.id, usuario: s.usuario, nombre: s.nombre, rol: s.rol, tokenHash: hash };
+  return { id: s.id, usuario: s.usuario, nombre: s.nombre, rol: s.rol, agendas: s.rol === "admin" ? "" : (s.agendas || ""), tokenHash: hash };
 }
 const intentos = new Map();
 function frenoLogin(ip) {
@@ -193,8 +193,22 @@ function resumenCaja(desde, hasta = desde) {
   const pagos = plainAll(db.prepare(`SELECT p.*, u.nombre AS usuario_nombre, ua.nombre AS anulado_por_nombre
     FROM pagos p LEFT JOIN usuarios u ON u.id = p.usuario_id LEFT JOIN usuarios ua ON ua.id = p.anulado_por
     WHERE p.fecha BETWEEN ? AND ? ORDER BY p.fecha, p.creado`).all(desde, hasta));
+  const pesosTxt = (n) => "$" + Math.round(n || 0).toLocaleString("es-CL");
+  for (const p of pagos) p.medio_txt = p.monto2 > 0 ? `${p.medio} ${pesosTxt(p.copago - p.monto2)} + ${p.medio2} ${pesosTxt(p.monto2)}` : p.medio;
   const validos = pagos.filter((p) => !p.anulado);
   const suma = (arr, k) => arr.reduce((t, p) => t + (p[k] || 0), 0);
+  // Partes de cada pago por medio (un pago dividido aporta a dos medios)
+  const partes = (p) => (p.monto2 > 0 ? [[p.medio, p.copago - p.monto2, true], [p.medio2, p.monto2, false]] : [[p.medio, p.copago, true]]);
+  const efectivoDe = (p) => partes(p).filter(([m]) => m === "Efectivo").reduce((t, [, x]) => t + x, 0);
+  const porMedio = (lista) => {
+    const o = {};
+    for (const p of lista) for (const [m, monto, principal] of partes(p)) {
+      const g = (o[m] = o[m] || { cantidad: 0, valor: 0, bonificacion: 0, copago: 0, descuento: 0 });
+      g.cantidad++; g.copago += monto;
+      if (principal) { g.valor += p.valor; g.bonificacion += p.bonificacion; g.descuento += p.descuento || 0; }
+    }
+    return o;
+  };
   const agrupar = (clave, lista) => {
     const o = {};
     for (const p of lista) { const k = p[clave] || "Sin dato"; o[k] = o[k] || { cantidad: 0, valor: 0, bonificacion: 0, copago: 0 };
@@ -210,10 +224,10 @@ function resumenCaja(desde, hasta = desde) {
     con_descuento: validos.filter((p) => p.descuento > 0).length,
     por_descuento: agrupar("descuento_motivo", validos.filter((p) => p.descuento > 0)),
     anulados: pagos.length - validos.length,
-    por_medio: agrupar("medio", validos),
+    por_medio: porMedio(validos),
     por_prevision: agrupar("prevision", validos),
     por_equipo: agrupar("equipo", validos),
-    efectivo_esperado: validos.filter((p) => p.medio === "Efectivo").reduce((t, p) => t + p.copago, 0),
+    efectivo_esperado: validos.reduce((t, p) => t + efectivoDe(p), 0),
   };
   const cierres = plainAll(db.prepare(`SELECT c.*, u.nombre AS usuario_nombre FROM cierres c LEFT JOIN usuarios u ON u.id = c.usuario_id
     WHERE c.fecha BETWEEN ? AND ? ORDER BY c.fecha`).all(desde, hasta)).map((c) => ({ ...c, resumen: JSON.parse(c.resumen) }));
@@ -222,7 +236,7 @@ function resumenCaja(desde, hasta = desde) {
   for (const p of validos) {
     const d = (dias[p.fecha] = dias[p.fecha] || { fecha: p.fecha, atenciones: 0, valor: 0, bonificacion: 0, descuentos: 0, recaudado: 0, efectivo_esperado: 0 });
     d.atenciones++; d.valor += p.valor; d.bonificacion += p.bonificacion; d.descuentos += p.descuento || 0; d.recaudado += p.copago;
-    if (p.medio === "Efectivo") d.efectivo_esperado += p.copago;
+    d.efectivo_esperado += efectivoDe(p);
   }
   for (const c of cierres) dias[c.fecha] = dias[c.fecha] || { fecha: c.fecha, atenciones: 0, valor: 0, bonificacion: 0, descuentos: 0, recaudado: 0, efectivo_esperado: 0 };
   const por_dia = Object.values(dias).sort((a, b) => a.fecha.localeCompare(b.fecha)).map((d) => {
@@ -243,9 +257,24 @@ function rangoCaja(url) {
   if ((new Date(hasta) - new Date(desde)) / 864e5 > 366) fallo(400, "El período no puede superar un año.");
   return [desde, hasta];
 }
+const agendasValidas = (v) => [...new Set(String(v || "").split(",").map((x) => x.trim()).filter((e) => EQUIPOS.includes(e)))].join(",");
+// Agendas (equipos) que ve un usuario: [] = todas
+const agendasDe = (u) => String(u?.agendas || "").split(",").filter((e) => EQUIPOS.includes(e));
+const veEquipo = (u, eq) => { const a = agendasDe(u); return !a.length || a.includes(eq); };
+const filtroAgendas = (u, alias = "c") => { const a = agendasDe(u); return a.length ? ` AND ${alias}.equipo IN (${a.map((e) => `'${e}'`).join(",")})` : ""; };
+// El usuario de solo lectura no ve valores ni pagos (sí si está pagada)
+const CAMPOS_DINERO = ["valor", "bonificacion", "copago", "pago_medio", "pago_monto", "pago_folio", "pago_descuento",
+  "pago_desc_motivo", "pago_boleta", "pago_medio2", "pago_monto2"];
+function paraUsuario(c, u) {
+  if (!c || u?.rol !== "lectura") return c;
+  const x = { ...c };
+  for (const k of CAMPOS_DINERO) delete x[k];
+  try { if (x.examenes) x.examenes = JSON.stringify(JSON.parse(x.examenes).map((l) => ({ codigo: l.codigo, nombre: l.nombre, cantidad: l.cantidad }))); } catch { x.examenes = ""; }
+  return x;
+}
 const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS actualizado_por_nombre,
   (SELECT COUNT(*) FROM adjuntos a WHERE a.cita_id = c.id) AS adjuntos,
-  p.id AS pago_id, p.medio AS pago_medio, p.copago AS pago_monto, p.folio_bono AS pago_folio, p.fecha AS pago_fecha,
+  p.id AS pago_id, p.medio AS pago_medio, p.copago AS pago_monto, p.medio2 AS pago_medio2, p.monto2 AS pago_monto2, p.folio_bono AS pago_folio, p.fecha AS pago_fecha,
   p.descuento AS pago_descuento, p.descuento_motivo AS pago_desc_motivo, p.boleta AS pago_boleta,
   p.creado AS pago_creado, up.nombre AS pago_usuario
   FROM citas c LEFT JOIN usuarios uc ON uc.id = c.creado_por LEFT JOIN usuarios ua ON ua.id = c.actualizado_por
@@ -257,6 +286,11 @@ const resp = require("./respaldo")(db, { ahoraCaja, fallo, integ });
 
 const pagoActivo = (citaId) => db.prepare("SELECT * FROM pagos WHERE cita_id = ? AND anulado = 0").get(citaId);
 const citaPorId = (id) => plain(db.prepare(`${SELECT_CITA} WHERE c.id = ?`).get(id));
+// La cita debe ser de una agenda que el usuario puede ver
+function exigirAgenda(u, citaId) {
+  const c = db.prepare("SELECT equipo FROM citas WHERE id = ?").get(citaId);
+  if (c && !veEquipo(u, c.equipo)) fallo(403, "Esa cita es de una agenda que tu usuario no ve.");
+}
 
 // ---------- rutas de la API ----------
 // Cada ruta: [método, patrón, nivel ("libre" | "sesion" | "escribir" | "admin"), manejador]
@@ -294,17 +328,19 @@ const rutas = [
     const desde = url.searchParams.get("desde") || fecha, hasta = url.searchParams.get("hasta") || fecha;
     if (!reFecha.test(desde) || !reFecha.test(hasta) || hasta < desde) fallo(400, "Falta la fecha.");
     if ((new Date(hasta) - new Date(desde)) / 864e5 > 31) fallo(400, "El rango no puede superar 31 días.");
-    return [200, plainAll(db.prepare(`${SELECT_CITA} WHERE c.fecha BETWEEN ? AND ? ORDER BY c.fecha, c.hora`).all(desde, hasta))];
+    return [200, plainAll(db.prepare(`${SELECT_CITA} WHERE c.fecha BETWEEN ? AND ?${filtroAgendas(u)} ORDER BY c.fecha, c.hora`)
+      .all(desde, hasta)).map((c) => paraUsuario(c, u))];
   }],
 
   // ----- adjuntos (orden médica) -----
-  ["GET", /^\/api\/citas\/(\d+)\/adjuntos$/, "sesion", async (req, u, url, m) =>
+  ["GET", /^\/api\/citas\/(\d+)\/adjuntos$/, "sesion", async (req, u, url, m) => exigirAgenda(u, Number(m[1])) ||
     [200, plainAll(db.prepare(`SELECT a.id, a.nombre, a.tipo, a.tamano, a.creado, us.nombre AS usuario_nombre,
       '/api/adjuntos/' || a.id AS url FROM adjuntos a LEFT JOIN usuarios us ON us.id = a.usuario_id
       WHERE a.cita_id = ? ORDER BY a.id`).all(Number(m[1])))]],
 
   ["POST", /^\/api\/citas\/(\d+)\/adjuntos$/, "escribir", async (req, u, url, m) => {
     const id = Number(m[1]);
+    exigirAgenda(u, id);
     if (!db.prepare("SELECT 1 FROM citas WHERE id = ?").get(id)) fallo(404, "La cita ya no existe.");
     const tipo = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
     if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(tipo)) fallo(400, "Solo se pueden adjuntar fotos (JPG, PNG) o PDF.");
@@ -339,8 +375,8 @@ const rutas = [
   ["GET", /^\/api\/citas\/mes$/, "sesion", async (req, u, url) => {
     const mes = url.searchParams.get("mes") || "";
     if (!/^\d{4}-\d{2}$/.test(mes)) fallo(400, "Falta el mes.");
-    return [200, plainAll(db.prepare(`SELECT fecha, equipo, COUNT(*) AS n, SUM(duracion) AS minutos FROM citas
-      WHERE fecha LIKE ? AND estado != 'cancelado' GROUP BY fecha, equipo`).all(mes + "-%"))];
+    return [200, plainAll(db.prepare(`SELECT fecha, equipo, COUNT(*) AS n, SUM(duracion) AS minutos FROM citas c
+      WHERE fecha LIKE ? AND estado != 'cancelado'${filtroAgendas(u)} GROUP BY fecha, equipo`).all(mes + "-%"))];
   }],
 
   // Datos del paciente según su RUT (de su última cita), para no volver a escribirlos
@@ -357,12 +393,13 @@ const rutas = [
     const q = txt(url.searchParams.get("q"), 60).replace(/[%_]/g, "");
     if (q.length < 2) return [200, []];
     const like = "%" + q + "%";
-    return [200, plainAll(db.prepare(`${SELECT_CITA} WHERE c.paciente LIKE ? OR c.rut LIKE ?
-      ORDER BY c.fecha DESC, c.hora DESC LIMIT 30`).all(like, like))];
+    return [200, plainAll(db.prepare(`${SELECT_CITA} WHERE (c.paciente LIKE ? OR c.rut LIKE ?)${filtroAgendas(u)}
+      ORDER BY c.fecha DESC, c.hora DESC LIMIT 30`).all(like, like)).map((c) => paraUsuario(c, u))];
   }],
 
   ["POST", /^\/api\/citas$/, "escribir", async (req, u) => {
     const c = validarCita(await leerCuerpo(req));
+    if (!veEquipo(u, c.equipo)) fallo(403, "Tu usuario no puede agendar en esa agenda.");
     const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,telefono2,fecha_nac,email,email2,examen,prevision,medico,medico_id,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
       VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@telefono2,@fecha_nac,@email,@email2,@examen,@prevision,@medico,@medico_id,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
       .run({ ...c, uid: u.id });
@@ -374,7 +411,9 @@ const rutas = [
 
   ["PUT", /^\/api\/citas\/(\d+)$/, "escribir", async (req, u, url, m) => {
     const id = Number(m[1]);
+    exigirAgenda(u, id);
     const c = validarCita(await leerCuerpo(req));
+    if (!veEquipo(u, c.equipo)) fallo(403, "Tu usuario no puede agendar en esa agenda.");
     // Si ya está pagada, los datos de cobro quedan fijos (para cambiarlos hay que anular el pago)
     if (pagoActivo(id)) {
       const prev = db.prepare("SELECT codigo, examen, prevision, valor, bonificacion, copago, examenes FROM citas WHERE id = ?").get(id);
@@ -390,6 +429,7 @@ const rutas = [
   }],
 
   ["DELETE", /^\/api\/citas\/(\d+)$/, "escribir", async (req, u, url, m) => {
+    exigirAgenda(u, Number(m[1]));
     if (pagoActivo(Number(m[1]))) fallo(409, "Esta cita tiene un pago registrado. Anula el pago antes de eliminarla.");
     integ.avisarEliminada(Number(m[1]));
     db.prepare("DELETE FROM citas WHERE id = ?").run(Number(m[1]));
@@ -399,6 +439,7 @@ const rutas = [
   // ----- pagos -----
   ["POST", /^\/api\/citas\/(\d+)\/pago$/, "escribir", async (req, u, url, m) => {
     const id = Number(m[1]);
+    exigirAgenda(u, id);
     const b = await leerCuerpo(req);
     const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id);
     if (!c) fallo(404, "La cita ya no existe.");
@@ -421,12 +462,21 @@ const rutas = [
     const aPagar = c.copago - descuento;
     const medio = aPagar === 0 ? "Sin copago" : txt(b.medio, 20);
     if (!MEDIOS.includes(medio)) fallo(400, "Elige el medio de pago.");
+    // Segundo medio de pago (opcional): monto2 con medio2, el resto con el primero
+    let medio2 = txt(b.medio2, 20), monto2 = entero(b.monto2);
+    if (!medio2 || !monto2 || aPagar === 0) { medio2 = ""; monto2 = 0; }
+    else {
+      if (!MEDIOS.includes(medio2) || medio2 === "Sin copago") fallo(400, "Elige el segundo medio de pago.");
+      if (medio2 === medio) fallo(400, "El segundo medio de pago debe ser distinto del primero.");
+      if (monto2 >= aPagar) fallo(400, "El monto del segundo medio debe ser menor que el total a pagar.");
+    }
     const folio = txt(b.folio_bono, 40), boleta = txt(b.boleta, 40);
     if (c.prevision === "Fonasa" && c.bonificacion > 0 && !folio) fallo(400, "Ingresa el folio del bono Fonasa.");
     db.prepare(`INSERT INTO pagos (cita_id, fecha, paciente, rut, equipo, codigo, examen, prevision, valor, bonificacion, copago, medio, folio_bono, usuario_id, creado,
-      descuento, descuento_motivo, descuento_detalle, examenes, boleta)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
-      c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta);
+      descuento, descuento_motivo, descuento_detalle, examenes, boleta, medio2, monto2)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
+      c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta,
+      medio2, monto2);
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
     // Clave para ver el examen en línea: se crea al pagar (solo la primera vez que viene el paciente)
     const portal = integ.activa ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;
@@ -448,7 +498,7 @@ const rutas = [
   }],
 
   // ----- caja -----
-  ["GET", /^\/api\/caja$/, "sesion", async (req, u, url) => [200, resumenCaja(...rangoCaja(url))]],
+  ["GET", /^\/api\/caja$/, "caja", async (req, u, url) => [200, resumenCaja(...rangoCaja(url))]],
 
   ["POST", /^\/api\/caja\/cerrar$/, "escribir", async (req, u) => {
     const b = await leerCuerpo(req);
@@ -470,13 +520,13 @@ const rutas = [
     return [200, resumenCaja(txt(b.fecha, 10))];
   }],
 
-  ["GET", /^\/api\/caja\/csv$/, "sesion", async (req, u, url) => {
+  ["GET", /^\/api\/caja\/csv$/, "caja", async (req, u, url) => {
     const [desde, hasta] = rangoCaja(url);
     const r = resumenCaja(desde, hasta);
     const esc = (v) => { const t = String(v ?? ""); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
     const filas = [["Fecha", "Hora", "Paciente", "RUT", "Equipo", "Código", "Examen", "Previsión", "Valor", "Bonificación", "Descuento", "Motivo descuento", "Pagado", "Medio", "Folio bono", "Boleta", "Cajero", "Estado"]];
     for (const p of r.pagos) filas.push([p.fecha.split("-").reverse().join("/"), p.creado.slice(11, 16), p.paciente, p.rut, p.equipo.toUpperCase(), p.codigo, p.examen, p.prevision,
-      p.valor, p.bonificacion, p.descuento, p.descuento_motivo, p.copago, p.medio, p.folio_bono, p.boleta, p.usuario_nombre, p.anulado ? "ANULADO: " + p.motivo_anulacion : "OK"]);
+      p.valor, p.bonificacion, p.descuento, p.descuento_motivo, p.copago, p.medio_txt, p.folio_bono, p.boleta, p.usuario_nombre, p.anulado ? "ANULADO: " + p.motivo_anulacion : "OK"]);
     filas.push([]);
     filas.push(["Total atenciones", r.totales.atenciones]);
     filas.push(["Total valor", r.totales.valor]);
@@ -520,7 +570,7 @@ const rutas = [
   }],
 
   ["GET", /^\/api\/usuarios$/, "admin", async () =>
-    [200, plainAll(db.prepare("SELECT id, usuario, nombre, rol, activo, creado FROM usuarios ORDER BY nombre").all())]],
+    [200, plainAll(db.prepare("SELECT id, usuario, nombre, rol, activo, agendas, creado FROM usuarios ORDER BY nombre").all())]],
 
   ["POST", /^\/api\/usuarios$/, "admin", async (req) => {
     const b = await leerCuerpo(req);
@@ -529,8 +579,8 @@ const rutas = [
     if (clave.length < 8) fallo(400, "La clave debe tener al menos 8 caracteres.");
     if (!ROLES.includes(rol)) fallo(400, "Elige un rol.");
     if (db.prepare("SELECT 1 FROM usuarios WHERE usuario = ?").get(usuario)) fallo(409, "Ese usuario ya existe.");
-    db.prepare("INSERT INTO usuarios (usuario, nombre, clave_hash, rol) VALUES (?,?,?,?)")
-      .run(usuario, nombre || usuario, db.hashClave(clave), rol);
+    db.prepare("INSERT INTO usuarios (usuario, nombre, clave_hash, rol, agendas) VALUES (?,?,?,?,?)")
+      .run(usuario, nombre || usuario, db.hashClave(clave), rol, agendasValidas(b.agendas));
     return [201, { ok: true }];
   }],
 
@@ -547,6 +597,7 @@ const rutas = [
       if (id === u.id && b.rol !== "admin") fallo(400, "No puedes quitarte el rol de administrador.");
       db.prepare("UPDATE usuarios SET rol = ? WHERE id = ?").run(b.rol, id);
     }
+    if (esAdmin && b.agendas !== undefined) db.prepare("UPDATE usuarios SET agendas = ? WHERE id = ?").run(agendasValidas(b.agendas), id);
     if (esAdmin && b.activo !== undefined) {
       if (id === u.id) fallo(400, "No puedes desactivar tu propio usuario.");
       db.prepare("UPDATE usuarios SET activo = ? WHERE id = ?").run(b.activo ? 1 : 0, id);
@@ -589,7 +640,7 @@ const servidor = http.createServer(async (req, res) => {
         if (nivel !== "libre") {
           u = usuarioDeSesion(req);
           if (!u) fallo(401, "Tu sesión expiró. Vuelve a ingresar.");
-          if (nivel === "escribir" && u.rol === "lectura") fallo(403, "Tu usuario es solo de lectura.");
+          if ((nivel === "escribir" || nivel === "caja") && u.rol === "lectura") fallo(403, "Tu usuario es solo de lectura.");
           if (nivel === "admin" && u.rol !== "admin") fallo(403, "Solo un administrador puede hacer esto.");
         }
         const [status, data, headers] = await manejador(req, u, url, m);

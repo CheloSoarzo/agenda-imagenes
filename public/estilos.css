@@ -415,3 +415,16 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 #f-estado .est-llego::before{background:var(--e-llego)} #f-estado .est-atendido::before{background:var(--e-atendido)}
 #f-estado .est-ausente::before{background:var(--e-ausente)} #f-estado .est-cancelado::before{background:var(--e-cancelado)}
 .msg.ok{color:var(--ok)}
+.pago2{border:1px dashed var(--line);border-radius:10px;padding:10px;margin:4px 0 8px}
+.p1-resto{display:block;font-family:var(--f-mono);font-size:16px;padding:8px 0}.p1-resto.bad{color:var(--bad)}
+#p2-add{margin:2px 0 8px}
+/* Comentario de la cita en el bloque de la agenda */
+.appt .n{font-size:11.5px;font-style:italic;color:var(--fg);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.appt .p{flex:0 1 auto}
+.appt>span{flex:none}
+.grid.semana .appt .n{display:none}
+/* Usuario de solo lectura: sin valores ni pagos */
+body.sin-dinero .ex-vals,body.sin-dinero #ir-cobro,body.sin-dinero #cobro,body.sin-dinero .ex-hint,body.sin-dinero .ex-cod{display:none!important}
+.u-agendas{display:flex;gap:12px;flex-wrap:wrap}.u-agendas label{display:inline-flex;gap:4px;align-items:center;font-weight:500;font-size:13px;text-transform:none;letter-spacing:0;color:var(--fg)}
+.urow{flex-wrap:wrap}.urow .u-agendas{flex-basis:100%;order:9;margin-top:2px;padding-left:2px}
+.urow .who{flex-basis:100%}
