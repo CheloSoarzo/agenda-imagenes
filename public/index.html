@@ -524,7 +524,7 @@ function render(){
   $("#oc-pct").textContent=pct+"%"; $("#oc-fill").style.width=pct+"%";
   $("#oc-fill").className=pct>=85?"alto":pct>=50?"medio":"";
   renderCal();
-  $("#empty").textContent=!canWrite?"Tu usuario es solo de lectura.":(mias.length?"Toca una cita para editarla o cambiar su estado.":`No hay citas en esta agenda ${vista==="semana"?"esta semana":"este día"}. Toca un horario libre para agendar.`);
+  $("#empty").textContent=!canWrite?(mias.length?"Tu usuario es solo de lectura. Toca una cita para cambiar su estado.":"Tu usuario es solo de lectura."):(mias.length?"Toca una cita para editarla o cambiar su estado.":`No hay citas en esta agenda ${vista==="semana"?"esta semana":"este día"}. Toca un horario libre para agendar.`);
 }
 
 /* ---------- datos ---------- */
@@ -770,7 +770,7 @@ function openCobro(c){
   $("#anular-box").hidden=true; $("#anular-motivo").value="";
   $("#pago-hecho").hidden=!pagada; $("#pago-form").hidden=pagada||!canWrite;
   if(pagada){
-    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_monto2>0?`${c.pago_medio} ${$$(c.pago_monto-c.pago_monto2)} + ${c.pago_medio2} ${$$(c.pago_monto2)}`:c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""} · ${parseISO(c.pago_fecha||c.fecha).toLocaleDateString("es-CL").replace(/-/g,"/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
+    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_monto2>0?`${c.pago_medio} ${$$(c.pago_monto-c.pago_monto2)} + ${c.pago_medio2} ${$$(c.pago_monto2)}`:c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""} · cobrado ${(c.pago_creado||"").slice(0,10).split("-").reverse().join("/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
     $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
   }
   $("#pmsg").textContent=""; $("#pmsg").className="msg";
@@ -850,8 +850,11 @@ function openForm(c,preset={}){
   const vp=$("#ver-pacs"); vp.hidden=!(c&&c.accesion&&PACS_PUBLICO);
   vp.title="Abrir la ficha del paciente en el PACS: todos sus exámenes, imágenes e informes"+(c&&!c.pacs_estado?" (las imágenes de esta cita aún no llegan)":"");
   if(!vp.hidden) vp.href=PACS_PUBLICO+"/agenda/"+encodeURIComponent(c.accesion);
-  $("#fmsg").textContent=canWrite?"":"Tu usuario es solo de lectura."; $("#fmsg").className="msg";
-  [...$("#form").elements].forEach(el=>{if(el.id!=="cancelar")el.disabled=!canWrite});
+  $("#fmsg").textContent=canWrite?"":(c?"Tu usuario es solo de lectura: solo puedes cambiar el estado.":"Tu usuario es solo de lectura."); $("#fmsg").className="msg";
+  // Solo lectura: quedan activos los botones de estado y «Guardar estado»
+  const soloEstado=!canWrite&&!!c;
+  [...$("#form").elements].forEach(el=>{if(el.id!=="cancelar")el.disabled=!canWrite&&!(soloEstado&&(el.id==="guardar"||el.parentElement?.id==="f-estado"))});
+  $("#guardar").hidden=!canWrite&&!c; $("#guardar").textContent=canWrite?"Guardar cita":"Guardar estado";
   $("#f-prevision").disabled=!canWrite||citaPagada;
   const ir=$("#ir-cobro");
   ir.hidden=!c&&!canWrite; ir.disabled=false;
@@ -951,6 +954,14 @@ async function guardarCita(data){
 }
 $("#form").addEventListener("submit",async e=>{
   e.preventDefault();
+  if(!canWrite){
+    if(!editId) return;
+    const msg=$("#fmsg"), btn=$("#guardar"); btn.disabled=true;
+    try{await api(`/api/citas/${editId}/estado`,{method:"PUT",body:{estado:estadoSel}});closeForm();toast("Estado actualizado");cargar()}
+    catch(err){msg.className="msg err";msg.textContent=err.message}
+    finally{btn.disabled=false}
+    return;
+  }
   const msg=$("#fmsg"), data=datosForm(), err=validarForm(data);
   if(err){msg.className="msg err";msg.textContent=err;return}
   const btn=$("#guardar"); btn.disabled=true;
@@ -1207,6 +1218,8 @@ $("#cform").addEventListener("submit",async e=>{
 const EQN={tc:"TC",rx:"RX",eco:"ECO"};
 let cajaData=null, cajaRango={desde:null,hasta:null};
 const fCorta=f=>{const [y,m,d]=f.split("-");return `${d}-${m}-${y}`};
+// Hora del cobro; si se cobró otro día que el agendado, también la fecha del cobro
+const cobradoTxt=p=>(p.creado.slice(0,10)!==p.fecha?p.creado.slice(8,10)+"/"+p.creado.slice(5,7)+" ":"")+p.creado.slice(11,16);
 // Fechas de cada período (incluye hoy)
 function rangoPreset(v){
   const hoy=isoDate(new Date()), d=new Date();
@@ -1240,7 +1253,7 @@ async function abrirCaja(rango){
   const d=cajaData, t=d.totales;
   $("#kscrim").hidden=false;
   $("#k-titulo").textContent=(d.un_dia?"Caja del día":"Resumen de caja")+(centroNombre?" · "+centroNombre:"");
-  $("#k-desde").value=d.desde; $("#k-hasta").value=d.hasta; $("#k-desde").max=$("#k-hasta").max=d.hoy;
+  $("#k-desde").value=d.desde; $("#k-hasta").value=d.hasta;
   const st=$("#k-estado");
   if(d.un_dia){
     st.textContent=(d.desde===d.hoy?"":fCorta(d.desde)+" · ")+(d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"—"} · ${d.cierre.creado.slice(11,16)}`:"Abierta");
@@ -1272,7 +1285,7 @@ async function abrirCaja(rango){
   if(pd.length) tabla($("#k-desc"),pd,[{t:"Motivo",f:r=>r.k},{t:"N°",n:1,f:r=>r.cantidad},{t:"Descuento",n:1,f:r=>$$(r.descuento)}]);
   tabla($("#k-pagos"),d.pagos.map(p=>({...p,_cls:p.anulado?"anulado":""})),[
     ...(d.un_dia?[]:[{t:"Fecha",f:p=>fCorta(p.fecha).slice(0,5)}]),
-    {t:"Hora",f:p=>p.creado.slice(11,16)},{t:"Paciente",f:p=>p.paciente},{t:"Equipo",f:p=>EQN[p.equipo]||p.equipo},
+    {t:"Cobrado",f:p=>cobradoTxt(p)},{t:"Paciente",f:p=>p.paciente},{t:"Equipo",f:p=>EQN[p.equipo]||p.equipo},
     {t:"Examen",f:p=>(p.codigo?p.codigo+" · ":"")+p.examen},{t:"Previsión",f:p=>p.prevision},
     {t:"Valor",n:1,f:p=>$$(p.valor)},{t:"Bonif.",n:1,f:p=>$$(p.bonificacion)},{t:"Desc.",n:1,f:p=>p.descuento?"−"+$$(p.descuento):""},{t:"Pagado",n:1,f:p=>$$(p.copago)},
     {t:"Medio",f:p=>p.medio_txt||p.medio},{t:"Bono / boleta",f:p=>[p.folio_bono&&"B "+p.folio_bono,p.boleta&&"Bol "+p.boleta].filter(Boolean).join(" · ")},{t:"Cajero",f:p=>p.usuario_nombre||""},
@@ -1471,7 +1484,7 @@ async function exportarPDF(){
   doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text(d.un_dia?"Pagos del día":"Pagos del período",M,yMax+8); doc.setFont("helvetica","normal");
   doc.autoTable({startY:yMax+10,margin:{left:M,right:M},styles:estilo,headStyles:cab,
     head:[["Fecha / hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonif.","Desc.","Pagado","Medio","Bono / boleta","Cajero","Estado"]],
-    body:d.pagos.length?d.pagos.map(p=>[(d.un_dia?"":fCorta(p.fecha).slice(0,5)+" ")+p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
+    body:d.pagos.length?d.pagos.map(p=>[(d.un_dia?"":fCorta(p.fecha).slice(0,5)+" ")+cobradoTxt(p),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
       $$(p.valor),$$(p.bonificacion),p.descuento?"-"+$$(p.descuento)+(p.descuento_motivo?"\n"+p.descuento_motivo:""):"",$$(p.copago),p.medio_txt||p.medio,[p.folio_bono&&"B "+p.folio_bono,p.boleta&&"Bol "+p.boleta].filter(Boolean).join("\n"),p.usuario_nombre||"",p.anulado?"Anulado: "+p.motivo_anulacion:"OK"]):[["","Sin pagos registrados","","","","","","","","","","","","",""]],
     columnStyles:{5:{cellWidth:52},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"},10:{halign:"right"}},
     didParseCell:h=>{if(h.section==="body"&&d.pagos[h.row.index]?.anulado){h.cell.styles.textColor=[150,150,150];if(h.column.index===14)h.cell.styles.textColor=[180,52,46]}}});
@@ -1535,8 +1548,8 @@ async function exportarExcel(){
   ws1["!cols"]=[{wch:24},{wch:34},{wch:14},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws1,"Resumen");
   // Hoja Pagos
-  const cab=["Fecha","Hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonificación","Descuento","Motivo descuento","Pagado","Medio","Folio bono","Boleta","Cajero","Estado","Motivo anulación"];
-  const filas=d.pagos.map(p=>[fechaCorta(p.fecha),p.creado.slice(11,16),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
+  const cab=["Fecha","Cobrado","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonificación","Descuento","Motivo descuento","Pagado","Medio","Folio bono","Boleta","Cajero","Estado","Motivo anulación"];
+  const filas=d.pagos.map(p=>[fechaCorta(p.fecha),cobradoTxt(p),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
     p.valor,p.bonificacion,p.descuento||0,p.descuento_motivo||"",p.copago,p.medio_txt||p.medio,p.folio_bono,p.boleta||"",p.usuario_nombre||"",p.anulado?"Anulado":"OK",p.motivo_anulacion||""]);
   const validos=d.pagos.filter(p=>!p.anulado);
   filas.push([]); filas.push(["","","Total (sin anulados)","","","","","",t.valor,t.bonificacion,t.descuentos||0,"",t.recaudado]);

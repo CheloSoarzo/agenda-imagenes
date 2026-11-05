@@ -228,6 +228,18 @@ db.accesionDe = (id) => db.PREFIJO_ACCESION + String(id).padStart(8, "0");
   for (const r of sin) up.run(db.accesionDe(r.id), r.id);
 }
 
+// v1.1.9: los pagos van en la caja del día agendado. Una sola vez, mueve los pagos ya registrados
+// al día de su cita, salvo que la caja de origen o la de destino ya esté cerrada.
+if (!db.prepare("SELECT 1 FROM meta WHERE clave = 'pagos_dia_cita'").get()) {
+  const r = db.prepare(`UPDATE pagos SET fecha = (SELECT c.fecha FROM citas c WHERE c.id = pagos.cita_id)
+    WHERE cita_id IS NOT NULL
+      AND fecha != (SELECT c.fecha FROM citas c WHERE c.id = pagos.cita_id)
+      AND fecha NOT IN (SELECT fecha FROM cierres)
+      AND (SELECT c.fecha FROM citas c WHERE c.id = pagos.cita_id) NOT IN (SELECT fecha FROM cierres)`).run();
+  db.prepare("INSERT INTO meta (clave, valor) VALUES ('pagos_dia_cita', ?)").run(String(r.changes));
+  if (r.changes) console.log(`Pagos movidos al día de su cita: ${r.changes}.`);
+}
+
 // Claves: scrypt con sal aleatoria (incluido en Node, sin dependencias)
 const crypto = require("crypto");
 db.hashClave = (clave) => {

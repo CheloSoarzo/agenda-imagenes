@@ -185,6 +185,7 @@ function ahoraCaja() {
 function hoyCaja() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: CAJA_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
+const fechaCL = (iso) => String(iso).split("-").reverse().join("/");
 const cajaCerrada = (fecha) => !!db.prepare("SELECT 1 FROM cierres WHERE fecha = ?").get(fecha);
 const MEDIOS = ["Efectivo", "Débito", "Crédito", "Transferencia", "Sin copago"];
 
@@ -415,17 +416,36 @@ const rutas = [
     const c = validarCita(await leerCuerpo(req));
     if (!veEquipo(u, c.equipo)) fallo(403, "Tu usuario no puede agendar en esa agenda.");
     // Si ya está pagada, los datos de cobro quedan fijos (para cambiarlos hay que anular el pago)
-    if (pagoActivo(id)) {
+    const pago = pagoActivo(id);
+    if (pago) {
       const prev = db.prepare("SELECT codigo, examen, prevision, valor, bonificacion, copago, examenes FROM citas WHERE id = ?").get(id);
       Object.assign(c, plain(prev));
+      // Si la cita pagada cambia de día, el pago se mueve con ella a la caja del nuevo día
+      if (pago.fecha !== c.fecha) {
+        if (cajaCerrada(pago.fecha)) fallo(409, `Esta cita está pagada y la caja del ${fechaCL(pago.fecha)} ya está cerrada. Un administrador debe reabrirla para cambiarla de día.`);
+        if (cajaCerrada(c.fecha)) fallo(409, `Esta cita está pagada y la caja del ${fechaCL(c.fecha)} ya está cerrada. Un administrador debe reabrirla para moverla a ese día.`);
+      }
     }
     const r = db.prepare(`UPDATE citas SET fecha=@fecha,hora=@hora,duracion=@duracion,equipo=@equipo,paciente=@paciente,rut=@rut,
       telefono=@telefono,telefono2=@telefono2,fecha_nac=@fecha_nac,email=@email,email2=@email2,examen=@examen,prevision=@prevision,medico=@medico,medico_id=@medico_id,estado=@estado,notas=@notas,
       codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");
+    if (pago && pago.fecha !== c.fecha) db.prepare("UPDATE pagos SET fecha = ? WHERE cita_id = ? AND anulado = 0").run(c.fecha, id);
     integ.avisar(id);
     return [200, citaPorId(id)];
+  }],
+
+  // Cambiar solo el estado de la cita (también lo pueden hacer los usuarios de solo lectura)
+  ["PUT", /^\/api\/citas\/(\d+)\/estado$/, "sesion", async (req, u, url, m) => {
+    const id = Number(m[1]);
+    exigirAgenda(u, id);
+    const estado = txt((await leerCuerpo(req)).estado, 20);
+    if (!ESTADOS.includes(estado)) fallo(400, "El estado no es válido.");
+    const r = db.prepare("UPDATE citas SET estado = ?, actualizado_por = ?, actualizado = datetime('now') WHERE id = ?").run(estado, u.id, id);
+    if (!r.changes) fallo(404, "La cita ya no existe.");
+    integ.avisar(id);
+    return [200, paraUsuario(citaPorId(id), u)];
   }],
 
   ["DELETE", /^\/api\/citas\/(\d+)$/, "escribir", async (req, u, url, m) => {
@@ -445,8 +465,9 @@ const rutas = [
     if (!c) fallo(404, "La cita ya no existe.");
     if (pagoActivo(id)) fallo(409, "Esta cita ya tiene un pago registrado.");
     if (!c.valor) fallo(400, "Elige el examen y su valor antes de cobrar.");
-    const fecha = hoyCaja();
-    if (cajaCerrada(fecha)) fallo(409, "La caja de hoy ya está cerrada. Un administrador debe reabrirla para registrar pagos.");
+    // El pago se registra en la caja del día agendado (no en el día en que se cobra)
+    const fecha = c.fecha;
+    if (cajaCerrada(fecha)) fallo(409, `La caja del ${fechaCL(fecha)} ya está cerrada. Un administrador debe reabrirla para registrar pagos.`);
     // Descuento sobre el copago del paciente (la bonificación del bono no cambia)
     const tipoDesc = txt(b.descuento_tipo, 10), motivoDesc = txt(b.descuento_motivo, 120);
     let descuento = 0, detalle = "";
