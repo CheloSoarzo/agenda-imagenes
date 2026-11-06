@@ -119,6 +119,9 @@ for (const [col, def] of [["codigo", "TEXT NOT NULL DEFAULT ''"], ["valor", "INT
   // agendas que ve el usuario (tc,rx,eco separadas por coma); vacío = todas
   const colsU = db.prepare("PRAGMA table_info(usuarios)").all().map((c) => c.name);
   if (!colsU.includes("agendas")) db.exec("ALTER TABLE usuarios ADD COLUMN agendas TEXT NOT NULL DEFAULT ''");
+  // colores que eligió el usuario ('' = azul) y usuarios eliminados (su nombre queda en el historial de caja y citas)
+  if (!colsU.includes("paleta")) db.exec("ALTER TABLE usuarios ADD COLUMN paleta TEXT NOT NULL DEFAULT ''");
+  if (!colsU.includes("eliminado")) db.exec("ALTER TABLE usuarios ADD COLUMN eliminado INTEGER NOT NULL DEFAULT 0");
 }
 
 // ---------- adjuntos (orden médica) ----------

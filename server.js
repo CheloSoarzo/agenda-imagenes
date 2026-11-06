@@ -93,10 +93,10 @@ function usuarioDeSesion(req) {
   const token = leerCookie(req, COOKIE);
   if (!token) return null;
   const hash = sha(token);
-  const s = db.prepare(`SELECT u.id, u.usuario, u.nombre, u.rol, u.agendas, s.expira FROM sesiones s
+  const s = db.prepare(`SELECT u.id, u.usuario, u.nombre, u.rol, u.agendas, u.paleta, s.expira FROM sesiones s
     JOIN usuarios u ON u.id = s.usuario_id WHERE s.token = ? AND u.activo = 1`).get(hash);
   if (!s || s.expira < Date.now()) return null;
-  return { id: s.id, usuario: s.usuario, nombre: s.nombre, rol: s.rol, agendas: s.rol === "admin" ? "" : (s.agendas || ""), tokenHash: hash };
+  return { id: s.id, usuario: s.usuario, nombre: s.nombre, rol: s.rol, agendas: s.rol === "admin" ? "" : (s.agendas || ""), paleta: s.paleta || "", tokenHash: hash };
 }
 const intentos = new Map();
 function frenoLogin(ip) {
@@ -113,6 +113,8 @@ const cookie = (valor, maxAge) =>
 // ---------- citas ----------
 const EQUIPOS = ["tc", "rx", "eco"];
 const ESTADOS = ["agendado", "confirmado", "llego", "atendido", "ausente", "cancelado"];
+// Paletas de colores que puede elegir cada usuario (los colores están en public/estilos.css)
+const PALETAS = ["azul", "rosa", "verde", "violeta", "cobre"];
 const ROLES = ["admin", "recepcion", "lectura"];
 const reFecha = /^\d{4}-\d{2}-\d{2}$/, reHora = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -591,7 +593,7 @@ const rutas = [
   }],
 
   ["GET", /^\/api\/usuarios$/, "admin", async () =>
-    [200, plainAll(db.prepare("SELECT id, usuario, nombre, rol, activo, agendas, creado FROM usuarios ORDER BY nombre").all())]],
+    [200, plainAll(db.prepare("SELECT id, usuario, nombre, rol, activo, agendas, creado FROM usuarios WHERE eliminado = 0 ORDER BY nombre").all())]],
 
   ["POST", /^\/api\/usuarios$/, "admin", async (req) => {
     const b = await leerCuerpo(req);
@@ -618,12 +620,29 @@ const rutas = [
       if (id === u.id && b.rol !== "admin") fallo(400, "No puedes quitarte el rol de administrador.");
       db.prepare("UPDATE usuarios SET rol = ? WHERE id = ?").run(b.rol, id);
     }
+    if (b.paleta !== undefined) {
+      if (id !== u.id) fallo(403, "Cada usuario elige sus propios colores.");
+      if (!PALETAS.includes(b.paleta)) fallo(400, "Esa paleta no existe.");
+      db.prepare("UPDATE usuarios SET paleta = ? WHERE id = ?").run(b.paleta === "azul" ? "" : b.paleta, id);
+    }
     if (esAdmin && b.agendas !== undefined) db.prepare("UPDATE usuarios SET agendas = ? WHERE id = ?").run(agendasValidas(b.agendas), id);
     if (esAdmin && b.activo !== undefined) {
       if (id === u.id) fallo(400, "No puedes desactivar tu propio usuario.");
       db.prepare("UPDATE usuarios SET activo = ? WHERE id = ?").run(b.activo ? 1 : 0, id);
       if (!b.activo) db.prepare("DELETE FROM sesiones WHERE usuario_id = ?").run(id);
     }
+    return [200, { ok: true }];
+  }],
+
+  // Eliminar usuario: ya no entra ni aparece, y su nombre de usuario queda libre.
+  // No se borra de la base para que la caja y las citas sigan mostrando quién cobró o agendó.
+  ["DELETE", /^\/api\/usuarios\/(\d+)$/, "admin", async (req, u, url, m) => {
+    const id = Number(m[1]);
+    if (id === u.id) fallo(400, "No puedes eliminar tu propio usuario.");
+    const x = db.prepare("SELECT * FROM usuarios WHERE id = ? AND eliminado = 0").get(id);
+    if (!x) fallo(404, "Ese usuario ya no existe.");
+    db.prepare("UPDATE usuarios SET eliminado = 1, activo = 0, usuario = ? WHERE id = ?").run(`${x.usuario}~eliminado${id}`, id);
+    db.prepare("DELETE FROM sesiones WHERE usuario_id = ?").run(id);
     return [200, { ok: true }];
   }],
   ...integ.rutas,

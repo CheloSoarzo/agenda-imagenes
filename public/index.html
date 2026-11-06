@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/estilos.css">
+<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
 <script src="/fecha-cl.js"></script>
 </head>
 <body>
@@ -40,6 +41,7 @@
       <button class="linkbtn" id="btnUsuarios" hidden>Usuarios</button>
       <a class="linkbtn" id="btnRespaldo" href="/api/respaldo" hidden title="Descarga una copia completa de la base de datos">Respaldo</a>
       <button class="linkbtn" id="btnCargarResp" hidden title="Reemplaza los datos de esta agenda por los de un respaldo">Cargar respaldo</button>
+      <button class="linkbtn" id="btnColores">Colores</button>
       <button class="linkbtn" id="btnClave">Cambiar clave</button>
       <button class="linkbtn" id="salir">Salir</button>
     </div>
@@ -259,6 +261,16 @@
       <div class="msg" id="umsg"></div>
       <div class="actions"><span class="spacer"></span><button type="button" class="btn" id="ucerrar">Cerrar</button><button class="btn primary" type="submit">Agregar</button></div>
     </form>
+  </div>
+</div>
+
+<!-- Panel de colores -->
+<div class="scrim" id="colscrim" hidden>
+  <div class="panel">
+    <h2>Colores</h2>
+    <p class="meta" style="margin:0">Elige los colores con que ves la agenda. Solo cambian para ti.</p>
+    <div class="paletas" id="paletas" role="radiogroup" aria-label="Paleta de colores"></div>
+    <div class="actions"><span class="spacer"></span><button type="button" class="btn primary" id="pcerrar">Listo</button></div>
   </div>
 </div>
 
@@ -1185,7 +1197,13 @@ async function cargarUsuarios(){
           try{await api("/api/usuarios/"+u.id,{method:"PUT",body:{clave:nueva}});
             $("#umsg").className="msg";$("#umsg").textContent=`Nueva clave de ${u.usuario}: ${nueva}  (anótala, no se volverá a mostrar)`}catch(e){toast(e.message)}
         });
-        row.append(k,t);
+        const x=document.createElement("button");x.type="button";x.className="linkbtn eliminar";x.textContent="Eliminar";
+        x.title="Ya no podrá entrar. La caja y las citas siguen mostrando su nombre.";
+        x.addEventListener("click",async()=>{
+          if(!x.classList.contains("armed")){x.classList.add("armed");x.textContent="¿Eliminar a "+u.nombre+"?";return}
+          try{await api("/api/usuarios/"+u.id,{method:"DELETE"});toast("Usuario "+u.usuario+" eliminado");cargarUsuarios()}catch(e){toast(e.message)}
+        });
+        row.append(k,t,x);
       }
       list.appendChild(row);
     }
@@ -1203,6 +1221,30 @@ $("#uform").addEventListener("submit",async e=>{
     $("#u-nombre").value="";$("#u-usuario").value="";$("#u-clave").value="";cargarUsuarios();
   }catch(err){m.className="msg err";m.textContent=err.message}
 });
+
+/* ---------- colores ---------- */
+const PALETAS=[["azul","Azul clínico",["#13283F","#1F5F8B","#E7F0FA"]],["rosa","Rosa",["#4A1230","#C2185B","#FCE4EE"]],
+  ["verde","Verde agua",["#0D3B36","#0F766E","#DDF2EE"]],["violeta","Lavanda",["#2B1F52","#6D4BC4","#ECE6FB"]],["cobre","Cobre",["#1B1512","#A65A23","#F5E6D9"]]];
+function aplicarPaleta(p){
+  p=p&&p!=="azul"?p:""; if(p) document.documentElement.dataset.paleta=p; else delete document.documentElement.dataset.paleta;
+  try{p?localStorage.setItem("agenda-paleta",p):localStorage.removeItem("agenda-paleta")}catch(e){}
+}
+$("#btnColores").addEventListener("click",()=>{
+  const box=$("#paletas"); box.innerHTML=""; const actual=yo.paleta||"azul";
+  for(const [k,nombre,cols] of PALETAS){
+    const l=document.createElement("label"); l.className="paleta";
+    l.innerHTML=`<input type="radio" name="paleta" value="${k}"><span class="muestra" aria-hidden="true">${cols.map(c=>`<span style="background:${c}"></span>`).join("")}</span><span></span>`;
+    l.lastChild.textContent=nombre; const r=l.querySelector("input"); r.checked=k===actual;
+    r.addEventListener("change",async()=>{
+      const antes=yo.paleta; aplicarPaleta(k); yo.paleta=k;
+      try{await api("/api/usuarios/"+yo.id,{method:"PUT",body:{paleta:k}});toast("Colores: "+nombre)}
+      catch(e){yo.paleta=antes;aplicarPaleta(antes);toast(e.message)}
+    });
+    box.appendChild(l);
+  }
+  $("#colscrim").hidden=false; setTimeout(()=>box.querySelector("input:checked")?.focus(),30);
+});
+$("#pcerrar").addEventListener("click",()=>$("#colscrim").hidden=true);
 
 /* ---------- mi clave ---------- */
 $("#btnClave").addEventListener("click",()=>{$("#c-clave").value="";$("#c-clave2").value="";$("#cmsg").textContent="";$("#cscrim").hidden=false;setTimeout(()=>$("#c-clave").focus(),30)});
@@ -1586,7 +1628,7 @@ buildGrid(); render();
 (async()=>{
   try{
     yo=await api("/api/me");
-    $("#me").textContent=yo.nombre||yo.usuario;
+    $("#me").textContent=yo.nombre||yo.usuario; aplicarPaleta(yo.paleta);
     if(yo.centro){$("#brand-centro").textContent="Agenda "+yo.centro;document.title="Agenda "+yo.centro;centroNombre=yo.centro}
     if(yo.logo){centroLogo=yo.logo;
       for(const box of [$("#brand-logo"),$("#k-logo")]){const img=box.querySelector("img");img.alt=yo.centro?"Logo "+yo.centro:"Logo";img.onload=()=>box.hidden=false;img.src=yo.logo}}
