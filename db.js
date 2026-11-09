@@ -224,6 +224,15 @@ CREATE TABLE IF NOT EXISTS pacs_cola (
 `);
 db.PREFIJO_ACCESION = (process.env.ACCESION_PREFIJO || "AG").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "AG";
 db.dataDir = DATA_DIR;
+// Clave del paciente cifrada (además del hash), para que el administrador pueda volver a verla.
+// La llave para descifrarla está en un archivo aparte (clave-portal.key), no en la base de datos.
+// Registro de quién vio cada clave.
+{
+  const cols = db.prepare("PRAGMA table_info(portal_claves)").all().map((c) => c.name);
+  if (!cols.includes("clave_cifrada")) db.exec("ALTER TABLE portal_claves ADD COLUMN clave_cifrada TEXT NOT NULL DEFAULT ''");
+  db.exec(`CREATE TABLE IF NOT EXISTS portal_claves_vistas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, rut TEXT NOT NULL, cita_id INTEGER, usuario_id INTEGER, visto TEXT NOT NULL)`);
+}
 db.accesionDe = (id) => db.PREFIJO_ACCESION + String(id).padStart(8, "0");
 {
   const sin = db.prepare("SELECT id FROM citas WHERE accesion = ''").all();

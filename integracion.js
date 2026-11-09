@@ -181,6 +181,36 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     enviarPronto();
   }
 
+  // ---------- cifrado de la clave del paciente (para que el administrador pueda verla) ----------
+  // AES-256-GCM con una llave guardada en DATA_DIR/clave-portal.key (fuera de la base de datos y de los respaldos):
+  // quien copie solo la base de datos no puede leer las claves.
+  const ARCHIVO_LLAVE = require("path").join(db.dataDir, "clave-portal.key");
+  let llave = null;
+  function llavePortal() {
+    if (llave) return llave;
+    const fs = require("fs");
+    try { llave = Buffer.from(fs.readFileSync(ARCHIVO_LLAVE, "utf8").trim(), "hex"); } catch {}
+    if (!llave || llave.length !== 32) {
+      llave = crypto.randomBytes(32);
+      fs.writeFileSync(ARCHIVO_LLAVE, llave.toString("hex") + "\n", { mode: 0o600 });
+    }
+    return llave;
+  }
+  function cifrar(texto) {
+    const iv = crypto.randomBytes(12), c = crypto.createCipheriv("aes-256-gcm", llavePortal(), iv);
+    const datos = Buffer.concat([c.update(texto, "utf8"), c.final()]);
+    return ["v1", iv.toString("base64"), c.getAuthTag().toString("base64"), datos.toString("base64")].join(":");
+  }
+  function descifrar(guardado) {
+    const [v, iv, tag, datos] = String(guardado || "").split(":");
+    if (v !== "v1") return null;
+    try {
+      const d = crypto.createDecipheriv("aes-256-gcm", llavePortal(), Buffer.from(iv, "base64"));
+      d.setAuthTag(Buffer.from(tag, "base64"));
+      return Buffer.concat([d.update(Buffer.from(datos, "base64")), d.final()]).toString("utf8");
+    } catch { return null; }   // llave distinta (ej. base restaurada en otro servidor)
+  }
+
   // ---------- clave del paciente ----------
   // Si el paciente aún no tiene clave, la crea. Devuelve la clave nueva (solo esa vez) o null si ya tenía.
   function asegurarClave(rut, usuarioId) {
@@ -188,16 +218,18 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     if (!r || !rutValido(r)) return { estado: "sin_rut" };
     if (db.prepare("SELECT 1 FROM portal_claves WHERE rut = ?").get(r)) return { estado: "existente" };
     const clave = claveNueva();
-    db.prepare("INSERT INTO portal_claves (rut, clave_hash, usuario_id, creado) VALUES (?,?,?,?)").run(r, db.hashClave(clave), usuarioId, ahoraCaja());
+    db.prepare("INSERT INTO portal_claves (rut, clave_hash, clave_cifrada, usuario_id, creado) VALUES (?,?,?,?,?)")
+      .run(r, db.hashClave(clave), cifrar(clave), usuarioId, ahoraCaja());
     return { estado: "nueva", clave };
   }
   function cambiarClave(rut, usuarioId) {
     const r = normRut(rut);
     if (!r || !rutValido(r)) fallo(400, "La cita necesita un RUT válido para crear la clave del paciente.");
     const clave = claveNueva();
-    db.prepare(`INSERT INTO portal_claves (rut, clave_hash, usuario_id, creado) VALUES (?,?,?,?)
-      ON CONFLICT(rut) DO UPDATE SET clave_hash = excluded.clave_hash, usuario_id = excluded.usuario_id, creado = excluded.creado`)
-      .run(r, db.hashClave(clave), usuarioId, ahoraCaja());
+    db.prepare(`INSERT INTO portal_claves (rut, clave_hash, clave_cifrada, usuario_id, creado) VALUES (?,?,?,?,?)
+      ON CONFLICT(rut) DO UPDATE SET clave_hash = excluded.clave_hash, clave_cifrada = excluded.clave_cifrada,
+        usuario_id = excluded.usuario_id, creado = excluded.creado`)
+      .run(r, db.hashClave(clave), cifrar(clave), usuarioId, ahoraCaja());
     avisarPaciente(r);
     return clave;
   }
@@ -225,6 +257,19 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
       if (!ACTIVA) fallo(400, "La agenda aún no está conectada al PACS.");
       const clave = cambiarClave(c.rut, u.id);
       return [200, { clave, portal_url: PORTAL_URL, accesion: c.accesion }];
+    }],
+    // Ver la clave del paciente (solo administrador). Cada vez que alguien la ve queda registrado.
+    ["GET", /^\/api\/citas\/(\d+)\/clave$/, "admin", async (req, u, url, m) => {
+      const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(Number(m[1]));
+      if (!c) fallo(404, "La cita ya no existe.");
+      const r = normRut(c.rut);
+      const fila = r ? db.prepare(`SELECT p.clave_cifrada, p.creado, us.nombre AS creada_por FROM portal_claves p
+        LEFT JOIN usuarios us ON us.id = p.usuario_id WHERE p.rut = ?`).get(r) : null;
+      if (!fila) fallo(404, "Este paciente aún no tiene clave. Se crea al pagar, o con «Nueva clave».");
+      const clave = descifrar(fila.clave_cifrada);
+      if (!clave) fallo(409, "Esta clave se creó antes de que se pudieran ver (o en otro servidor), así que no se puede mostrar. Genera una nueva con «Nueva clave».");
+      db.prepare("INSERT INTO portal_claves_vistas (rut, cita_id, usuario_id, visto) VALUES (?,?,?,?)").run(r, c.id, u.id, ahoraCaja());
+      return [200, { clave, creado: fila.creado, creada_por: fila.creada_por || "", portal_url: PORTAL_URL }];
     }],
     // Estado de la conexión con el PACS (para el administrador)
     ["GET", /^\/api\/integracion$/, "sesion", async () => {

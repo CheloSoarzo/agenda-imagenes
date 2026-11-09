@@ -177,6 +177,7 @@
         <div class="clave-grande" id="portal-clave" hidden></div>
         <div class="portal-acc">
           <button type="button" class="btn primary" id="portal-hoja">Imprimir hoja de retiro</button>
+          <button type="button" class="btn" id="portal-ver" hidden>Ver clave</button>
           <button type="button" class="btn" id="portal-nueva">Nueva clave</button>
         </div>
       </div>
@@ -1046,6 +1047,8 @@ function pintarPortal(p){
   if(!p){box.hidden=true;return}
   box.hidden=false; $("#portal-clave").hidden=true;
   $("#portal-nueva").hidden=!canWrite; $("#portal-hoja").hidden=false;
+  // El administrador puede volver a ver la clave del paciente (queda registrado)
+  $("#portal-ver").hidden=!(yo&&yo.rol==="admin")||p.estado==="nueva"||!!p.clave||p.estado==="sin_rut";
   if(p.estado==="nueva"||p.clave){
     claveMostrada=p.clave;
     $("#portal-txt").textContent="Clave del paciente para ver su examen en línea. Imprime la hoja y entrégasela: la clave no se vuelve a mostrar.";
@@ -1070,7 +1073,19 @@ $("#portal-nueva").addEventListener("click",async()=>{
   catch(e){$("#pmsg").className="msg err";$("#pmsg").textContent=e.message}
   finally{b.disabled=false;b.classList.remove("armed");b.textContent="Nueva clave"}
 });
+$("#portal-ver").addEventListener("click",async()=>{
+  const c=cobroCita, b=$("#portal-ver"); if(!c) return;
+  b.disabled=true;
+  try{
+    const r=await api(`/api/citas/${c.id}/clave`);
+    claveMostrada=r.clave; $("#portal-clave").textContent=r.clave; $("#portal-clave").hidden=false; b.hidden=true;
+    $("#portal-txt").textContent=`Clave actual del paciente (creada el ${fechaHoraCL(r.creado)}${r.creada_por?" por "+r.creada_por:""}). Queda registrado que la viste.`;
+    $("#portal-hoja").textContent="Imprimir hoja de retiro";
+  }catch(e){$("#portal-txt").textContent=e.message}
+  finally{b.disabled=false}
+});
 $("#portal-hoja").addEventListener("click",()=>{if(cobroCita)imprimirHoja(cobroCita,claveMostrada)});
+function fechaHoraCL(t){t=String(t||"");const [f,h]=t.split(/[ T]/);return f?f.split("-").reverse().join("/")+(h?" "+h.slice(0,5):""):""}
 function imprimirHoja(c,clave){
   const esc=t=>String(t??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
   const centro=yo?.centro||"", logo=yo?.logo?location.origin+yo.logo:"";
