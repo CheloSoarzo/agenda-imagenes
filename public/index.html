@@ -152,6 +152,7 @@
       <span class="spacer"></span>
       <button type="button" class="btn" id="cancelar">Cancelar</button>
       <button type="submit" class="btn primary" id="guardar">Guardar cita</button>
+      <button type="button" class="btn" id="f-hoja" hidden title="Imprimir de nuevo la hoja de retiro con la clave del paciente">Hoja de retiro</button>
       <button type="button" class="btn pay" id="ir-cobro" hidden>Cobrar</button>
     </div>
   </form>
@@ -184,18 +185,21 @@
       <div id="pago-form">
         <div class="row2">
           <div class="field"><label for="p-medio">Medio de pago</label>
-            <select id="p-medio"><option value="">Elige…</option><option>Efectivo</option><option>Débito</option><option>Crédito</option><option>Transferencia</option></select></div>
+            <select id="p-medio"><option value="">Elige…</option><option>Efectivo</option><option>Débito</option><option>Crédito</option><option>Transferencia</option><option>Cheque</option></select></div>
           <div class="field"><label for="p-boleta">N° de boleta</label><input id="p-boleta" autocomplete="off" inputmode="numeric" placeholder="Opcional"></div>
         </div>
         <button type="button" class="linkbtn" id="p2-add">+ Pagar con dos medios de pago</button>
         <div class="pago2" id="p2" hidden>
           <div class="row3">
             <div class="field"><label for="p-medio2">Segundo medio</label>
-              <select id="p-medio2"><option value="">Elige…</option><option>Efectivo</option><option>Débito</option><option>Crédito</option><option>Transferencia</option></select></div>
+              <select id="p-medio2"><option value="">Elige…</option><option>Efectivo</option><option>Débito</option><option>Crédito</option><option>Transferencia</option><option>Cheque</option></select></div>
             <div class="field"><label for="p-monto2">Monto con el segundo medio</label><input id="p-monto2" inputmode="numeric" autocomplete="off" placeholder="$0"></div>
             <div class="field"><label>Con el primer medio</label><b class="p1-resto" id="p1-resto">$0</b></div>
           </div>
           <button type="button" class="linkbtn" id="p2-quitar">Quitar segundo medio</button>
+        </div>
+        <div class="row2" id="p-cheque-f" hidden>
+          <div class="field"><label for="p-cheque">N° de cheque y banco</label><input id="p-cheque" autocomplete="off" maxlength="80" placeholder="Ej. 0012345 Banco Estado"></div>
         </div>
         <div class="row2">
           <div class="field" id="p-folio-f"><label for="p-folio" id="p-folio-l">Folio bono Fonasa</label><input id="p-folio" autocomplete="off" inputmode="numeric"></div>
@@ -506,7 +510,8 @@ function render(){
       const n=anchoGrupo.get(c.id)||1, k=carril.get(c.id)||0;
       if(n>1){el.style.left=`calc(4px + (100% - 8px) * ${k}/${n})`;el.style.right=`calc(4px + (100% - 8px) * ${n-k-1}/${n})`}
       const est=ESTADOS.find(e=>e.id===c.estado)||ESTADOS[0];
-      el.innerHTML=`<span class="l1"><span class="h"></span><span class="p"></span><span class="n" hidden></span></span><span class="e"></span><span class="st st-${est.id}"></span>`;
+      el.innerHTML=`<span class="l1"><span class="h"></span><span class="p"></span><span class="n" hidden></span></span><span class="e"></span><span class="st st-${est.id}"></span>`
+        +(canWrite&&PACS_ON&&c.pago_id&&c.rut?'<span class="hoja" title="Reimprimir la hoja de retiro (con la clave del paciente)">Hoja</span>':"");
       el.querySelector(".h").textContent=c.hora;
       el.querySelector(".p").textContent=c.paciente;
       if(c.notas){const n=el.querySelector(".n");n.hidden=false;n.textContent="💬 "+c.notas.replace(/\s+/g," ")}
@@ -515,7 +520,7 @@ function render(){
       if(c.pacs_estado) el.classList.add("pacs-"+c.pacs_estado);
       if(c.pago_id&&!SIN_DINERO) el.classList.add("paid");
       el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.notas?" · Comentario: "+c.notas:""}${c.adjuntos?" · orden adjunta":""}${c.accesion?" · N° acceso "+c.accesion:""}${PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:""}`;
-      el.addEventListener("click",()=>openForm(c));
+      el.addEventListener("click",ev=>{if(ev.target.closest(".hoja")){ev.stopPropagation();hojaRetiro(c);return} openForm(c)});
       col.appendChild(el);
     }
     if(colInfo.fecha===isoDate(new Date())){
@@ -777,13 +782,13 @@ function openCobro(c){
   tabla($("#c-examenes"),[...ls.map(l=>({...l,copago:l.copago??(l.valor-l.bonificacion)})),{_cls:"tot",nombre:"Total",codigo:"",valor:c.valor,bonificacion:c.bonificacion,copago:c.copago}],[
     {t:"Examen",f:l=>(l.codigo?l.codigo+" · ":"")+(l.nombre||"")+(l.cantidad>1?" × "+l.cantidad:"")},{t:"Valor",n:1,f:l=>$$(l.valor)},{t:"Bonif.",n:1,f:l=>$$(l.bonificacion)},{t:"Copago",n:1,f:l=>$$(l.copago)}]);
   if(!ls.length) $("#c-examenes").innerHTML='<tr><td class="meta">La cita no tiene exámenes. Usa "Editar cita" para agregarlos.</td></tr>';
-  $("#p-medio").value=""; $("#p-folio").value=""; $("#p-boleta").value="";
+  $("#p-medio").value=""; $("#p-folio").value=""; $("#p-boleta").value=""; $("#p-cheque").value=""; $("#p-cheque-f").hidden=true;
   $("#p2").hidden=true; $("#p-medio2").value=""; $("#p-monto2").value="";
   $("#p-dtipo").value=""; $("#p-dvalor").value=""; $("#p-dmotivo").value=""; $("#p-dvalor-f").hidden=true; $("#p-dmotivo-f").hidden=true;
   $("#anular-box").hidden=true; $("#anular-motivo").value="";
   $("#pago-hecho").hidden=!pagada; $("#pago-form").hidden=pagada||!canWrite;
   if(pagada){
-    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_monto2>0?`${c.pago_medio} ${$$(c.pago_monto-c.pago_monto2)} + ${c.pago_medio2} ${$$(c.pago_monto2)}`:c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""} · cobrado ${(c.pago_creado||"").slice(0,10).split("-").reverse().join("/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
+    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_monto2>0?`${c.pago_medio} ${$$(c.pago_monto-c.pago_monto2)} + ${c.pago_medio2} ${$$(c.pago_monto2)}`:c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""}${c.pago_cheque?" · cheque "+c.pago_cheque:""} · cobrado ${(c.pago_creado||"").slice(0,10).split("-").reverse().join("/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
     $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
   }
   $("#pmsg").textContent=""; $("#pmsg").className="msg";
@@ -812,8 +817,11 @@ function recalcCobro(){
   $("#p1-resto").textContent=$$(Math.max(0,total-m2));
   $("#p1-resto").classList.toggle("bad",!$("#p2").hidden&&m2>=total);
 }
+// Cheque: se pide el número y el banco
+const verCheque=()=>{$("#p-cheque-f").hidden=!($("#p-medio").value==="Cheque"||(!$("#p2").hidden&&$("#p-medio2").value==="Cheque"))};
+["#p-medio","#p-medio2"].forEach(s=>$(s).addEventListener("change",verCheque));
 $("#p2-add").addEventListener("click",()=>{$("#p2").hidden=false;recalcCobro();$("#p-medio2").focus()});
-$("#p2-quitar").addEventListener("click",()=>{$("#p2").hidden=true;$("#p-medio2").value="";$("#p-monto2").value="";recalcCobro()});
+$("#p2-quitar").addEventListener("click",()=>{$("#p2").hidden=true;$("#p-medio2").value="";$("#p-monto2").value="";recalcCobro();verCheque()});
 $("#p-monto2").addEventListener("input",recalcCobro);
 $("#p-monto2").addEventListener("blur",e=>{if(e.target.value)e.target.value=$$(pesos(e.target.value))});
 // Descuento sobre el copago: porcentaje o monto fijo
@@ -873,6 +881,7 @@ function openForm(c,preset={}){
   ir.hidden=!c&&!canWrite; ir.disabled=false;
   ir.textContent=citaPagada?"Ver pago":c?"Cobrar":"Guardar y cobrar";
   if(!canWrite&&!citaPagada) ir.hidden=true;
+  $("#f-hoja").hidden=!(canWrite&&PACS_ON&&citaPagada&&c?.rut);
   recalcular(false);
   adjPendientes=[]; $("#adj-btn").hidden=!canWrite; cargarAdjuntos(c?.id);
   $("#scrim").hidden=false; setTimeout(()=>$("#f-paciente").focus(),30);
@@ -1013,11 +1022,12 @@ $("#cobrar").addEventListener("click",async()=>{
   else if(!$("#p2").hidden&&total>0&&$("#p-medio2").value===$("#p-medio").value) err="El segundo medio de pago debe ser distinto del primero.";
   else if(!$("#p2").hidden&&total>0&&pesos($("#p-monto2").value)>=total) err="El monto del segundo medio debe ser menor que el total.";
   else if(c.prevision==="Fonasa"&&c.bonificacion>0&&!$("#p-folio").value.trim()) err="Ingresa el folio del bono Fonasa.";
+  else if(!$("#p-cheque-f").hidden&&!$("#p-cheque").value.trim()) err="Escribe el número del cheque y el banco.";
   if(err){msg.textContent=err;return}
   const btn=$("#cobrar"); btn.disabled=true;
   try{
     const desc=ds.monto>0?{descuento_tipo:$("#p-dtipo").value,descuento_valor:$("#p-dtipo").value==="pct"?String(ds.pct):ds.monto,descuento_motivo:$("#p-dmotivo").value.trim()}:{};
-    const r=await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{medio:$("#p-medio").value,...(!$("#p2").hidden?{medio2:$("#p-medio2").value,monto2:pesos($("#p-monto2").value)}:{}),folio_bono:$("#p-folio").value.trim(),boleta:$("#p-boleta").value.trim(),...desc}});
+    const r=await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{cheque:$("#p-cheque").value.trim(),medio:$("#p-medio").value,...(!$("#p2").hidden?{medio2:$("#p-medio2").value,monto2:pesos($("#p-monto2").value)}:{}),folio_bono:$("#p-folio").value.trim(),boleta:$("#p-boleta").value.trim(),...desc}});
     toast(total>0?`Pago registrado: ${$$(total)}${ds.monto?" (con descuento)":""}`:"Atención registrada sin copago");
     await cargar();
     if(r.portal){openCobro(citas.find(x=>x.id===c.id)||r); pintarPortal(r.portal)}
@@ -1084,14 +1094,32 @@ $("#portal-ver").addEventListener("click",async()=>{
   }catch(e){$("#portal-txt").textContent=e.message}
   finally{b.disabled=false}
 });
-$("#portal-hoja").addEventListener("click",()=>{if(cobroCita)imprimirHoja(cobroCita,claveMostrada)});
+$("#portal-hoja").addEventListener("click",()=>{if(!cobroCita)return; if(claveMostrada)imprimirHoja(cobroCita,claveMostrada); else hojaRetiro(cobroCita)});
+$("#f-hoja").addEventListener("click",()=>{const c=editId&&citas.find(x=>x.id===editId); if(c)hojaRetiro(c)});
 function fechaHoraCL(t){t=String(t||"");const [f,h]=t.split(/[ T]/);return f?f.split("-").reverse().join("/")+(h?" "+h.slice(0,5):""):""}
-function imprimirHoja(c,clave){
+// Acceso rápido: reimprime la hoja de retiro completa, con la clave actual del paciente
+async function hojaRetiro(c){
+  // la ventana se abre al tiro (antes de esperar al servidor) para que el navegador no la bloquee
+  const w=window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
+  w.document.write('<p style="font:16px system-ui;margin:32px">Preparando la hoja de retiro…</p>');
+  try{
+    const r=await api(`/api/citas/${c.id}/hoja`);
+    if(r.clave){imprimirHoja(c,r.clave,w);return}
+    w.close();
+    const msg={sin_rut:"Esta cita no tiene RUT: el paciente no tiene clave para ver su examen en línea.",
+      sin_clave:"Este paciente aún no tiene clave: se crea al pagar el examen.",
+      antigua:"La clave de este paciente se creó antes de que se pudiera reimprimir. Presiona «Nueva clave» y luego «Imprimir hoja de retiro»: la hoja sale con la clave nueva."}[r.motivo]||"No se pudo obtener la clave.";
+    if(r.motivo==="antigua"&&c.pago_id){openCobro(citas.find(x=>x.id===c.id)||c);$("#portal-txt").textContent=msg}
+    else toast(msg);
+  }catch(e){w.close();toast(e.message)}
+}
+function imprimirHoja(c,clave,w0){
   const esc=t=>String(t??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
   const centro=yo?.centro||"", logo=yo?.logo?location.origin+yo.logo:"";
   const fecha=parseISO(c.fecha).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   const url=PORTAL_URL||"(dirección pendiente)";
-  const w=window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
+  const w=w0||window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
+  w.document.open();
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Hoja de retiro · ${esc(c.paciente)}</title>
 <style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#111;margin:32px;font-size:15px;line-height:1.45}
 .top{display:flex;align-items:center;gap:16px;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:18px}.top img{max-height:56px;max-width:180px}
@@ -1109,10 +1137,10 @@ ol{padding-left:20px}li{margin:4px 0}.pie{margin-top:24px;font-size:12px;color:#
 <div class="dato">Usuario: <b>${esc(c.rut)}</b> (su RUT)</div>
 <div class="dato">Clave: <b>${clave?esc(clave):"la que recibió en su visita anterior"}</b></div></div>
 <ol><li>Entre a la dirección desde su celular o computador.</li><li>Escriba su RUT y su clave.</li>
-<li>Verá su examen con su estado. Cuando el médico radiólogo firme el informe, podrá verlo, descargarlo en PDF y ver sus imágenes.</li>
+<li>Verá su examen con su estado. Podrá ver sus imágenes apenas estén listas, y cuando el médico radiólogo firme el informe, podrá verlo y descargarlo en PDF.</li>
 <li>Su clave sirve para todos sus exámenes en este centro. Guárdela y no la comparta.</li></ol>
 <p>El informe suele estar disponible dentro de los plazos informados en recepción. Si olvida su clave, pida una nueva en recepción presentando su carnet.</p>
-<div class="pie">Impreso el ${esc(new Date().toLocaleString("es-CL"))}${yo?.nombre?" por "+esc(yo.nombre):""}.</div>
+<div class="pie">Impreso el ${esc((d=>`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`)(new Date()))}${yo?.nombre?" por "+esc(yo.nombre):""}.</div>
 <script>window.onload=()=>{setTimeout(()=>window.print(),200)}<\/script></body></html>`);
   w.document.close();
 }

@@ -189,7 +189,7 @@ function hoyCaja() {
 }
 const fechaCL = (iso) => String(iso).split("-").reverse().join("/");
 const cajaCerrada = (fecha) => !!db.prepare("SELECT 1 FROM cierres WHERE fecha = ?").get(fecha);
-const MEDIOS = ["Efectivo", "Débito", "Crédito", "Transferencia", "Sin copago"];
+const MEDIOS = ["Efectivo", "Débito", "Crédito", "Transferencia", "Cheque", "Sin copago"];
 
 // Resumen de caja de un día o de un período (desde–hasta, ambos incluidos)
 function resumenCaja(desde, hasta = desde) {
@@ -197,7 +197,8 @@ function resumenCaja(desde, hasta = desde) {
     FROM pagos p LEFT JOIN usuarios u ON u.id = p.usuario_id LEFT JOIN usuarios ua ON ua.id = p.anulado_por
     WHERE p.fecha BETWEEN ? AND ? ORDER BY p.fecha, p.creado`).all(desde, hasta));
   const pesosTxt = (n) => "$" + Math.round(n || 0).toLocaleString("es-CL");
-  for (const p of pagos) p.medio_txt = p.monto2 > 0 ? `${p.medio} ${pesosTxt(p.copago - p.monto2)} + ${p.medio2} ${pesosTxt(p.monto2)}` : p.medio;
+  for (const p of pagos) p.medio_txt = (p.monto2 > 0 ? `${p.medio} ${pesosTxt(p.copago - p.monto2)} + ${p.medio2} ${pesosTxt(p.monto2)}` : p.medio)
+    + (p.cheque ? ` (cheque ${p.cheque})` : "");
   const validos = pagos.filter((p) => !p.anulado);
   const suma = (arr, k) => arr.reduce((t, p) => t + (p[k] || 0), 0);
   // Partes de cada pago por medio (un pago dividido aporta a dos medios)
@@ -267,7 +268,7 @@ const veEquipo = (u, eq) => { const a = agendasDe(u); return !a.length || a.incl
 const filtroAgendas = (u, alias = "c") => { const a = agendasDe(u); return a.length ? ` AND ${alias}.equipo IN (${a.map((e) => `'${e}'`).join(",")})` : ""; };
 // El usuario de solo lectura no ve valores ni pagos (sí si está pagada)
 const CAMPOS_DINERO = ["valor", "bonificacion", "copago", "pago_medio", "pago_monto", "pago_folio", "pago_descuento",
-  "pago_desc_motivo", "pago_boleta", "pago_medio2", "pago_monto2"];
+  "pago_desc_motivo", "pago_boleta", "pago_medio2", "pago_monto2", "pago_cheque"];
 function paraUsuario(c, u) {
   if (!c || u?.rol !== "lectura") return c;
   const x = { ...c };
@@ -278,7 +279,7 @@ function paraUsuario(c, u) {
 const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS actualizado_por_nombre,
   (SELECT COUNT(*) FROM adjuntos a WHERE a.cita_id = c.id) AS adjuntos,
   p.id AS pago_id, p.medio AS pago_medio, p.copago AS pago_monto, p.medio2 AS pago_medio2, p.monto2 AS pago_monto2, p.folio_bono AS pago_folio, p.fecha AS pago_fecha,
-  p.descuento AS pago_descuento, p.descuento_motivo AS pago_desc_motivo, p.boleta AS pago_boleta,
+  p.descuento AS pago_descuento, p.descuento_motivo AS pago_desc_motivo, p.boleta AS pago_boleta, p.cheque AS pago_cheque,
   p.creado AS pago_creado, up.nombre AS pago_usuario
   FROM citas c LEFT JOIN usuarios uc ON uc.id = c.creado_por LEFT JOIN usuarios ua ON ua.id = c.actualizado_por
   LEFT JOIN pagos p ON p.id = (SELECT MAX(id) FROM pagos WHERE cita_id = c.id AND anulado = 0)
@@ -494,12 +495,14 @@ const rutas = [
       if (monto2 >= aPagar) fallo(400, "El monto del segundo medio debe ser menor que el total a pagar.");
     }
     const folio = txt(b.folio_bono, 40), boleta = txt(b.boleta, 40);
+    const cheque = medio === "Cheque" || medio2 === "Cheque" ? txt(b.cheque, 80) : "";
+    if ((medio === "Cheque" || medio2 === "Cheque") && !cheque) fallo(400, "Escribe el número del cheque y el banco.");
     if (c.prevision === "Fonasa" && c.bonificacion > 0 && !folio) fallo(400, "Ingresa el folio del bono Fonasa.");
     db.prepare(`INSERT INTO pagos (cita_id, fecha, paciente, rut, equipo, codigo, examen, prevision, valor, bonificacion, copago, medio, folio_bono, usuario_id, creado,
-      descuento, descuento_motivo, descuento_detalle, examenes, boleta, medio2, monto2)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
+      descuento, descuento_motivo, descuento_detalle, examenes, boleta, medio2, monto2, cheque)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
       c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta,
-      medio2, monto2);
+      medio2, monto2, cheque);
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
     // Clave para ver el examen en línea: se crea al pagar (solo la primera vez que viene el paciente)
     const portal = integ.activa ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;

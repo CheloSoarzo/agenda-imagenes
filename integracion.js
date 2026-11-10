@@ -271,6 +271,21 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
       db.prepare("INSERT INTO portal_claves_vistas (rut, cita_id, usuario_id, visto) VALUES (?,?,?,?)").run(r, c.id, u.id, ahoraCaja());
       return [200, { clave, creado: fila.creado, creada_por: fila.creada_por || "", portal_url: PORTAL_URL }];
     }],
+    // Reimprimir la hoja de retiro con la clave actual del paciente (recepción y administrador).
+    // Queda registrado quién la reimprimió. Si la clave es de antes de la versión 1.1.15 no se puede recuperar.
+    ["GET", /^\/api\/citas\/(\d+)\/hoja$/, "escribir", async (req, u, url, m) => {
+      const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(Number(m[1]));
+      if (!c) fallo(404, "La cita ya no existe.");
+      if (!ACTIVA) fallo(400, "La agenda aún no está conectada al PACS.");
+      const r = normRut(c.rut);
+      if (!r) return [200, { clave: null, motivo: "sin_rut" }];
+      const fila = db.prepare("SELECT clave_cifrada FROM portal_claves WHERE rut = ?").get(r);
+      if (!fila) return [200, { clave: null, motivo: "sin_clave" }];
+      const clave = descifrar(fila.clave_cifrada);
+      if (!clave) return [200, { clave: null, motivo: "antigua" }];
+      db.prepare("INSERT INTO portal_claves_vistas (rut, cita_id, usuario_id, visto) VALUES (?,?,?,?)").run(r, c.id, u.id, ahoraCaja());
+      return [200, { clave, portal_url: PORTAL_URL }];
+    }],
     // Estado de la conexión con el PACS (para el administrador)
     ["GET", /^\/api\/integracion$/, "sesion", async () => {
       const p = db.prepare("SELECT COUNT(*) AS n, MAX(intentos) AS max, MAX(error) AS error FROM pacs_cola").get();
