@@ -62,7 +62,7 @@
         <button type="button" data-v="dia">Día</button>
         <button type="button" data-v="semana">Semana</button>
       </div>
-      <div class="ocupacion" id="ocupacion" title="Minutos agendados sobre el horario de atención del día">
+      <div class="ocupacion" id="ocupacion" title="Minutos agendados sobre el horario de atención (08:00 a 18:00)">
         <div class="oc-top"><span id="oc-label">Ocupación del día</span><b id="oc-pct">0%</b></div>
         <div class="oc-bar"><i id="oc-fill"></i></div>
       </div>
@@ -381,7 +381,16 @@ const EXAMENES={tc:["TC de cerebro","TC de tórax","TC de abdomen y pelvis","TC 
   rx:["RX de tórax AP y lateral","RX de columna lumbar","RX de rodilla","RX de cadera","RX de mano","RX de pelvis"],
   eco:["Eco abdominal","Eco pelviana","Eco tiroidea","Eco mamaria","Eco obstétrica","Eco partes blandas","Eco renal"]};
 const DUR_DEF={tc:15,rx:15,eco:15};
-const START=8*60, END=21*60, STEP=15, ROW=34;
+// Horario de atención (08:00 a 18:00): la grilla muestra este horario y la ocupación se calcula sobre él.
+// Si hay citas después de las 18:00, la grilla se alarga hasta ellas (marcadas como fuera de horario).
+const ATENCION_INI=8*60, ATENCION_FIN=18*60;
+const START=ATENCION_INI, STEP=15, ROW=34;
+let END=ATENCION_FIN;
+// La grilla llega hasta las 18:00, o hasta la última cita si alguna termina más tarde (máximo 23:00)
+function finGrilla(){
+  const fin=citas.filter(c=>c.estado!=="cancelado"&&delAgenda(c)).reduce((m,c)=>Math.max(m,toMin(c.hora)+(Number(c.duracion)||15)),0);
+  return Math.min(23*60,Math.max(ATENCION_FIN,Math.ceil(fin/60)*60));
+}
 
 const $=s=>document.querySelector(s);
 const pad=n=>String(n).padStart(2,"0");
@@ -461,7 +470,7 @@ function buildGrid(){
     const eqDefecto=col.equipos.length===1?col.equipos[0]:"tc";
     for(let r=0;r<rows;r++){
       const m=START+r*STEP; const b=document.createElement("button");
-      b.type="button"; b.className="slot"+(((m+STEP)%60===0)?" hour":"");
+      b.type="button"; b.className="slot"+(((m+STEP)%60===0)?" hour":"")+(m>=ATENCION_FIN?" fuera":"");
       b.setAttribute("aria-label",`Agendar ${col.titulo} ${col.sub} a las ${toHora(m)}`);
       b.addEventListener("click",()=>{if(canWrite)openForm(null,{equipo:eqDefecto,hora:toHora(m),fecha:col.fecha})});
       c.appendChild(b);
@@ -479,7 +488,9 @@ function render(){
   }else $("#dayname").textContent=parseISO(dia).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"});
   $("#dayname").classList.toggle("semana",vista==="semana");
   $("#fecha").value=dia;
-  if(COLS.length&&COLS[0].fecha!==columnas()[0].fecha) buildGrid();
+  const fin=finGrilla();
+  if(fin!==END){END=fin;buildGrid()}
+  else if(COLS.length&&COLS[0].fecha!==columnas()[0].fecha) buildGrid();
   document.querySelectorAll(".appt,.nowline").forEach(e=>e.remove());
   const activos=citas.filter(c=>c.estado!=="cancelado");
   COLS.forEach((colInfo,i)=>{
@@ -534,9 +545,12 @@ function render(){
   const periodo=vista==="semana"?"de la semana":"del día";
   chip("var(--fg)",agendaSel==="todas"?"Total "+periodo:"Citas "+EQUIPOS.find(e=>e.id===agendaSel).nombre+" "+periodo,misActivas.length);
   for(const e of ESTADOS.filter(e=>e.id!=="cancelado")){const n=mias.filter(c=>c.estado===e.id).length;if(n)chip(`var(--e-${e.id})`,e.n,n)}
-  // ocupación: minutos agendados / minutos de atención (en semana: lunes a sábado, y domingo si tiene citas)
+  // ocupación: minutos agendados dentro del horario de atención (08:00–18:00) / minutos de atención
+  // (en semana: lunes a sábado, y domingo si tiene citas). Lo agendado fuera de horario no suma.
   const dias=vista==="semana"?6+(misActivas.some(c=>parseISO(c.fecha).getDay()===0)?1:0):1;
-  const ocup=misActivas.reduce((t,c)=>t+(Number(c.duracion)||15),0), cap=(END-START)*visibles().length*dias;
+  const ocup=misActivas.reduce((t,c)=>{const i=toMin(c.hora), f=i+(Number(c.duracion)||15);
+    return t+Math.max(0,Math.min(f,ATENCION_FIN)-Math.max(i,ATENCION_INI))},0);
+  const cap=(ATENCION_FIN-ATENCION_INI)*visibles().length*dias;
   const pct=Math.min(100,Math.round(ocup*100/cap));
   $("#oc-label").textContent="Ocupación "+periodo;
   $("#oc-pct").textContent=pct+"%"; $("#oc-fill").style.width=pct+"%";
@@ -1663,7 +1677,7 @@ $("#prev").addEventListener("click",()=>shift(-1));
 $("#next").addEventListener("click",()=>shift(1));
 $("#hoy").addEventListener("click",()=>setDia(isoDate(new Date())));
 $("#fecha").addEventListener("change",e=>{if(e.target.value)setDia(e.target.value)});
-$("#nueva").addEventListener("click",()=>{const n=new Date();const m=Math.min(Math.max(Math.ceil((n.getHours()*60+n.getMinutes())/STEP)*STEP,START),END-STEP);openForm(null,{equipo:agendaSel==="todas"?"tc":agendaSel,hora:toHora(m)})});
+$("#nueva").addEventListener("click",()=>{const n=new Date();const m=Math.min(Math.max(Math.ceil((n.getHours()*60+n.getMinutes())/STEP)*STEP,START),ATENCION_FIN-STEP);openForm(null,{equipo:agendaSel==="todas"?"tc":agendaSel,hora:toHora(m)})});
 $("#salir").addEventListener("click",async()=>{await fetch("/api/logout",{method:"POST"});location.href="/login"});
 setInterval(()=>{if(dia===isoDate(new Date()))render()},60000);
 
