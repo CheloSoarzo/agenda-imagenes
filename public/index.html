@@ -1691,7 +1691,7 @@ $("#k-xlsx").addEventListener("click",exportarExcel);
 const shift=n=>setDia(sumarDias(dia,vista==="semana"?7*n:n));
 $("#prev").addEventListener("click",()=>shift(-1));
 $("#next").addEventListener("click",()=>shift(1));
-$("#hoy").addEventListener("click",()=>setDia(isoDate(new Date())));
+$("#hoy").addEventListener("click",()=>{if(vista==="semana"){setVista("dia");citas=[];dia=""}setDia(isoDate(new Date()))});   // Hoy = solo el día de hoy
 $("#fecha").addEventListener("change",e=>{if(e.target.value)setDia(e.target.value)});
 $("#nueva").addEventListener("click",()=>{const n=new Date();const m=Math.min(Math.max(Math.ceil((n.getHours()*60+n.getMinutes())/STEP)*STEP,START),ATENCION_FIN-STEP);openForm(null,{equipo:agendaSel==="todas"?"tc":agendaSel,hora:toHora(m)})});
 $("#salir").addEventListener("click",async()=>{await fetch("/api/logout",{method:"POST"});location.href="/login"});
