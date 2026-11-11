@@ -1128,11 +1128,20 @@ async function hojaRetiro(c){
     else toast(msg);
   }catch(e){w.close();toast(e.message)}
 }
+// Feriados nacionales de Chile (para contar días hábiles). Actualizar cada año.
+const FERIADOS=new Set([
+  "2026-01-01","2026-04-03","2026-04-04","2026-05-01","2026-05-21","2026-06-21","2026-06-29","2026-07-16","2026-08-15",
+  "2026-09-18","2026-09-19","2026-10-12","2026-10-31","2026-11-01","2026-12-08","2026-12-25",
+  "2027-01-01","2027-03-26","2027-03-27","2027-05-01","2027-05-21","2027-06-21","2027-06-28","2027-07-16","2027-08-15",
+  "2027-09-17","2027-09-18","2027-09-19","2027-10-11","2027-10-31","2027-11-01","2027-12-08","2027-12-25"]);
+const DIAS_INFORME=2;   // el informe queda listo 2 días hábiles después del examen
+function sumarHabiles(f,n){let d=f;while(n>0){d=sumarDias(d,1);const w=parseISO(d).getDay();if(w!==0&&w!==6&&!FERIADOS.has(d))n--}return d}
 function imprimirHoja(c,clave,w0){
   const esc=t=>String(t??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
   const centro=yo?.centro||"", logo=yo?.logo?location.origin+yo.logo:"";
   const fecha=parseISO(c.fecha).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   const url=PORTAL_URL||"(dirección pendiente)";
+  const informeListo=(f=>parseISO(f).toLocaleDateString("es-CL",{weekday:"long"})+" "+f.slice(8,10)+"/"+f.slice(5,7)+"/"+f.slice(0,4))(sumarHabiles(c.fecha,DIAS_INFORME));
   const w=w0||window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
   w.document.open();
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Hoja de retiro · ${esc(c.paciente)}</title>
@@ -1141,12 +1150,14 @@ function imprimirHoja(c,clave,w0){
 h1{font-size:20px;margin:0}.sub{color:#555;font-size:13px}table{border-collapse:collapse;width:100%;margin:8px 0 18px}td{padding:6px 8px;border-bottom:1px solid #ddd;vertical-align:top}td:first-child{color:#555;width:38%}
 .acceso{border:2px solid #111;border-radius:10px;padding:16px 18px;margin:12px 0 18px}.acceso h2{margin:0 0 10px;font-size:17px}
 .dato{font-size:15px;margin:6px 0}.dato b{font-family:ui-monospace,Menlo,monospace;font-size:20px;letter-spacing:.08em}
+tr.listo td{background:#f3f4f6;font-size:16px}tr.listo .sub{font-size:12px}
 ol{padding-left:20px}li{margin:4px 0}.pie{margin-top:24px;font-size:12px;color:#555;border-top:1px solid #ccc;padding-top:10px}
 @media print{body{margin:14mm}button{display:none}}</style></head><body>
 <div class="top">${logo?`<img src="${esc(logo)}" alt="">`:""}<div><h1>${esc(centro?"Centro de imágenes "+centro:"Centro de imágenes")}</h1><div class="sub">Comprobante de atención y retiro de examen</div></div></div>
 <table><tr><td>Paciente</td><td><b>${esc(c.paciente)}</b></td></tr><tr><td>RUT</td><td>${esc(c.rut)}</td></tr>
 <tr><td>Examen</td><td>${esc(c.examen||"")}</td></tr><tr><td>Fecha</td><td>${esc(fecha)} · ${esc(c.hora)}</td></tr>
-<tr><td>N° de acceso</td><td>${esc(c.accesion||"")}</td></tr></table>
+<tr><td>N° de acceso</td><td>${esc(c.accesion||"")}</td></tr>
+<tr class="listo"><td>Informe disponible desde</td><td><b>${esc(informeListo)}</b><div class="sub">${DIAS_INFORME} días hábiles después de su examen</div></td></tr></table>
 <div class="acceso"><h2>Ver su examen en línea</h2>
 <div class="dato">Dirección: <b>${esc(url.replace(/^https?:\/\//,""))}</b></div>
 <div class="dato">Usuario: <b>${esc(c.rut)}</b> (su RUT)</div>
@@ -1154,7 +1165,7 @@ ol{padding-left:20px}li{margin:4px 0}.pie{margin-top:24px;font-size:12px;color:#
 <ol><li>Entre a la dirección desde su celular o computador.</li><li>Escriba su RUT y su clave.</li>
 <li>Verá su examen con su estado. Podrá ver sus imágenes apenas estén listas, y cuando el médico radiólogo firme el informe, podrá verlo y descargarlo en PDF.</li>
 <li>Su clave sirve para todos sus exámenes en este centro. Guárdela y no la comparta.</li></ol>
-<p>El informe suele estar disponible dentro de los plazos informados en recepción. Si olvida su clave, pida una nueva en recepción presentando su carnet.</p>
+<p>Si olvida su clave, pida una nueva en recepción presentando su carnet.</p>
 <div class="pie">Impreso el ${esc((d=>`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`)(new Date()))}${yo?.nombre?" por "+esc(yo.nombre):""}.</div>
 <script>window.onload=()=>{setTimeout(()=>window.print(),200)}<\/script></body></html>`);
   w.document.close();

@@ -421,6 +421,22 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 .fecha-cl-oculto{position:absolute!important;right:0;bottom:0;width:1px!important;height:1px!important;opacity:0;pointer-events:none;border:0!important;padding:0!important;margin:0!important}
 .fecha-cl-txt.fecha-cl-error{border-color:var(--bad)!important;color:var(--bad)}
 .daynav .fecha-cl{width:auto}
+/* Calendario emergente propio (fecha-cl.js) */
+.cal-pop{position:fixed;z-index:1000;width:252px;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:10px}
+.cal-cab{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.cal-sel{display:flex;gap:4px}
+.cal-sel select{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:7px;padding:4px 4px;font:inherit;font-size:13px;font-weight:600}
+.cal-nav{width:30px;height:30px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;cursor:pointer;font-size:16px;line-height:1}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-dow{font-size:11px;color:var(--muted);text-align:center;padding:2px 0}
+.cal-dia{height:30px;border:0;background:none;color:var(--fg);border-radius:7px;cursor:pointer;font:inherit;font-size:13px;font-variant-numeric:tabular-nums}
+.cal-dia:hover{background:var(--sunk)}
+.cal-dia.hoy{box-shadow:inset 0 0 0 1px var(--accent);font-weight:700}
+.cal-dia.sel{background:var(--accent);color:var(--accent-fg,#fff);font-weight:700}
+.cal-dia:disabled{opacity:.35;cursor:default}
+.cal-dia:focus-visible,.cal-nav:focus-visible,.cal-pie button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cal-pie{display:flex;justify-content:space-between;margin-top:8px}
+.cal-pie button{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
 .daynav .fecha-cl-txt{width:7.6em;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px;font-family:var(--f-mono);font-size:13px;color:var(--fg)}
 #k-entre .fecha-cl,.rango .fecha-cl{width:auto;display:inline-flex}
 #k-entre .fecha-cl-txt{width:7.6em;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 8px;color:var(--fg)}
