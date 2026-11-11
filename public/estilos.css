@@ -384,7 +384,11 @@ button.colhead:hover{background:var(--sunk)}
 #c-examenes{min-width:0}
 #c-examenes tr.tot td{font-weight:800;border-top:2px solid var(--line);border-bottom:0}
 /* caja por período */
-#k-rango{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;font:inherit;color:var(--fg)}
+.rangos{display:inline-flex;flex-wrap:wrap;gap:4px}
+.rango{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+.rango:hover{background:var(--sunk)}
+.rango[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg,#fff);font-weight:600}
+.rango:focus-visible{outline:2px solid var(--accent,var(--fg));outline-offset:2px}
 .k-entre{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .k-entre input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px;font:inherit;color:var(--fg)}
 .k-entre[hidden]{display:none!important}

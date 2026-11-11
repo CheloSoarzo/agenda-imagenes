@@ -296,14 +296,15 @@
     <div class="caja-head">
       <div class="caja-marca"><div class="marca" id="k-logo" hidden><img alt=""></div><h2 id="k-titulo">Caja del día</h2></div>
       <div class="caja-ctrl">
-        <select id="k-rango" aria-label="Período">
-          <option value="hoy">Hoy</option>
-          <option value="3d">Últimos 3 días</option>
-          <option value="7d">Última semana</option>
-          <option value="mes">Mes actual</option>
-          <option value="mesant">Mes pasado</option>
-          <option value="entre">Elegir fechas…</option>
-        </select>
+        <div class="rangos" id="k-rango" role="group" aria-label="Período">
+          <button type="button" class="rango" data-r="hoy" aria-pressed="true">Hoy</button>
+          <button type="button" class="rango" data-r="ayer" aria-pressed="false">Ayer</button>
+          <button type="button" class="rango" data-r="3d" aria-pressed="false">3 días</button>
+          <button type="button" class="rango" data-r="7d" aria-pressed="false">Última semana</button>
+          <button type="button" class="rango" data-r="mes" aria-pressed="false">Este mes</button>
+          <button type="button" class="rango" data-r="mesant" aria-pressed="false">Mes pasado</button>
+          <button type="button" class="rango" data-r="entre" aria-pressed="false">Elegir fechas…</button>
+        </div>
         <span class="k-entre" id="k-entre" hidden>
           <input type="date" id="k-desde" aria-label="Desde"><span class="meta">a</span><input type="date" id="k-hasta" aria-label="Hasta">
         </span>
@@ -1322,6 +1323,7 @@ const cobradoTxt=p=>(p.creado.slice(0,10)!==p.fecha?p.creado.slice(8,10)+"/"+p.c
 // Fechas de cada período (incluye hoy)
 function rangoPreset(v){
   const hoy=isoDate(new Date()), d=new Date();
+  if(v==="ayer"){const a=sumarDias(hoy,-1);return {desde:a,hasta:a}}
   if(v==="3d") return {desde:sumarDias(hoy,-2),hasta:hoy};
   if(v==="7d") return {desde:sumarDias(hoy,-6),hasta:hoy};
   if(v==="mes") return {desde:hoy.slice(0,8)+"01",hasta:hoy};
@@ -1371,7 +1373,7 @@ async function abrirCaja(rango){
       {t:"Contado",n:1,f:x=>x.cerrada?$$(x.efectivo_contado):"—"},{t:"Diferencia",n:1,f:x=>x.cerrada?(x.diferencia>0?"+":x.diferencia<0?"−":"")+$$(Math.abs(x.diferencia)):"—"},
       {t:"Estado",f:x=>x.cerrada?"Cerrada":"Abierta"}]);
     if(!d.por_dia.length) $("#k-dias").innerHTML='<tr><td class="meta">No hay pagos en este período.</td></tr>';
-    [...$("#k-dias").querySelectorAll("tr.click")].forEach((tr,i)=>{tr.tabIndex=0;const ir=()=>{$("#k-rango").value="entre";$("#k-entre").hidden=false;abrirCaja({desde:d.por_dia[i].fecha,hasta:d.por_dia[i].fecha})};
+    [...$("#k-dias").querySelectorAll("tr.click")].forEach((tr,i)=>{tr.tabIndex=0;const ir=()=>{marcarRango("entre");$("#k-entre").hidden=false;abrirCaja({desde:d.por_dia[i].fecha,hasta:d.por_dia[i].fecha})};
       tr.addEventListener("click",ir);tr.addEventListener("keydown",e=>{if(e.key==="Enter")ir()})});
   }
   $("#k-pagos-tit").textContent=d.un_dia?"Pagos del día":"Pagos del período";
@@ -1424,9 +1426,12 @@ async function abrirCaja(rango){
     });
   }
 }
-$("#btnCaja").addEventListener("click",()=>{$("#k-rango").value="hoy";$("#k-entre").hidden=true;abrirCaja(rangoPreset("hoy"))});
-$("#k-rango").addEventListener("change",e=>{
-  const v=e.target.value; $("#k-entre").hidden=v!=="entre";
+// Botones de período de la caja (Hoy, Ayer, 3 días, Última semana, Este mes, Mes pasado, Elegir fechas)
+function marcarRango(v){for(const b of document.querySelectorAll("#k-rango .rango"))b.setAttribute("aria-pressed",String(b.dataset.r===v))}
+$("#btnCaja").addEventListener("click",()=>{marcarRango("hoy");$("#k-entre").hidden=true;abrirCaja(rangoPreset("hoy"))});
+$("#k-rango").addEventListener("click",e=>{
+  const b=e.target.closest(".rango"); if(!b) return;
+  const v=b.dataset.r; marcarRango(v); $("#k-entre").hidden=v!=="entre";
   if(v==="entre"){$("#k-desde").value=cajaRango.desde;$("#k-hasta").value=cajaRango.hasta;$("#k-desde").focus();return}
   abrirCaja(rangoPreset(v));
 });
