@@ -410,6 +410,7 @@ table.pagos.dias tr.click:hover td,table.pagos.dias tr.click:focus td{background
 
 /* Pie de página: dominio, versión y copyright */
 .pie-sistema{text-align:center;font-size:12px;color:var(--muted);padding:18px 16px 22px}
+.msc26-iso{vertical-align:-2px;margin-right:6px}
 @media print{.pie-sistema{display:none}}
 
 /* Fechas en formato chileno dd/mm/aaaa (fecha-cl.js) */

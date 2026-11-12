@@ -8,6 +8,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/estilos.css">
 <script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
+<link rel="icon" href="/msc26/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/msc26/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/msc26/apple-touch-icon.png">
 </head>
 <body>
 <div class="login-wrap">
@@ -44,6 +47,6 @@ fetch("/api/config").then(r=>r.json()).then(c=>{
 }).catch(()=>{});
 </script>
 <footer class="pie-sistema" id="pie-sistema"></footer>
-<script>fetch("/api/config").then(r=>r.json()).then(c=>{document.getElementById("pie-sistema").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 MSC26"}).catch(()=>{})</script>
+<script>fetch("/api/config").then(r=>r.json()).then(c=>{const pie=document.getElementById("pie-sistema");pie.innerHTML='<svg class="msc26-iso" width="14" height="14" viewBox="0 0 160 160" aria-hidden="true"><path d="M54.6 134.4 A60 60 0 1 1 105.4 134.4" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/><circle cx="80" cy="82" r="18" fill="currentColor"/><rect x="6" y="104" width="148" height="16" rx="8" fill="#14B8A6"/></svg>';pie.append(location.host+" · Versión "+(c.version||"")+" · © 2026 MSC26")}).catch(()=>{})</script>
 </body>
 </html>
