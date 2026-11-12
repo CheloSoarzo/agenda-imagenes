@@ -15,7 +15,7 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE === "1";
 const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 const SESION_HORAS = Number(process.env.SESION_HORAS) || 12;
 const COOKIE = "agenda_sesion";
-const { resumenCaja, hoyCaja, CAJA_TZ } = require("./caja");
+const { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas } = require("./caja");
 const CENTRO = txtEnv(process.env.CENTRO_NOMBRE); // nombre del centro que se muestra en pantalla
 function txtEnv(v) { return String(v || "").trim().slice(0, 60); }
 // Logo del centro: CENTRO_LOGO (archivo en public/logos) o, si no se indica, el que coincide con el nombre del centro
@@ -477,6 +477,10 @@ const rutas = [
     return [200, resumenCaja(fecha)];
   }],
 
+  ["GET", /^\/api\/caja\/tarjetas$/, "caja", async () => [200, configTarjetas()]],
+  ["PUT", /^\/api\/caja\/tarjetas$/, "admin", async (req) => {
+    try { return [200, guardarTarjetas(await leerCuerpo(req))]; } catch (e) { fallo(400, "Revisa los valores de comisión."); }
+  }],
   ["POST", /^\/api\/caja\/reabrir$/, "admin", async (req) => {
     const b = await leerCuerpo(req);
     db.prepare("DELETE FROM cierres WHERE fecha = ?").run(txt(b.fecha, 10));

@@ -485,3 +485,19 @@ body.sin-dinero .ex-vals,body.sin-dinero #ir-cobro,body.sin-dinero #cobro,body.s
 @media (max-width:900px){.msc26-marca .msc26-txt{display:none}}
 @media (max-width:600px){.msc26-marca{border-left:0;padding-left:0}}
 @media print{.msc26-marca{display:none}}
+
+/* Caja: tarjetas y depósito estimado */
+.k-tarjetas{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.k-tarj-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.k-tarj-cab h3{margin:0}
+.k-tarj-cuerpo{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;align-items:start}
+.k-deposito{display:flex;flex-direction:column;gap:8px}
+.tile.destacado{background:color-mix(in srgb,var(--accent) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+.tile.destacado b{font-size:22px}
+.tile.destacado small{color:var(--muted);font-size:12px}
+.k-dep-lista{margin:0;padding-left:18px;font-size:13px;display:flex;flex-direction:column;gap:2px}
+.k-tarj-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;border-top:1px solid var(--line);padding-top:10px}
+.k-tarj-form .chk{display:flex;gap:6px;align-items:center;font-size:13px}
+.k-tarj-form .meta{grid-column:1/-1;margin:0}
+.k-tarj-acc{display:flex;gap:6px}
+@media (max-width:760px){.k-tarj-cuerpo{grid-template-columns:1fr}}

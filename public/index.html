@@ -322,6 +322,23 @@
       <div><h3>Por equipo</h3><div class="tbl" id="k-equipo"></div></div>
       <div id="k-desc-box" hidden><h3>Descuentos por motivo</h3><div class="tbl" id="k-desc"></div></div>
     </div>
+    <section class="k-tarjetas" id="k-tarj" hidden aria-labelledby="k-tarj-tit">
+      <div class="k-tarj-cab"><h3 id="k-tarj-tit">Tarjetas · depósito estimado</h3><button type="button" class="btn noprint" id="k-tarj-cfg" hidden>Comisiones tarjetas</button></div>
+      <div class="k-tarj-cuerpo">
+        <div class="tbl" id="k-tarj-tabla"></div>
+        <div class="k-deposito" id="k-tarj-dep"></div>
+      </div>
+      <form class="k-tarj-form noprint" id="k-tarj-form" hidden>
+        <div class="field"><label for="kt-prov">Proveedor</label><input id="kt-prov" maxlength="40"></div>
+        <div class="field"><label for="kt-deb">Débito %</label><input id="kt-deb" inputmode="decimal"></div>
+        <div class="field"><label for="kt-cred">Crédito %</label><input id="kt-cred" inputmode="decimal"></div>
+        <div class="field"><label for="kt-fijo">Cargo fijo por venta $</label><input id="kt-fijo" inputmode="numeric"></div>
+        <div class="field"><label for="kt-dias">Días hábiles al depósito</label><input id="kt-dias" inputmode="numeric"></div>
+        <label class="chk"><input type="checkbox" id="kt-iva"> La comisión lleva IVA (19 %)</label>
+        <div class="k-tarj-acc"><button type="submit" class="btn primary">Guardar</button><button type="button" class="btn" id="kt-cancelar">Cancelar</button></div>
+        <p class="meta">Usa las tasas de tu contrato con el proveedor (aparecen en la liquidación o en el portal del comercio).</p>
+      </form>
+    </section>
     <div id="k-dias-box" hidden><h3>Cierres por día</h3><div class="tblwrap"><table class="pagos dias" id="k-dias"></table></div><p class="meta">Toca un día para verlo, cerrarlo o reabrirlo.</p></div>
     <h3 id="k-pagos-tit">Pagos del día</h3>
     <div class="tblwrap"><table class="pagos" id="k-pagos"></table></div>
@@ -1361,6 +1378,52 @@ function grupoTabla(el,obj,etq=k=>k){
   if(!filas.length){el.innerHTML='<p class="meta">Sin pagos.</p>';return}
   tabla(el,filas,[{t:"",f:r=>r.k},{t:"N°",n:1,f:r=>r.cantidad},{t:"Bonificación",n:1,f:r=>$$(r.bonificacion)},{t:"Recaudado",n:1,f:r=>$$(r.copago)}]);
 }
+// Tarjetas: comisión aproximada y lo que el proveedor (Klap) debería depositar el día hábil siguiente
+const pct=n=>String(n).replace(".",",")+" %";
+const fLarga=f=>parseISO(f).toLocaleDateString("es-CL",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}).replace(/-/g,"/");
+function pintarTarjetas(tj,d){
+  const box=$("#k-tarj"); if(!tj){box.hidden=true;return}
+  box.hidden=false;
+  const c=tj.config;
+  $("#k-tarj-tit").textContent=`Tarjetas · depósito estimado ${c.proveedor||""}`.trim();
+  $("#k-tarj-cfg").hidden=!(yo&&yo.rol==="admin");
+  const filas=[["Débito",tj.debito,c.debito],["Crédito",tj.credito,c.credito]].filter(([, x])=>x.cantidad)
+    .map(([k,x,p])=>({k,cantidad:x.cantidad,bruto:x.bruto,comision:x.comision,tasa:`${pct(p)}${c.fijo?" + "+$$(c.fijo):""}`}));
+  if(!filas.length){$("#k-tarj-tabla").innerHTML='<p class="meta">No hay ventas con tarjeta.</p>';$("#k-tarj-dep").innerHTML="";return}
+  if(tj.iva) filas.push({k:"IVA de la comisión",cantidad:"",bruto:"",comision:tj.iva,tasa:"19 %"});
+  tabla($("#k-tarj-tabla"),filas,[{t:"",f:r=>r.k},{t:"N°",n:1,f:r=>r.cantidad},{t:"Ventas",n:1,f:r=>r.bruto===""?"":$$(r.bruto)},
+    {t:"Comisión",f:r=>r.tasa},{t:"Descuento",n:1,f:r=>"−"+$$(r.comision)}]);
+  const dep=$("#k-tarj-dep"); dep.innerHTML="";
+  const caja=document.createElement("div"); caja.className="tile destacado";
+  caja.innerHTML="<span>Debería depositarse</span><b></b><small></small>";
+  caja.querySelector("b").textContent=$$(tj.neto);
+  caja.querySelector("small").textContent=tj.depositos.length===1?"el "+fLarga(tj.depositos[0].fecha):`en ${tj.depositos.length} depósitos`;
+  dep.appendChild(caja);
+  if(tj.depositos.length>1){
+    const ul=document.createElement("ul"); ul.className="k-dep-lista";
+    for(const x of tj.depositos){const li=document.createElement("li");
+      li.textContent=`${fLarga(x.fecha)}: ${$$(x.neto)} (ventas del ${x.ventas.map(v=>v.slice(8,10)+"/"+v.slice(5,7)).join(", ")})`;ul.appendChild(li)}
+    dep.appendChild(ul);
+  }
+  const nota=document.createElement("p"); nota.className="meta";
+  nota.textContent=`Aproximado: ventas ${$$(tj.bruto)} − comisión ${$$(tj.comision)}${tj.iva?` − IVA ${$$(tj.iva)}`:""}. Ventas de fin de semana o feriado se depositan el siguiente día hábil.`;
+  dep.appendChild(nota);
+}
+async function abrirTarjetasCfg(){
+  const f=$("#k-tarj-form");
+  try{const c=await api("/api/caja/tarjetas");
+    $("#kt-prov").value=c.proveedor||"";$("#kt-deb").value=String(c.debito).replace(".",",");$("#kt-cred").value=String(c.credito).replace(".",",");
+    $("#kt-fijo").value=c.fijo;$("#kt-dias").value=c.dias;$("#kt-iva").checked=!!c.iva;f.hidden=false;$("#kt-deb").focus();
+  }catch(e){toast(e.message)}
+}
+document.addEventListener("DOMContentLoaded",()=>{
+  $("#k-tarj-cfg").addEventListener("click",()=>{const f=$("#k-tarj-form");if(f.hidden)abrirTarjetasCfg();else f.hidden=true});
+  $("#kt-cancelar").addEventListener("click",()=>{$("#k-tarj-form").hidden=true});
+  $("#k-tarj-form").addEventListener("submit",async e=>{e.preventDefault();
+    try{await api("/api/caja/tarjetas",{method:"PUT",body:{proveedor:$("#kt-prov").value,debito:$("#kt-deb").value,credito:$("#kt-cred").value,
+      fijo:$("#kt-fijo").value,dias:$("#kt-dias").value,iva:$("#kt-iva").checked}});
+      $("#k-tarj-form").hidden=true;toast("Comisiones guardadas");abrirCaja()}catch(err){toast(err.message)}});
+});
 async function abrirCaja(rango){
   if(rango) cajaRango=rango;
   if(!cajaRango.desde) cajaRango=rangoPreset("hoy");
@@ -1395,6 +1458,7 @@ async function abrirCaja(rango){
   const tiles=[["Atenciones cobradas",t.atenciones],["Valor total",$$(t.valor)],["Bonificación (bonos)",$$(t.bonificacion)],["Descuentos",$$(t.descuentos||0)],["Recaudado en caja",$$(t.recaudado)]];
   $("#k-tiles").innerHTML="";
   for(const [l,v] of tiles){const d2=document.createElement("div");d2.className="tile";d2.innerHTML="<span></span><b></b>";d2.children[0].textContent=l;d2.children[1].textContent=v;$("#k-tiles").appendChild(d2)}
+  pintarTarjetas(t.tarjetas,d);
   grupoTabla($("#k-medio"),t.por_medio); grupoTabla($("#k-prev"),t.por_prevision); grupoTabla($("#k-equipo"),t.por_equipo,k=>EQN[k]||k);
   const pd=Object.entries(t.por_descuento||{}).map(([k,v])=>({k,...v}));
   $("#k-desc-box").hidden=!pd.length;
@@ -1598,6 +1662,25 @@ async function exportarPDF(){
     doc.autoTable({startY:58,margin:{left:x},tableWidth:gw,styles:estilo,headStyles:cab,head:[["Motivo","N°","Descuento"]],body:descFilas,
       columnStyles:{1:{halign:"right"},2:{halign:"right"}}});
     yMax=Math.max(yMax,doc.lastAutoTable.finalY);
+  }
+  // tarjetas: depósito estimado
+  const tj=t.tarjetas;
+  if(tj&&tj.bruto>0){
+    const c=tj.config, y0=yMax+8;
+    doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text(`Tarjetas · depósito estimado ${c.proveedor||""}`,M,y0); doc.setFont("helvetica","normal");
+    const fl=[["Débito",tj.debito,c.debito],["Crédito",tj.credito,c.credito]].filter(([,x])=>x.cantidad)
+      .map(([k,x,p])=>[k,x.cantidad,$$(x.bruto),pct(p)+(c.fijo?" + "+$$(c.fijo):""),"-"+$$(x.comision)]);
+    if(tj.iva) fl.push(["IVA de la comisión","","","19 %","-"+$$(tj.iva)]);
+    doc.autoTable({startY:y0+2,margin:{left:M},tableWidth:(W-2*M)*0.55,styles:estilo,headStyles:cab,head:[["","N°","Ventas","Comisión","Descuento"]],body:fl,
+      columnStyles:{1:{halign:"right"},2:{halign:"right"},4:{halign:"right"}}});
+    const x=M+(W-2*M)*0.55+6, wB=W-M-x;
+    doc.setFillColor(225,240,238); doc.roundedRect(x,y0+2,wB,22,2,2,"F");
+    doc.setFontSize(8); doc.setTextColor(90); doc.text("DEBERÍA DEPOSITARSE",x+4,y0+8);
+    doc.setTextColor(0); doc.setFontSize(15); doc.setFont("helvetica","bold"); doc.text($$(tj.neto),x+4,y0+16); doc.setFont("helvetica","normal");
+    doc.setFontSize(8.5); doc.setTextColor(90);
+    doc.text(tj.depositos.map(z=>fLarga(z.fecha)+(tj.depositos.length>1?": "+$$(z.neto):"")).join(" · "),x+4,y0+21,{maxWidth:wB-8});
+    doc.setTextColor(0);
+    yMax=Math.max(doc.lastAutoTable.finalY,y0+24);
   }
   // pagos
   doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text(d.un_dia?"Pagos del día":"Pagos del período",M,yMax+8); doc.setFont("helvetica","normal");

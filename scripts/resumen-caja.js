@@ -13,6 +13,10 @@ console.log(JSON.stringify({
   atenciones: t.atenciones, valor: t.valor, bonificacion: t.bonificacion, recaudado: t.recaudado,
   descuentos: t.descuentos, con_descuento: t.con_descuento, anulados: t.anulados,
   efectivo_esperado: t.efectivo_esperado,
+  tarjetas: t.tarjetas && t.tarjetas.bruto > 0 ? { proveedor: t.tarjetas.config.proveedor, bruto: t.tarjetas.bruto,
+    comision: t.tarjetas.comision, iva: t.tarjetas.iva, neto: t.tarjetas.neto, depositos: t.tarjetas.depositos,
+    debito: { ...t.tarjetas.debito, tasa: t.tarjetas.config.debito }, credito: { ...t.tarjetas.credito, tasa: t.tarjetas.config.credito },
+    fijo: t.tarjetas.config.fijo } : null,
   por_medio: solo(t.por_medio), por_prevision: solo(t.por_prevision), por_equipo: solo(t.por_equipo),
   pagos: process.argv.includes("--detalle") ? r.pagos.map((p) => ({
     hora: String(p.creado || "").slice(11, 16), paciente: p.paciente, rut: p.rut, examen: p.examen, equipo: p.equipo,
