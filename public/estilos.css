@@ -475,3 +475,13 @@ body.sin-dinero .ex-vals,body.sin-dinero #ir-cobro,body.sin-dinero #cobro,body.s
 .u-agendas{display:flex;gap:12px;flex-wrap:wrap}.u-agendas label{display:inline-flex;gap:4px;align-items:center;font-weight:500;font-size:13px;text-transform:none;letter-spacing:0;color:var(--fg)}
 .urow{flex-wrap:wrap}.urow .u-agendas{flex-basis:100%;order:9;margin-top:2px;padding-left:2px}
 .urow .who{flex-basis:100%}
+
+/* Firma del desarrollador a la derecha de la cabecera */
+.msc26-marca{display:flex;align-items:center;gap:8px;padding-left:14px;border-left:1px solid var(--line);color:var(--fg);--msc26-acento:#0D9488;text-decoration:none;white-space:nowrap}
+.msc26-marca .msc26-txt{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.msc26-marca .msc26-logo{display:block;height:22px;width:auto}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .msc26-marca{--msc26-acento:#14B8A6}}
+:root[data-theme="dark"] .msc26-marca{--msc26-acento:#14B8A6}
+@media (max-width:900px){.msc26-marca .msc26-txt{display:none}}
+@media (max-width:600px){.msc26-marca{border-left:0;padding-left:0}}
+@media print{.msc26-marca{display:none}}
