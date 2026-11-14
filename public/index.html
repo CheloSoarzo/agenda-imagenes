@@ -332,7 +332,7 @@
         <div class="field"><label for="kt-prov">Proveedor</label><input id="kt-prov" maxlength="40"></div>
         <div class="field"><label for="kt-deb">Débito %</label><input id="kt-deb" inputmode="decimal"></div>
         <div class="field"><label for="kt-cred">Crédito %</label><input id="kt-cred" inputmode="decimal"></div>
-        <div class="field"><label for="kt-fijo">Cargo fijo por venta $</label><input id="kt-fijo" inputmode="numeric"></div>
+        <div class="field"><label for="kt-fijo">Cargo fijo por venta (UF)</label><input id="kt-fijo" inputmode="decimal"><small class="meta" id="kt-fijo-pesos"></small></div>
         <div class="field"><label for="kt-dias">Días hábiles al depósito</label><input id="kt-dias" inputmode="numeric"></div>
         <label class="chk"><input type="checkbox" id="kt-iva"> La comisión lleva IVA (19 %)</label>
         <div class="k-tarj-acc"><button type="submit" class="btn primary">Guardar</button><button type="button" class="btn" id="kt-cancelar">Cancelar</button></div>
@@ -1388,7 +1388,7 @@ function pintarTarjetas(tj,d){
   $("#k-tarj-tit").textContent=`Tarjetas · depósito estimado ${c.proveedor||""}`.trim();
   $("#k-tarj-cfg").hidden=!(yo&&yo.rol==="admin");
   const filas=[["Débito",tj.debito,c.debito],["Crédito",tj.credito,c.credito]].filter(([, x])=>x.cantidad)
-    .map(([k,x,p])=>({k,cantidad:x.cantidad,bruto:x.bruto,comision:x.comision,tasa:`${pct(p)}${c.fijo?" + "+$$(c.fijo):""}`}));
+    .map(([k,x,p])=>({k,cantidad:x.cantidad,bruto:x.bruto,comision:x.comision,tasa:`${pct(p)}${c.fijo_uf?" + "+String(c.fijo_uf).replace(".",",")+" UF":""}`}));
   if(!filas.length){$("#k-tarj-tabla").innerHTML='<p class="meta">No hay ventas con tarjeta.</p>';$("#k-tarj-dep").innerHTML="";return}
   if(tj.iva) filas.push({k:"IVA de la comisión",cantidad:"",bruto:"",comision:tj.iva,tasa:"19 %"});
   tabla($("#k-tarj-tabla"),filas,[{t:"",f:r=>r.k},{t:"N°",n:1,f:r=>r.cantidad},{t:"Ventas",n:1,f:r=>r.bruto===""?"":$$(r.bruto)},
@@ -1413,7 +1413,8 @@ async function abrirTarjetasCfg(){
   const f=$("#k-tarj-form");
   try{const c=await api("/api/caja/tarjetas");
     $("#kt-prov").value=c.proveedor||"";$("#kt-deb").value=String(c.debito).replace(".",",");$("#kt-cred").value=String(c.credito).replace(".",",");
-    $("#kt-fijo").value=c.fijo;$("#kt-dias").value=c.dias;$("#kt-iva").checked=!!c.iva;f.hidden=false;$("#kt-deb").focus();
+    $("#kt-fijo").value=String(c.fijo_uf).replace(".",",");
+    $("#kt-fijo-pesos").textContent=`≈ ${$$(c.fijo)} con UF ${c.uf_aproximado?"aprox. ":""}${$$(c.uf)}${c.uf_fecha?" del "+c.uf_fecha.split("-").reverse().join("/"):""}`;$("#kt-dias").value=c.dias;$("#kt-iva").checked=!!c.iva;f.hidden=false;$("#kt-deb").focus();
   }catch(e){toast(e.message)}
 }
 document.addEventListener("DOMContentLoaded",()=>{
@@ -1421,7 +1422,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   $("#kt-cancelar").addEventListener("click",()=>{$("#k-tarj-form").hidden=true});
   $("#k-tarj-form").addEventListener("submit",async e=>{e.preventDefault();
     try{await api("/api/caja/tarjetas",{method:"PUT",body:{proveedor:$("#kt-prov").value,debito:$("#kt-deb").value,credito:$("#kt-cred").value,
-      fijo:$("#kt-fijo").value,dias:$("#kt-dias").value,iva:$("#kt-iva").checked}});
+      fijo_uf:$("#kt-fijo").value,dias:$("#kt-dias").value,iva:$("#kt-iva").checked}});
       $("#k-tarj-form").hidden=true;toast("Comisiones guardadas");abrirCaja()}catch(err){toast(err.message)}});
 });
 async function abrirCaja(rango){
@@ -1669,7 +1670,7 @@ async function exportarPDF(){
     const c=tj.config, y0=yMax+8;
     doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.text(`Tarjetas · depósito estimado ${c.proveedor||""}`,M,y0); doc.setFont("helvetica","normal");
     const fl=[["Débito",tj.debito,c.debito],["Crédito",tj.credito,c.credito]].filter(([,x])=>x.cantidad)
-      .map(([k,x,p])=>[k,x.cantidad,$$(x.bruto),pct(p)+(c.fijo?" + "+$$(c.fijo):""),"-"+$$(x.comision)]);
+      .map(([k,x,p])=>[k,x.cantidad,$$(x.bruto),pct(p)+(c.fijo_uf?" + "+String(c.fijo_uf).replace(".",",")+" UF":""),"-"+$$(x.comision)]);
     if(tj.iva) fl.push(["IVA de la comisión","","","19 %","-"+$$(tj.iva)]);
     doc.autoTable({startY:y0+2,margin:{left:M},tableWidth:(W-2*M)*0.55,styles:estilo,headStyles:cab,head:[["","N°","Ventas","Comisión","Descuento"]],body:fl,
       columnStyles:{1:{halign:"right"},2:{halign:"right"},4:{halign:"right"}}});

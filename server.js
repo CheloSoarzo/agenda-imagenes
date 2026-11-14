@@ -15,7 +15,8 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE === "1";
 const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 const SESION_HORAS = Number(process.env.SESION_HORAS) || 12;
 const COOKIE = "agenda_sesion";
-const { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas } = require("./caja");
+const { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas, iniciarUF } = require("./caja");
+iniciarUF();   // valor de la UF para la comisión fija de las tarjetas
 const CENTRO = txtEnv(process.env.CENTRO_NOMBRE); // nombre del centro que se muestra en pantalla
 function txtEnv(v) { return String(v || "").trim().slice(0, 60); }
 // Logo del centro: CENTRO_LOGO (archivo en public/logos) o, si no se indica, el que coincide con el nombre del centro

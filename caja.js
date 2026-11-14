@@ -25,17 +25,43 @@ function habilSiguiente(fecha, dias = 1) {
   }
   return d.toISOString().slice(0, 10);
 }
-// Valores referenciales de Klap (POS); cada comercio tiene su contrato: se cambian en Caja → «Comisiones tarjetas»
-const TARJETAS_DEF = { proveedor: "Klap", debito: 0.62, credito: 1.39, fijo: 77, iva: true, dias: 1 };
+// Tasas del contrato con Klap (13/11/2026): débito 0,59 %, crédito 1,33 %, 0,0017 UF por operación, todo + IVA.
+// Se cambian en Caja → «Comisiones tarjetas». v:2 = tasas del contrato (reemplaza las referenciales de antes).
+const TARJETAS_DEF = { v: 2, proveedor: "Klap", debito: 0.59, credito: 1.33, fijo_uf: 0.0017, iva: true, dias: 1 };
+
+// ---------- Valor de la UF (para el cargo fijo por operación) ----------
+const UF_RESPALDO = 41300;                   // si nunca se pudo consultar (aprox. noviembre 2026)
+function valorUF() {
+  try { const u = JSON.parse(db.prepare("SELECT valor FROM meta WHERE clave = 'uf'").get()?.valor || "null"); if (u && u.valor > 0) return u; } catch { /* */ }
+  return { valor: UF_RESPALDO, fecha: "", aproximado: true };
+}
+async function actualizarUF() {
+  try {
+    const r = await fetch("https://mindicador.cl/api/uf", { signal: AbortSignal.timeout(15000) });
+    const j = await r.json();
+    const s = (j.serie || [])[0];
+    if (s && s.valor > 1000) {
+      const u = { valor: s.valor, fecha: String(s.fecha || "").slice(0, 10) };
+      db.prepare("INSERT INTO meta (clave, valor) VALUES ('uf', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").run(JSON.stringify(u));
+    }
+  } catch { /* sin internet: se usa el último valor guardado */ }
+}
+function iniciarUF() { actualizarUF(); setInterval(actualizarUF, 6 * 3600 * 1000).unref(); }
+
 function configTarjetas() {
   let c = {};
   try { c = JSON.parse(db.prepare("SELECT valor FROM meta WHERE clave = 'tarjetas'").get()?.valor || "{}"); } catch { c = {}; }
-  return { ...TARJETAS_DEF, ...c };
+  if (c.v !== 2) c = { proveedor: c.proveedor, dias: c.dias };     // tasas antiguas (referenciales): se usan las del contrato
+  const cfg = { ...TARJETAS_DEF, ...Object.fromEntries(Object.entries(c).filter(([, v]) => v !== undefined)) };
+  const uf = valorUF();
+  cfg.uf = uf.valor; cfg.uf_fecha = uf.fecha; cfg.uf_aproximado = !!uf.aproximado;
+  cfg.fijo = Math.round(cfg.fijo_uf * uf.valor * 100) / 100;      // en pesos, con la UF del día
+  return cfg;
 }
 function guardarTarjetas(b) {
   const num = (v, max) => { const n = Number(String(v ?? "").replace(",", ".")); if (!isFinite(n) || n < 0 || n > max) throw new Error("Valor no válido"); return n; };
-  const c = { proveedor: String(b.proveedor || "Klap").slice(0, 40), debito: num(b.debito, 10), credito: num(b.credito, 10),
-    fijo: num(b.fijo, 5000), iva: !!b.iva, dias: Math.round(num(b.dias ?? 1, 10)) || 1 };
+  const c = { v: 2, proveedor: String(b.proveedor || "Klap").slice(0, 40), debito: num(b.debito, 10), credito: num(b.credito, 10),
+    fijo_uf: num(b.fijo_uf, 1), iva: !!b.iva, dias: Math.round(num(b.dias ?? 1, 10)) || 1 };
   db.prepare("INSERT INTO meta (clave, valor) VALUES ('tarjetas', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").run(JSON.stringify(c));
   return c;
 }
@@ -125,4 +151,4 @@ function resumenCaja(desde, hasta = desde) {
   return { fecha: desde, desde, hasta, un_dia: desde === hasta, hoy: hoyCaja(), pagos, totales, cierre, cierres, por_dia };
 }
 
-module.exports = { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas, habilSiguiente };
+module.exports = { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas, habilSiguiente, iniciarUF };
