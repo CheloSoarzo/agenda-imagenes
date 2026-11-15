@@ -100,7 +100,8 @@ CREATE TABLE IF NOT EXISTS cierres (
 const colsCitas = db.prepare("PRAGMA table_info(citas)").all().map((c) => c.name);
 for (const [col, def] of [["codigo", "TEXT NOT NULL DEFAULT ''"], ["valor", "INTEGER NOT NULL DEFAULT 0"],
   ["bonificacion", "INTEGER NOT NULL DEFAULT 0"], ["copago", "INTEGER NOT NULL DEFAULT 0"],
-  ["examenes", "TEXT NOT NULL DEFAULT ''"], ["fecha_nac", "TEXT NOT NULL DEFAULT ''"], ["email", "TEXT NOT NULL DEFAULT ''"]]) { // examenes: JSON con el detalle cuando la cita tiene más de un examen
+  ["examenes", "TEXT NOT NULL DEFAULT ''"], ["fecha_nac", "TEXT NOT NULL DEFAULT ''"], ["email", "TEXT NOT NULL DEFAULT ''"],
+  ["contraste", "INTEGER NOT NULL DEFAULT 0"]]) {   // contraste: valor del medio de contraste (0 = sin contraste) // examenes: JSON con el detalle cuando la cita tiene más de un examen
   if (!colsCitas.includes(col)) db.exec(`ALTER TABLE citas ADD COLUMN ${col} ${def}`);
 }
 
@@ -113,6 +114,9 @@ for (const [col, def] of [["codigo", "TEXT NOT NULL DEFAULT ''"], ["valor", "INT
   if (!colsPagos.includes("descuento_detalle")) db.exec("ALTER TABLE pagos ADD COLUMN descuento_detalle TEXT NOT NULL DEFAULT ''");
   if (!colsPagos.includes("examenes")) db.exec("ALTER TABLE pagos ADD COLUMN examenes TEXT NOT NULL DEFAULT ''");
   if (!colsPagos.includes("boleta")) db.exec("ALTER TABLE pagos ADD COLUMN boleta TEXT NOT NULL DEFAULT ''");
+  // Medio de contraste: se cobra aparte del examen (no es un examen y no se envía al PACS ni al portal)
+  if (!colsPagos.includes("contraste")) db.exec("ALTER TABLE pagos ADD COLUMN contraste INTEGER NOT NULL DEFAULT 0");
+  if (!colsPagos.includes("boleta_contraste")) db.exec("ALTER TABLE pagos ADD COLUMN boleta_contraste TEXT NOT NULL DEFAULT ''");
   // segundo medio de pago (pago dividido): monto2 se paga con medio2 y el resto con medio
   if (!colsPagos.includes("medio2")) db.exec("ALTER TABLE pagos ADD COLUMN medio2 TEXT NOT NULL DEFAULT ''");
   if (!colsPagos.includes("monto2")) db.exec("ALTER TABLE pagos ADD COLUMN monto2 INTEGER NOT NULL DEFAULT 0");

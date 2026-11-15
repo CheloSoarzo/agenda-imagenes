@@ -156,6 +156,7 @@ function validarCita(b) {
   c.valor = lineas.reduce((t, l) => t + l.valor, 0);
   c.bonificacion = lineas.reduce((t, l) => t + l.bonificacion, 0);
   c.copago = c.valor - c.bonificacion;
+  c.contraste = b.contraste === true || b.contraste === "si" || Number(b.contraste) > 0 ? CONTRASTE_VALOR : 0;
   c.examenes = lineas.length > 1 || lineas.some((l) => l.cantidad > 1) ? JSON.stringify(lineas) : "";
   return c;
 }
@@ -205,7 +206,9 @@ const agendasDe = (u) => String(u?.agendas || "").split(",").filter((e) => EQUIP
 const veEquipo = (u, eq) => { const a = agendasDe(u); return !a.length || a.includes(eq); };
 const filtroAgendas = (u, alias = "c") => { const a = agendasDe(u); return a.length ? ` AND ${alias}.equipo IN (${a.map((e) => `'${e}'`).join(",")})` : ""; };
 // El usuario de solo lectura no ve valores ni pagos (sí si está pagada)
-const CAMPOS_DINERO = ["valor", "bonificacion", "copago", "pago_medio", "pago_monto", "pago_folio", "pago_descuento",
+// Valor del medio de contraste (se cobra aparte del examen). Se puede cambiar con la variable CONTRASTE_VALOR.
+const CONTRASTE_VALOR = Math.max(0, Math.round(Number(process.env.CONTRASTE_VALOR) || 25000));
+const CAMPOS_DINERO = ["pago_contraste", "pago_boleta_contraste", "valor", "bonificacion", "copago", "pago_medio", "pago_monto", "pago_folio", "pago_descuento",
   "pago_desc_motivo", "pago_boleta", "pago_medio2", "pago_monto2", "pago_cheque"];
 function paraUsuario(c, u) {
   if (!c || u?.rol !== "lectura") return c;
@@ -218,6 +221,7 @@ const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS ac
   (SELECT COUNT(*) FROM adjuntos a WHERE a.cita_id = c.id) AS adjuntos,
   p.id AS pago_id, p.medio AS pago_medio, p.copago AS pago_monto, p.medio2 AS pago_medio2, p.monto2 AS pago_monto2, p.folio_bono AS pago_folio, p.fecha AS pago_fecha,
   p.descuento AS pago_descuento, p.descuento_motivo AS pago_desc_motivo, p.boleta AS pago_boleta, p.cheque AS pago_cheque,
+  p.contraste AS pago_contraste, p.boleta_contraste AS pago_boleta_contraste,
   p.creado AS pago_creado, up.nombre AS pago_usuario
   FROM citas c LEFT JOIN usuarios uc ON uc.id = c.creado_por LEFT JOIN usuarios ua ON ua.id = c.actualizado_por
   LEFT JOIN pagos p ON p.id = (SELECT MAX(id) FROM pagos WHERE cita_id = c.id AND anulado = 0)
@@ -259,10 +263,10 @@ const rutas = [
 
   ["GET", /^\/api\/me$/, "sesion", async (req, u) => {
     const { tokenHash, ...datos } = u;
-    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, pacs_publico: integ.pacsPublico, version: VERSION }];
+    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, pacs_publico: integ.pacsPublico, version: VERSION, contraste_valor: CONTRASTE_VALOR }];
   }],
 
-  ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, version: VERSION }]],
+  ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, version: VERSION, contraste_valor: CONTRASTE_VALOR }]],
 
   // Citas de un día (?fecha=) o de un rango (?desde=&hasta=, máximo 31 días)
   ["GET", /^\/api\/citas$/, "sesion", async (req, u, url) => {
@@ -342,8 +346,8 @@ const rutas = [
   ["POST", /^\/api\/citas$/, "escribir", async (req, u) => {
     const c = validarCita(await leerCuerpo(req));
     if (!veEquipo(u, c.equipo)) fallo(403, "Tu usuario no puede agendar en esa agenda.");
-    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,telefono2,fecha_nac,email,email2,examen,prevision,medico,medico_id,estado,notas,codigo,valor,bonificacion,copago,examenes,creado_por,actualizado_por)
-      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@telefono2,@fecha_nac,@email,@email2,@examen,@prevision,@medico,@medico_id,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@uid,@uid)`)
+    const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,telefono2,fecha_nac,email,email2,examen,prevision,medico,medico_id,estado,notas,codigo,valor,bonificacion,copago,examenes,contraste,creado_por,actualizado_por)
+      VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@telefono2,@fecha_nac,@email,@email2,@examen,@prevision,@medico,@medico_id,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@contraste,@uid,@uid)`)
       .run({ ...c, uid: u.id });
     const nuevoId = Number(r.lastInsertRowid);
     db.prepare("UPDATE citas SET accesion = ? WHERE id = ?").run(db.accesionDe(nuevoId), nuevoId);
@@ -359,7 +363,7 @@ const rutas = [
     // Si ya está pagada, los datos de cobro quedan fijos (para cambiarlos hay que anular el pago)
     const pago = pagoActivo(id);
     if (pago) {
-      const prev = db.prepare("SELECT codigo, examen, prevision, valor, bonificacion, copago, examenes FROM citas WHERE id = ?").get(id);
+      const prev = db.prepare("SELECT codigo, examen, prevision, valor, bonificacion, copago, examenes, contraste FROM citas WHERE id = ?").get(id);
       Object.assign(c, plain(prev));
       // Si la cita pagada cambia de día, el pago se mueve con ella a la caja del nuevo día
       if (pago.fecha !== c.fecha) {
@@ -369,7 +373,7 @@ const rutas = [
     }
     const r = db.prepare(`UPDATE citas SET fecha=@fecha,hora=@hora,duracion=@duracion,equipo=@equipo,paciente=@paciente,rut=@rut,
       telefono=@telefono,telefono2=@telefono2,fecha_nac=@fecha_nac,email=@email,email2=@email2,examen=@examen,prevision=@prevision,medico=@medico,medico_id=@medico_id,estado=@estado,notas=@notas,
-      codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,
+      codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,contraste=@contraste,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");
     if (pago && pago.fecha !== c.fecha) db.prepare("UPDATE pagos SET fecha = ? WHERE cita_id = ? AND anulado = 0").run(c.fecha, id);
@@ -421,7 +425,8 @@ const rutas = [
     if (descuento < 0 || descuento > c.copago) fallo(400, "El descuento no puede ser mayor que el copago.");
     if (descuento > 0 && !motivoDesc) fallo(400, "Escribe el motivo del descuento.");
     if (!descuento) detalle = "";
-    const aPagar = c.copago - descuento;
+    const contraste = c.contraste || 0;                  // medio de contraste: aparte del examen, sin descuento ni bonificación
+    const aPagar = c.copago - descuento + contraste;
     const medio = aPagar === 0 ? "Sin copago" : txt(b.medio, 20);
     if (!MEDIOS.includes(medio)) fallo(400, "Elige el medio de pago.");
     // Segundo medio de pago (opcional): monto2 con medio2, el resto con el primero
@@ -432,15 +437,15 @@ const rutas = [
       if (medio2 === medio) fallo(400, "El segundo medio de pago debe ser distinto del primero.");
       if (monto2 >= aPagar) fallo(400, "El monto del segundo medio debe ser menor que el total a pagar.");
     }
-    const folio = txt(b.folio_bono, 40), boleta = txt(b.boleta, 40);
+    const folio = txt(b.folio_bono, 40), boleta = txt(b.boleta, 40), boletaContraste = contraste ? txt(b.boleta_contraste, 40) : "";
     const cheque = medio === "Cheque" || medio2 === "Cheque" ? txt(b.cheque, 80) : "";
     if ((medio === "Cheque" || medio2 === "Cheque") && !cheque) fallo(400, "Escribe el número del cheque y el banco.");
     if (c.prevision === "Fonasa" && c.bonificacion > 0 && !folio) fallo(400, "Ingresa el folio del bono Fonasa.");
     db.prepare(`INSERT INTO pagos (cita_id, fecha, paciente, rut, equipo, codigo, examen, prevision, valor, bonificacion, copago, medio, folio_bono, usuario_id, creado,
-      descuento, descuento_motivo, descuento_detalle, examenes, boleta, medio2, monto2, cheque)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
+      descuento, descuento_motivo, descuento_detalle, examenes, boleta, medio2, monto2, cheque, contraste, boleta_contraste)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
       c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta,
-      medio2, monto2, cheque);
+      medio2, monto2, cheque, contraste, boletaContraste);
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
     // Clave para ver el examen en línea: se crea al pagar (solo la primera vez que viene el paciente)
     const portal = integ.activa ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;

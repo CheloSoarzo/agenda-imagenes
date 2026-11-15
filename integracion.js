@@ -49,6 +49,9 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     let examenes = [];
     try { examenes = cita.examenes ? JSON.parse(cita.examenes) : []; } catch {}
     if (!examenes.length && (cita.codigo || cita.examen)) examenes = [{ codigo: cita.codigo, nombre: cita.examen }];
+    // El medio de contraste no es un examen: no va al PACS ni al portal del paciente (por si se agregó como línea)
+    const sinContraste = examenes.filter((l) => !/^\s*(cobro\s+(de\s+)?)?(medio\s+de\s+)?contraste\b/i.test(l.nombre || ""));
+    if (sinContraste.length) examenes = sinContraste;
     const pagado = !!db.prepare("SELECT 1 FROM pagos WHERE cita_id = ? AND anulado = 0").get(cita.id);
     const rut = normRut(cita.rut);
     const clave = rut ? db.prepare("SELECT clave_hash FROM portal_claves WHERE rut = ?").get(rut) : null;

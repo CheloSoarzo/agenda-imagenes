@@ -17,6 +17,7 @@ console.log(JSON.stringify({
   atenciones: t.atenciones, valor: t.valor, bonificacion: t.bonificacion, recaudado: t.recaudado,
   descuentos: t.descuentos, con_descuento: t.con_descuento, anulados: t.anulados,
   efectivo_esperado: t.efectivo_esperado,
+  contraste: t.contraste,
   tarjetas: t.tarjetas && t.tarjetas.bruto > 0 ? { proveedor: t.tarjetas.config.proveedor, bruto: t.tarjetas.bruto,
     comision: t.tarjetas.comision, iva: t.tarjetas.iva, neto: t.tarjetas.neto, depositos: t.tarjetas.depositos,
     debito: { ...t.tarjetas.debito, tasa: t.tarjetas.config.debito }, credito: { ...t.tarjetas.credito, tasa: t.tarjetas.config.credito },
@@ -29,7 +30,7 @@ console.log(JSON.stringify({
   pagos: !periodo && process.argv.includes("--detalle") ? r.pagos.map((p) => ({
     hora: String(p.creado || "").slice(11, 16), paciente: p.paciente, rut: p.rut, examen: p.examen, equipo: p.equipo,
     prevision: p.prevision, valor: p.valor, bonificacion: p.bonificacion, descuento: p.descuento || 0, copago: p.copago,
-    medio: p.medio_txt, boleta: p.boleta || "", folio_bono: p.folio_bono || "", usuario: p.usuario_nombre || "",
+    medio: p.medio_txt, boleta: p.boleta || "", contraste: p.contraste || 0, boleta_contraste: p.boleta_contraste || "", folio_bono: p.folio_bono || "", usuario: p.usuario_nombre || "",
     anulado: !!p.anulado, motivo_anulacion: p.motivo_anulacion || "" })) : undefined,
   cierre: r.cierre ? { efectivo_contado: r.cierre.efectivo_contado, diferencia: r.cierre.diferencia,
     por: r.cierre.usuario_nombre || "", observaciones: r.cierre.observaciones || "" } : null,

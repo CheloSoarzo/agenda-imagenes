@@ -122,6 +122,10 @@
       <div class="ex-list" id="ex-list"></div>
       <button type="button" class="btn sm ex-add" id="ex-add">+ Agregar otro examen</button>
     </div>
+    <div class="field contraste-f">
+      <label>Medio de contraste</label>
+      <div class="contraste-fila"><div class="seg" id="f-contraste"></div><span class="meta" id="f-contraste-txt"></span></div>
+    </div>
     <datalist id="examenes"></datalist>
     <div class="cobro" id="cobro">
       <div class="row3">
@@ -191,6 +195,10 @@
           <div class="field"><label for="p-medio">Medio de pago</label>
             <select id="p-medio"><option value="">Elige…</option><option>Efectivo</option><option>Débito</option><option>Crédito</option><option>Transferencia</option><option>Cheque</option></select></div>
           <div class="field"><label for="p-boleta">N° de boleta</label><input id="p-boleta" autocomplete="off" inputmode="numeric" placeholder="Opcional"></div>
+        </div>
+        <div class="row2" id="p-boleta-c-f" hidden>
+          <div class="field"><label for="p-boleta-c">N° de boleta del contraste</label><input id="p-boleta-c" autocomplete="off" inputmode="numeric" placeholder="Opcional"></div>
+          <div class="field"><label>Medio de contraste</label><b class="p1-resto" id="p-ctr-monto"></b></div>
         </div>
         <button type="button" class="linkbtn" id="p2-add">+ Pagar con dos medios de pago</button>
         <div class="pago2" id="p2" hidden>
@@ -801,7 +809,8 @@ function recalcular(reset){
   $("#f-valor").value=$$(val); $("#f-bonif").value=$$(bon);
   $("#f-copago").value=$$(Math.max(0,val-bon));
   $("#f-copago").classList.toggle("bad",bon>val);
-  $("#f-preciohint").textContent=!prev?"Elige la previsión para calcular el copago.":ls.length>1?`${ls.length} exámenes`:"";
+  $("#f-preciohint").textContent=!prev?"Elige la previsión para calcular el copago.":[ls.length>1?`${ls.length} exámenes`:"",contrasteSel?`Medio de contraste ${$$(CONTRASTE_VALOR)} aparte · total a pagar ${$$(Math.max(0,val-bon)+CONTRASTE_VALOR)}`:""].filter(Boolean).join(" · ");
+  if($("#f-contraste").children.length)$("#f-contraste-txt").textContent=contrasteSel?`+ ${$$(CONTRASTE_VALOR)}, se cobra aparte del examen`:"";
 }
 /* ---------- cobro (separado del agendamiento) ---------- */
 let cobroCita=null;
@@ -815,16 +824,19 @@ function openCobro(c){
   $("#c-paciente").textContent=c.paciente;
   $("#c-sub").textContent=[c.rut,c.prevision||"Sin previsión",parseISO(c.fecha).toLocaleDateString("es-CL").replace(/-/g,"/")+" "+c.hora,(EQN[c.equipo]||c.equipo)].filter(Boolean).join(" · ");
   const ls=lineasDe(c);
-  tabla($("#c-examenes"),[...ls.map(l=>({...l,copago:l.copago??(l.valor-l.bonificacion)})),{_cls:"tot",nombre:"Total",codigo:"",valor:c.valor,bonificacion:c.bonificacion,copago:c.copago}],[
+  const ctr=c.contraste||0;
+  tabla($("#c-examenes"),[...ls.map(l=>({...l,copago:l.copago??(l.valor-l.bonificacion)})),
+    ...(ctr?[{_cls:"ctr",nombre:"Medio de contraste (cobro aparte)",codigo:"",valor:ctr,bonificacion:0,copago:ctr}]:[]),
+    {_cls:"tot",nombre:"Total",codigo:"",valor:c.valor+ctr,bonificacion:c.bonificacion,copago:c.copago+ctr}],[
     {t:"Examen",f:l=>(l.codigo?l.codigo+" · ":"")+(l.nombre||"")+(l.cantidad>1?" × "+l.cantidad:"")},{t:"Valor",n:1,f:l=>$$(l.valor)},{t:"Bonif.",n:1,f:l=>$$(l.bonificacion)},{t:"Copago",n:1,f:l=>$$(l.copago)}]);
   if(!ls.length) $("#c-examenes").innerHTML='<tr><td class="meta">La cita no tiene exámenes. Usa "Editar cita" para agregarlos.</td></tr>';
-  $("#p-medio").value=""; $("#p-folio").value=""; $("#p-boleta").value=""; $("#p-cheque").value=""; $("#p-cheque-f").hidden=true;
+  $("#p-medio").value=""; $("#p-folio").value=""; $("#p-boleta").value=""; $("#p-boleta-c").value=""; $("#p-boleta-c-f").hidden=!ctr; $("#p-cheque").value=""; $("#p-cheque-f").hidden=true;
   $("#p2").hidden=true; $("#p-medio2").value=""; $("#p-monto2").value="";
   $("#p-dtipo").value=""; $("#p-dvalor").value=""; $("#p-dmotivo").value=""; $("#p-dvalor-f").hidden=true; $("#p-dmotivo-f").hidden=true;
   $("#anular-box").hidden=true; $("#anular-motivo").value="";
   $("#pago-hecho").hidden=!pagada; $("#pago-form").hidden=pagada||!canWrite;
   if(pagada){
-    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_monto2>0?`${c.pago_medio} ${$$(c.pago_monto-c.pago_monto2)} + ${c.pago_medio2} ${$$(c.pago_monto2)}`:c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""}${c.pago_cheque?" · cheque "+c.pago_cheque:""} · cobrado ${(c.pago_creado||"").slice(0,10).split("-").reverse().join("/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
+    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_monto2>0?`${c.pago_medio} ${$$(c.pago_monto-c.pago_monto2)} + ${c.pago_medio2} ${$$(c.pago_monto2)}`:c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""}${c.pago_contraste?` · contraste ${$$(c.pago_contraste)}${c.pago_boleta_contraste?" (boleta "+c.pago_boleta_contraste+")":""}`:""}${c.pago_cheque?" · cheque "+c.pago_cheque:""} · cobrado ${(c.pago_creado||"").slice(0,10).split("-").reverse().join("/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
     $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
   }
   $("#pmsg").textContent=""; $("#pmsg").className="msg";
@@ -837,11 +849,13 @@ function openCobro(c){
 function recalcCobro(){
   const c=cobroCita; if(!c) return;
   const val=c.valor||0, bon=c.bonificacion||0;
-  const cop=Math.max(0,val-bon), ds=descuentoActual(cop), total=cop-ds.monto;
+  const ctr=c.contraste||0;
+  const cop=Math.max(0,val-bon), ds=descuentoActual(cop), total=cop-ds.monto+ctr;
+  $("#p-ctr-monto").textContent=$$(ctr);
   $("#p-folio-f").hidden=!(bon>0);
   $("#p-folio-l").textContent=c.prevision==="Fonasa"?"Folio bono Fonasa":"N° de bono "+(c.prevision||"");
   $("#p-total").textContent=$$(total);
-  $("#p-desc-txt").textContent=ds.error||(ds.monto?`Copago ${$$(cop)} − descuento ${$$(ds.monto)}`:"");
+  $("#p-desc-txt").textContent=ds.error||[ds.monto?`Copago ${$$(cop)} − descuento ${$$(ds.monto)}`:"",ctr?`incluye contraste ${$$(ctr)}`:""].filter(Boolean).join(" · ");
   $("#p-desc-txt").className=ds.error?"bad":"";
   $("#cobrar").textContent=val?`Cobrar ${$$(total)}`:"Cobrar";
   $("#p-medio").disabled=val>0&&total===0;
@@ -894,6 +908,7 @@ function openForm(c,preset={}){
   $("#f-hora").value=c?.hora||preset.hora||"09:00";
   $("#f-prevision").value=c?.prevision||preset.prevision||""; ponerMedico(c); $("#f-notas").value=c?.notas||"";
   citaPagada=!!c?.pago_id;
+  contrasteSel=!!(c&&c.contraste>0);
   $("#ex-list").innerHTML="";
   const eq=c?.equipo||preset.equipo||"tc"; setEquipo(eq,!c); if(c) $("#f-dur").value=String(c.duracion||15);
   let previas=[]; try{previas=c?.examenes?JSON.parse(c.examenes):[]}catch(e){}
@@ -918,7 +933,7 @@ function openForm(c,preset={}){
   ir.textContent=citaPagada?"Ver pago":c?"Cobrar":"Guardar y cobrar";
   if(!canWrite&&!citaPagada) ir.hidden=true;
   $("#f-hoja").hidden=!(canWrite&&PACS_ON&&citaPagada&&c?.rut);
-  recalcular(false);
+  pintarContraste(); recalcular(false);
   adjPendientes=[]; $("#adj-btn").hidden=!canWrite; cargarAdjuntos(c?.id);
   $("#scrim").hidden=false; setTimeout(()=>$("#f-paciente").focus(),30);
 }
@@ -991,7 +1006,7 @@ function datosForm(){
     telefono2:$("#f-tel2").value.trim(),email2:$("#f-email2").value.trim(),
     equipo:equipoSel,fecha:$("#f-fecha").value,hora:$("#f-hora").value,
     duracion:Number($("#f-dur").value),prevision:$("#f-prevision").value,...medicoForm(),
-    estado:estadoSel,notas:$("#f-notas").value.trim(),examenes:lineas()};
+    estado:estadoSel,notas:$("#f-notas").value.trim(),examenes:lineas(),contraste:contrasteSel};
   // totales para validar y cobrar
   return Object.assign(d,{valor:d.examenes.reduce((t,l)=>t+l.valor,0),bonificacion:d.examenes.reduce((t,l)=>t+l.bonificacion,0)});
 }
@@ -1047,7 +1062,7 @@ $("#ir-cobro").addEventListener("click",async()=>{
 
 $("#cobrar").addEventListener("click",async()=>{
   const c=cobroCita, msg=$("#pmsg"); msg.className="msg err";
-  const copago=c.valor-c.bonificacion, ds=descuentoActual(Math.max(0,copago)), total=copago-ds.monto;
+  const copago=c.valor-c.bonificacion, ds=descuentoActual(Math.max(0,copago)), total=copago-ds.monto+(c.contraste||0);
   let err="";
   if(!c.valor) err="La cita no tiene exámenes con valor. Usa \"Editar cita\" para agregarlos.";
   else if(!c.prevision) err="La cita no tiene previsión. Usa \"Editar cita\" para indicarla.";
@@ -1063,7 +1078,7 @@ $("#cobrar").addEventListener("click",async()=>{
   const btn=$("#cobrar"); btn.disabled=true;
   try{
     const desc=ds.monto>0?{descuento_tipo:$("#p-dtipo").value,descuento_valor:$("#p-dtipo").value==="pct"?String(ds.pct):ds.monto,descuento_motivo:$("#p-dmotivo").value.trim()}:{};
-    const r=await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{cheque:$("#p-cheque").value.trim(),medio:$("#p-medio").value,...(!$("#p2").hidden?{medio2:$("#p-medio2").value,monto2:pesos($("#p-monto2").value)}:{}),folio_bono:$("#p-folio").value.trim(),boleta:$("#p-boleta").value.trim(),...desc}});
+    const r=await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{cheque:$("#p-cheque").value.trim(),medio:$("#p-medio").value,...(!$("#p2").hidden?{medio2:$("#p-medio2").value,monto2:pesos($("#p-monto2").value)}:{}),folio_bono:$("#p-folio").value.trim(),boleta:$("#p-boleta").value.trim(),boleta_contraste:$("#p-boleta-c").value.trim(),...desc}});
     toast(total>0?`Pago registrado: ${$$(total)}${ds.monto?" (con descuento)":""}`:"Atención registrada sin copago");
     await cargar();
     if(r.portal){openCobro(citas.find(x=>x.id===c.id)||r); pintarPortal(r.portal)}
@@ -1088,6 +1103,14 @@ $("#c-cerrar").addEventListener("click",()=>{$("#pscrim").hidden=true;cobroCita=
 const PACS_TXT={imagenes:"imágenes",informado:"informado",entregado:"entregado"};
 const PACS_LARGO={imagenes:"Imágenes en el PACS",informado:"Informe listo",entregado:"Informe entregado"};
 let PACS_ON=false, PORTAL_URL="", PACS_PUBLICO="", claveMostrada="";
+// Medio de contraste: se cobra aparte del examen (no suma al valor del examen ni aparece en el portal del paciente)
+let CONTRASTE_VALOR=25000, contrasteSel=false;
+function pintarContraste(){
+  const dis=!canWrite||citaPagada;
+  segButtons($("#f-contraste"),[{id:"no",n:"Sin contraste"},{id:"si",n:"Con contraste"}],contrasteSel?"si":"no",id=>{contrasteSel=id==="si";recalcular(false)});
+  [...$("#f-contraste").children].forEach(b=>b.disabled=dis);
+  $("#f-contraste-txt").textContent=contrasteSel?`+ ${$$(CONTRASTE_VALOR)}, se cobra aparte del examen`:"";
+}
 function pintarPortal(p){
   const box=$("#portal-box"); claveMostrada="";
   if(!p){box.hidden=true;return}
@@ -1469,7 +1492,7 @@ async function abrirCaja(rango){
     {t:"Cobrado",f:p=>cobradoTxt(p)},{t:"Paciente",f:p=>p.paciente},{t:"Equipo",f:p=>EQN[p.equipo]||p.equipo},
     {t:"Examen",f:p=>(p.codigo?p.codigo+" · ":"")+p.examen},{t:"Previsión",f:p=>p.prevision},
     {t:"Valor",n:1,f:p=>$$(p.valor)},{t:"Bonif.",n:1,f:p=>$$(p.bonificacion)},{t:"Desc.",n:1,f:p=>p.descuento?"−"+$$(p.descuento):""},{t:"Pagado",n:1,f:p=>$$(p.copago)},
-    {t:"Medio",f:p=>p.medio_txt||p.medio},{t:"Bono / boleta",f:p=>[p.folio_bono&&"B "+p.folio_bono,p.boleta&&"Bol "+p.boleta].filter(Boolean).join(" · ")},{t:"Cajero",f:p=>p.usuario_nombre||""},
+    {t:"Medio",f:p=>p.medio_txt||p.medio},{t:"Bono / boleta",f:p=>[p.folio_bono&&"B "+p.folio_bono,p.boleta&&"Bol "+p.boleta,p.contraste>0&&("Contraste "+$$(p.contraste)+(p.boleta_contraste?" · Bol "+p.boleta_contraste:""))].filter(Boolean).join(" · ")},{t:"Cajero",f:p=>p.usuario_nombre||""},
     {t:"",f:p=>p.anulado?"Anulado: "+p.motivo_anulacion:""}]);
   if(!d.pagos.length) $("#k-pagos").innerHTML=`<tr><td class="meta">${d.un_dia?"Aún no hay pagos registrados este día.":"No hay pagos en este período."}</td></tr>`;
   // cierre
@@ -1688,7 +1711,7 @@ async function exportarPDF(){
   doc.autoTable({startY:yMax+10,margin:{left:M,right:M},styles:estilo,headStyles:cab,
     head:[["Fecha / hora","Paciente","RUT","Equipo","Código","Examen","Previsión","Valor","Bonif.","Desc.","Pagado","Medio","Bono / boleta","Cajero","Estado"]],
     body:d.pagos.length?d.pagos.map(p=>[(d.un_dia?"":fCorta(p.fecha).slice(0,5)+" ")+cobradoTxt(p),p.paciente,p.rut,EQN[p.equipo]||p.equipo,p.codigo,p.examen,p.prevision,
-      $$(p.valor),$$(p.bonificacion),p.descuento?"-"+$$(p.descuento)+(p.descuento_motivo?"\n"+p.descuento_motivo:""):"",$$(p.copago),p.medio_txt||p.medio,[p.folio_bono&&"B "+p.folio_bono,p.boleta&&"Bol "+p.boleta].filter(Boolean).join("\n"),p.usuario_nombre||"",p.anulado?"Anulado: "+p.motivo_anulacion:"OK"]):[["","Sin pagos registrados","","","","","","","","","","","","",""]],
+      $$(p.valor),$$(p.bonificacion),p.descuento?"-"+$$(p.descuento)+(p.descuento_motivo?"\n"+p.descuento_motivo:""):"",$$(p.copago),p.medio_txt||p.medio,[p.folio_bono&&"B "+p.folio_bono,p.boleta&&"Bol "+p.boleta,p.contraste>0&&("Contr. "+$$(p.contraste)+(p.boleta_contraste?" Bol "+p.boleta_contraste:""))].filter(Boolean).join("\n"),p.usuario_nombre||"",p.anulado?"Anulado: "+p.motivo_anulacion:"OK"]):[["","Sin pagos registrados","","","","","","","","","","","","",""]],
     columnStyles:{5:{cellWidth:52},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"},10:{halign:"right"}},
     didParseCell:h=>{if(h.section==="body"&&d.pagos[h.row.index]?.anulado){h.cell.styles.textColor=[150,150,150];if(h.column.index===14)h.cell.styles.textColor=[180,52,46]}}});
   // cuadre
@@ -1804,7 +1827,7 @@ buildGrid(); render();
       for(const o of [...$("#agenda-sel").options]) if(o.value==="todas"?mias.length<2:!mias.includes(o.value)) o.remove();
       if(!mias.includes(agendaSel)&&!(agendaSel==="todas"&&mias.length>1)){agendaSel=mias[0];$("#agenda-sel").value=agendaSel}
     }
-    PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||""; PACS_PUBLICO=yo.pacs_publico||"";
+    PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||""; PACS_PUBLICO=yo.pacs_publico||""; if(yo.contraste_valor)CONTRASTE_VALOR=yo.contraste_valor;
     if(PACS_ON) cargarMedicos();
     $("#nueva").hidden=!canWrite;
     $("#btnUsuarios").hidden=yo.rol!=="admin";

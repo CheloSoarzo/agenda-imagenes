@@ -131,6 +131,7 @@ function resumenCaja(desde, hasta = desde) {
     por_equipo: agrupar("equipo", validos),
     efectivo_esperado: validos.reduce((t, p) => t + efectivoDe(p), 0),
     tarjetas: calcularTarjetas(validos, partes),
+    contraste: { cantidad: validos.filter((p) => p.contraste > 0).length, monto: suma(validos, "contraste") },
   };
   const cierres = plainAll(db.prepare(`SELECT c.*, u.nombre AS usuario_nombre FROM cierres c LEFT JOIN usuarios u ON u.id = c.usuario_id
     WHERE c.fecha BETWEEN ? AND ? ORDER BY c.fecha`).all(desde, hasta)).map((c) => ({ ...c, resumen: JSON.parse(c.resumen) }));

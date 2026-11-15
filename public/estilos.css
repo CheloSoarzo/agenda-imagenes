@@ -501,3 +501,7 @@ body.sin-dinero .ex-vals,body.sin-dinero #ir-cobro,body.sin-dinero #cobro,body.s
 .k-tarj-form .meta{grid-column:1/-1;margin:0}
 .k-tarj-acc{display:flex;gap:6px}
 @media (max-width:760px){.k-tarj-cuerpo{grid-template-columns:1fr}}
+
+/* Medio de contraste (cobro aparte) */
+.contraste-fila{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.c-ex tr.ctr td{color:var(--muted);font-style:italic}
