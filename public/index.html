@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/estilos.css">
-<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
+<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p;var t=localStorage.getItem("agenda-tema");if(t==="claro")document.documentElement.dataset.theme="light";else if(t==="oscuro")document.documentElement.dataset.theme="dark"}catch(e){}</script>
 <script src="/fecha-cl.js"></script>
 <link rel="icon" href="/msc26/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/msc26/favicon.ico" sizes="any">
@@ -281,12 +281,21 @@
   </div>
 </div>
 
+<!-- Tarjeta con el detalle de la cita al pasar el mouse -->
+<div class="hc" id="hc" role="tooltip" hidden></div>
+
 <!-- Panel de colores -->
 <div class="scrim" id="colscrim" hidden>
   <div class="panel">
     <h2>Colores</h2>
     <p class="meta" style="margin:0">Elige los colores con que ves la agenda. Solo cambian para ti.</p>
     <div class="paletas" id="paletas" role="radiogroup" aria-label="Paleta de colores"></div>
+    <div class="tema-fila"><span class="meta">Tema en este equipo</span>
+      <div class="seg" id="temas" role="group" aria-label="Tema">
+        <button type="button" data-t="auto" title="Sigue el modo claro u oscuro del computador">Automático</button>
+        <button type="button" data-t="claro">☀ Claro</button>
+        <button type="button" data-t="oscuro">☾ Oscuro</button>
+      </div></div>
     <div class="actions"><span class="spacer"></span><button type="button" class="btn primary" id="pcerrar">Listo</button></div>
   </div>
 </div>
@@ -555,13 +564,17 @@ function render(){
         +(canWrite&&PACS_ON&&c.pago_id&&c.rut?'<span class="hoja" title="Reimprimir la hoja de retiro (con la clave del paciente)">Hoja</span>':"");
       el.querySelector(".h").textContent=c.hora;
       el.querySelector(".p").textContent=c.paciente;
+      if(Number(c.contraste)>0){const cm=document.createElement("span");cm.className="cmas";cm.textContent="C+";cm.title="Con medio de contraste";el.querySelector(".l1").insertBefore(cm,el.querySelector(".n"))}
+      if(dur/STEP*ROW<40) el.classList.add("corta");   // bloque de una fila: examen en la misma línea
       if(c.notas){const n=el.querySelector(".n");n.hidden=false;n.textContent="💬 "+c.notas.replace(/\s+/g," ")}
       el.querySelector(".e").textContent=c.examen||"";
       el.querySelector(".st").textContent=est.n+(SIN_DINERO?"":(c.pago_id?" · pagado":(c.estado==="llego"||c.estado==="atendido")&&c.valor?" · por cobrar":""))+(PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
       if(c.pacs_estado) el.classList.add("pacs-"+c.pacs_estado);
       if(c.pago_id&&!SIN_DINERO) el.classList.add("paid");
       el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.notas?" · Comentario: "+c.notas:""}${c.adjuntos?" · orden adjunta":""}${c.accesion?" · N° acceso "+c.accesion:""}${PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:""}`;
-      el.addEventListener("click",ev=>{if(ev.target.closest(".hoja")){ev.stopPropagation();hojaRetiro(c);return} openForm(c)});
+      if(HOVER){el.setAttribute("aria-label",el.title);el.removeAttribute("title");
+        el.addEventListener("mouseenter",()=>mostrarTarjeta(c,el));el.addEventListener("mouseleave",ocultarTarjeta)}
+      el.addEventListener("click",ev=>{ocultarTarjeta();if(ev.target.closest(".hoja")){ev.stopPropagation();hojaRetiro(c);return} openForm(c)});
       col.appendChild(el);
     }
     if(colInfo.fecha===isoDate(new Date())){
@@ -588,6 +601,59 @@ function render(){
   renderCal();
   $("#empty").textContent=!canWrite?(mias.length?"Tu usuario es solo de lectura. Toca una cita para cambiar su estado.":"Tu usuario es solo de lectura."):(mias.length?"Toca una cita para editarla o cambiar su estado.":`No hay citas en esta agenda ${vista==="semana"?"esta semana":"este día"}. Toca un horario libre para agendar.`);
 }
+
+/* ---------- tarjeta de detalle al pasar el mouse (solo con mouse; en el celular se toca la cita) ---------- */
+const HOVER=matchMedia("(hover:hover) and (pointer:fine)").matches;
+const plata=n=>"$"+Number(n||0).toLocaleString("es-CL");
+function edadDe(nac){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(nac||"");if(!m)return"";const h=new Date();let a=h.getFullYear()-m[1];
+  if(h.getMonth()+1<+m[2]||(h.getMonth()+1==+m[2]&&h.getDate()<+m[3]))a--;return a>=0&&a<130?a+" años":""}
+let hcTimer=0;
+function mostrarTarjeta(c,el){
+  clearTimeout(hcTimer);
+  hcTimer=setTimeout(()=>{
+    const hc=$("#hc"); hc.innerHTML="";
+    const est=ESTADOS.find(e=>e.id===c.estado)||ESTADOS[0];
+    const fin=(()=>{const m=toMin(c.hora)+(Number(c.duracion)||15);return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0")})();
+    const add=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;hc.appendChild(e);return e};
+    const cab=add("div","hc-cab");
+    const nom=document.createElement("b");nom.textContent=c.paciente;cab.appendChild(nom);
+    const st=document.createElement("span");st.className="hc-est st-"+est.id;st.textContent=est.n;cab.appendChild(st);
+    const sub=[c.rut,edadDe(c.fecha_nac),c.telefono].filter(Boolean).join(" · ");
+    if(sub) add("div","hc-sub",sub);
+    let exs=[];try{exs=JSON.parse(c.examenes||"[]").map(x=>x.nombre).filter(Boolean)}catch(e){}
+    if(!exs.length&&c.examen) exs=[c.examen];
+    const lst=add("ul","hc-ex"); for(const x of exs){const li=document.createElement("li");li.textContent=x;lst.appendChild(li)}
+    const filas=[["Hora",`${c.hora} – ${fin} · ${(EQUIPOS.find(e=>e.id===c.equipo)||{}).nombre||c.equipo}`],
+      ["Previsión",c.prevision],["Médico",c.medico],
+      ["Contraste",Number(c.contraste)>0?"Sí · "+plata(c.contraste):""],
+      ["Pago",SIN_DINERO||["ausente","cancelado"].includes(c.estado)?"":(c.pago_id?"Pagado":(c.valor?((c.estado==="llego"||c.estado==="atendido")?"Por cobrar · ":"A pagar · ")+plata(Number(c.copago||c.valor)+Number(c.contraste||0)):""))],
+      ["N° acceso",c.accesion],["PACS",PACS_TXT[c.pacs_estado]||""],["Orden",c.adjuntos?"Adjunta":""]];
+    const dl=add("dl","hc-dl");
+    for(const [k,v] of filas){if(!v)continue;const dt=document.createElement("dt");dt.textContent=k;const dd=document.createElement("dd");dd.textContent=v;
+      if(k==="Pago")dd.className=c.pago_id?"hc-ok":"hc-pend";dl.append(dt,dd)}
+    if(c.notas) add("div","hc-nota","💬 "+c.notas);
+    add("div","hc-pie","Clic para abrir la cita");
+    hc.hidden=false;
+    const r=el.getBoundingClientRect(), w=hc.offsetWidth, h=hc.offsetHeight;
+    let x=r.right+10; if(x+w>innerWidth-8) x=Math.max(8,r.left-w-10);
+    if(x<8||(r.left-w-10<8&&r.right+10+w>innerWidth-8)) x=Math.min(innerWidth-w-8,Math.max(8,r.left+20));
+    let y=Math.min(Math.max(8,r.top),innerHeight-h-8);
+    hc.style.left=x+"px"; hc.style.top=y+"px";
+  },180);
+}
+function ocultarTarjeta(){clearTimeout(hcTimer);const hc=$("#hc");if(hc)hc.hidden=true}
+addEventListener("scroll",ocultarTarjeta,true);
+
+/* ---------- tema claro / oscuro / automático (se guarda en este equipo) ---------- */
+function aplicarTema(t){
+  if(t==="claro")document.documentElement.dataset.theme="light";
+  else if(t==="oscuro")document.documentElement.dataset.theme="dark";
+  else delete document.documentElement.dataset.theme;
+  try{t&&t!=="auto"?localStorage.setItem("agenda-tema",t):localStorage.removeItem("agenda-tema")}catch(e){}
+  [...$("#temas").children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.t===(t||"auto"))));
+}
+(function(){let t="auto";try{t=localStorage.getItem("agenda-tema")||"auto"}catch(e){}
+  [...$("#temas").children].forEach(b=>b.addEventListener("click",()=>aplicarTema(b.dataset.t)));aplicarTema(t)})();
 
 /* ---------- datos ---------- */
 let cargando=0;
