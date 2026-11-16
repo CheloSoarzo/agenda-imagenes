@@ -42,14 +42,13 @@ const rutValido = (rut) => {
   const res = 11 - (suma % 11);
   return dv === (res === 11 ? "0" : res === 10 ? "K" : String(res));
 };
-// Documento del paciente: su RUT (como siempre) o, para extranjeros sin RUT, «P» + el pasaporte.
-// Un pasaporte se reconoce porque lleva letras (un RUT solo puede tener la K al final).
-// Si el pasaporte es solo de números, se escribe con «PAS» adelante (ej: PAS 123456789).
-// Debe ser igual a doc_norm() del PACS.
+// Documento del paciente: su RUT si es válido; si no, es extranjero y la clave es «P» + el número tal como se escribió
+// (solo letras y números). Debe ser igual a doc_norm() del PACS.
 const docNorm = (v) => {
+  const r = normRut(v);
+  if (rutValido(r)) return r;
   const s = String(v || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
-  if (/^\d*K?$/.test(s) || s.length < 5) return normRut(v);
-  return "P" + s;
+  return s.length >= 5 ? "P" + s : "";
 };
 const esPasaporte = (k) => /^P[0-9A-Z]{5,}$/.test(k || "");
 const docValido = (k) => esPasaporte(k) || rutValido(k);

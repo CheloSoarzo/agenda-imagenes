@@ -187,7 +187,6 @@
         <div class="clave-grande" id="portal-clave" hidden></div>
         <div class="portal-acc">
           <button type="button" class="btn primary" id="portal-hoja">Imprimir hoja de retiro</button>
-          <button type="button" class="btn primary" id="portal-ext" hidden>Es pasaporte / documento extranjero</button>
           <button type="button" class="btn" id="portal-ver" hidden>Ver clave</button>
           <button type="button" class="btn" id="portal-nueva">Nueva clave</button>
         </div>
@@ -1195,7 +1194,7 @@ function pintarPortal(p){
   const box=$("#portal-box"); claveMostrada="";
   if(!p){box.hidden=true;return}
   box.hidden=false; $("#portal-clave").hidden=true;
-  $("#portal-nueva").hidden=!canWrite; $("#portal-hoja").hidden=false; $("#portal-ext").hidden=true;
+  $("#portal-nueva").hidden=!canWrite; $("#portal-hoja").hidden=false;
   // El administrador puede volver a ver la clave del paciente (queda registrado)
   $("#portal-ver").hidden=!(yo&&yo.rol==="admin")||p.estado==="nueva"||!!p.clave||p.estado==="sin_rut";
   if(p.estado==="nueva"||p.clave){
@@ -1207,12 +1206,8 @@ function pintarPortal(p){
     $("#portal-txt").textContent="El paciente ya tiene clave de una visita anterior y la usa para ver todos sus exámenes. Si no la recuerda, genera una nueva.";
     $("#portal-hoja").textContent="Imprimir hoja sin clave";
   }else if(p.estado==="sin_rut"){
-    // documento solo de números que no es un RUT válido: puede ser un pasaporte o documento extranjero
-    const soloNum=cobroCita&&/^[\d\s.\-]+$/.test(String(cobroCita.rut||""))&&String(cobroCita.rut).replace(/\D/g,"").length>=5;
-    $("#portal-txt").textContent=soloNum
-      ?"El documento «"+cobroCita.rut+"» no es un RUT válido. Si el paciente es extranjero, pulsa «Es pasaporte / documento extranjero» y se crea su clave. Si es un RUT mal escrito, corrígelo en «Editar cita» y luego pulsa «Nueva clave»."
-      :"La cita no tiene un RUT válido ni un pasaporte, así que no se creó clave. Corrígelo en «Editar cita» y luego pulsa «Nueva clave».";
-    $("#portal-hoja").hidden=true; $("#portal-ext").hidden=!(canWrite&&soloNum);
+    $("#portal-txt").textContent="La cita no tiene RUT ni número de documento, así que no se creó clave. Escríbelo en «Editar cita» y luego pulsa «Nueva clave».";
+    $("#portal-hoja").hidden=true;
   }else{
     $("#portal-txt").textContent="Para reimprimir la hoja con clave, genera una nueva (la anterior deja de funcionar).";
     $("#portal-hoja").textContent="Imprimir hoja sin clave";
@@ -1225,16 +1220,6 @@ $("#portal-nueva").addEventListener("click",async()=>{
   try{const r=await api(`/api/citas/${c.id}/clave`,{method:"POST"}); pintarPortal({estado:"nueva",clave:r.clave}); toast("Clave nueva creada")}
   catch(e){$("#pmsg").className="msg err";$("#pmsg").textContent=e.message}
   finally{b.disabled=false;b.classList.remove("armed");b.textContent="Nueva clave"}
-});
-$("#portal-ext").addEventListener("click",async()=>{
-  const c=cobroCita, b=$("#portal-ext"); if(!c) return;
-  b.disabled=true;
-  try{
-    const r=await api(`/api/citas/${c.id}/extranjero`,{method:"POST"});
-    c.rut=r.rut; const l=citas.find(x=>x.id===c.id); if(l) l.rut=r.rut;
-    pintarPortal(r); toast("Documento extranjero guardado"); cargar();
-  }catch(e){$("#pmsg").className="msg err";$("#pmsg").textContent=e.message}
-  finally{b.disabled=false}
 });
 $("#portal-ver").addEventListener("click",async()=>{
   const c=cobroCita, b=$("#portal-ver"); if(!c) return;
@@ -1251,25 +1236,15 @@ $("#portal-hoja").addEventListener("click",()=>{if(!cobroCita)return; if(claveMo
 $("#f-hoja").addEventListener("click",()=>{const c=editId&&citas.find(x=>x.id===editId); if(c)hojaRetiro(c)});
 function fechaHoraCL(t){t=String(t||"");const [f,h]=t.split(/[ T]/);return f?f.split("-").reverse().join("/")+(h?" "+h.slice(0,5):""):""}
 // Acceso rápido: reimprime la hoja de retiro completa, con la clave actual del paciente
-// La hoja se imprime desde un marco oculto dentro de la misma página (no una ventana nueva),
-// así ningún bloqueador de ventanas emergentes la impide.
-function marcoHoja(){
-  document.querySelectorAll("iframe.marco-hoja").forEach(f=>f.remove());
-  const f=document.createElement("iframe"); f.className="marco-hoja"; f.setAttribute("aria-hidden","true"); f.tabIndex=-1;
-  f.style.cssText="position:fixed;left:-10000px;top:0;width:800px;height:1100px;border:0;";
-  document.body.appendChild(f);
-  const win=f.contentWindow;
-  win.addEventListener("afterprint",()=>setTimeout(()=>f.remove(),500));
-  return {get document(){return f.contentDocument}, close(){f.remove()}};
-}
 async function hojaRetiro(c){
-  const w=marcoHoja();
+  // la ventana se abre al tiro (antes de esperar al servidor) para que el navegador no la bloquee
+  const w=window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
   w.document.write('<p style="font:16px system-ui;margin:32px">Preparando la hoja de retiro…</p>');
   try{
     const r=await api(`/api/citas/${c.id}/hoja`);
     if(r.clave){imprimirHoja(c,r.clave,w);return}
     w.close();
-    const msg={sin_rut:"Esta cita no tiene un RUT válido ni pasaporte, así que el paciente no tiene clave. Ábrela con «Cobro»: si es extranjero, pulsa «Es pasaporte / documento extranjero»; si el RUT está mal escrito, corrígelo y pulsa «Nueva clave».",
+    const msg={sin_rut:"Esta cita no tiene RUT ni número de documento: escríbelo en «Editar cita» y luego pulsa «Nueva clave».",
       sin_clave:"Este paciente aún no tiene clave: se crea al pagar el examen.",
       antigua:"La clave de este paciente se creó antes de que se pudiera reimprimir. Presiona «Nueva clave» y luego «Imprimir hoja de retiro»: la hoja sale con la clave nueva."}[r.motivo]||"No se pudo obtener la clave.";
     if((r.motivo==="antigua"||r.motivo==="sin_rut")&&c.pago_id){openCobro(citas.find(x=>x.id===c.id)||c);$("#portal-txt").textContent=msg}
@@ -1284,6 +1259,11 @@ const FERIADOS=new Set([
   "2027-09-17","2027-09-18","2027-09-19","2027-10-11","2027-10-31","2027-11-01","2027-12-08","2027-12-25"]);
 const DIAS_INFORME=2;   // el informe queda listo 2 días hábiles después del examen
 function sumarHabiles(f,n){let d=f;while(n>0){d=sumarDias(d,1);const w=parseISO(d).getDay();if(w!==0&&w!==6&&!FERIADOS.has(d))n--}return d}
+function rutOk(v){
+  const r=String(v||"").replace(/[^0-9kK]/g,"").toUpperCase(); if(r.length<7||r.length>9||/[^0-9]/.test(r.slice(0,-1))) return false;
+  let s=0,m=2; for(let i=r.length-2;i>=0;i--){s+=Number(r[i])*m;m=m===7?2:m+1}
+  const d=11-(s%11); return r.slice(-1)===(d===11?"0":d===10?"K":String(d));
+}
 function imprimirHoja(c,clave,w0){
   const esc=t=>String(t??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
   const centro=yo?.centro||"", logo=yo?.logo?location.origin+yo.logo:"";
@@ -1294,9 +1274,9 @@ function imprimirHoja(c,clave,w0){
   let qr=""; try{if(PORTAL_URL&&window.qrSVG)qr=qrSVG(PORTAL_URL,{modulo:4,margen:2})}catch(e){qr=""}   // QR con la dirección del portal
   // extranjero sin RUT: el usuario es su pasaporte (lleva letras; uno solo de números se escribe con PAS adelante)
   const docTxt=String(c.rut||"").replace(/^\s*PAS[\s.:-]*(?=\d)/i,"");   // «PAS 123456789» → 123456789 (el portal acepta solo los números)
-  const esPas=(()=>{const s=String(c.rut||"").toUpperCase().replace(/[^0-9A-Z]/g,"");return s.length>=5&&!/^\d*K?$/.test(s)})();
+  const esPas=!rutOk(c.rut);   // si no es un RUT válido, es un pasaporte o documento extranjero
   const informeListo=diaMay(sumarHabiles(c.fecha,DIAS_INFORME));
-  const w=w0||marcoHoja();
+  const w=w0||window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
   w.document.open();
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Hoja de retiro · ${esc(c.paciente)}</title>
 <style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#111;margin:32px;font-size:15px;line-height:1.45}
@@ -1307,7 +1287,13 @@ h1{font-size:20px;margin:0}.sub{color:#555;font-size:13px}table{border-collapse:
 tr.listo td{background:#f3f4f6;font-size:16px}tr.listo .sub{font-size:12px}
 ol{padding-left:20px}li{margin:4px 0}.app{border:1px dashed #888;border-radius:10px;padding:10px 14px;margin:10px 0 14px;font-size:13.5px}.app .t{display:block;margin-bottom:6px;font-size:14.5px}.app .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}.app .cols ol{margin:2px 0 0;padding-left:18px}.app .cols li{margin:2px 0}
 .acceso{display:flex;gap:16px;align-items:center}.acc-datos{flex:1}.qr{flex:none;text-align:center;font-size:11px;color:#444;line-height:1.25}.qr svg{display:block;width:118px;height:118px;margin:0 auto 4px}.pie{margin-top:24px;font-size:12px;color:#555;border-top:1px solid #ccc;padding-top:10px}
-@media print{body{margin:14mm}button{display:none}}</style></head><body>
+/* la hoja debe caber en una sola página (carta u oficio/A4) */
+body{max-width:720px;font-size:13.5px;line-height:1.35}.top{padding-bottom:8px;margin-bottom:10px}.top img{max-height:46px}h1{font-size:18px}
+table{margin:4px 0 10px}td{padding:4px 8px}.acceso{padding:10px 14px;margin:8px 0 10px}.acceso h2{font-size:15.5px;margin:0 0 6px}.dato{margin:3px 0}.dato b{font-size:18px}
+.qr svg{width:100px;height:100px}ol{margin:6px 0}li{margin:2px 0}.app{padding:8px 12px;margin:8px 0 8px;font-size:12.5px}.app .t{margin-bottom:4px;font-size:13.5px}.pie{margin-top:12px;padding-top:6px;font-size:11px}
+p{margin:6px 0}
+@page{margin:10mm}
+@media print{body{margin:0;max-width:none}button{display:none}.acceso,.app,table{break-inside:avoid}}</style></head><body>
 <div class="top">${logo?`<img src="${esc(logo)}" alt="">`:""}<div><h1>${esc(centro?"Centro de imágenes "+centro:"Centro de imágenes")}</h1><div class="sub">Comprobante de atención y retiro de examen</div></div></div>
 <table><tr><td>Paciente</td><td><b>${esc(c.paciente)}</b></td></tr><tr><td>${esPas?"Pasaporte / documento":"RUT"}</td><td>${esc(docTxt)}</td></tr>
 <tr><td>Examen</td><td>${esc(c.examen||"")}</td></tr><tr><td>Fecha</td><td>${esc(fecha)} · ${esc(c.hora)}</td></tr>
