@@ -8,15 +8,16 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/estilos.css">
 <script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
-<link rel="icon" href="/msc26/favicon.svg" type="image/svg+xml">
-<link rel="icon" href="/msc26/favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="/msc26/apple-touch-icon.png">
+<link rel="icon" href="/raxio/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/raxio/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/raxio/apple-touch-icon.png">
 </head>
 <body>
 <div class="login-wrap">
   <form class="login" id="form" novalidate>
     <div class="login-logo" id="logo-box" hidden><img id="logo" alt=""></div>
     <div class="mods" id="mods"><span class="tc">TC</span><span class="rx">RX</span><span class="eco">ECO</span></div>
+    <div class="login-raxio"><svg xmlns="http://www.w3.org/2000/svg" class="raxio-logo" viewBox="16 16 930 256" role="img" aria-label="RAXIO"><g transform="translate(24 24)"><path fill="currentColor" d="M0 0H138C200 0 232 30 232 86C232 130 207 157 159 165L107 116H134C156 116 168 107 168 88C168 69 156 61 134 61H0V0ZM0 61L61 122V240H0Z"/><path fill="#14B8A6" d="M25 77L147 240H247Z"/></g><g transform="translate(322 42)"><g fill="currentColor" fill-rule="evenodd"><path d="M0 0H67Q112 0 112 43Q112 74 83 83L118 135H78L31 63H63Q79 63 79 44Q79 27 63 27H32V135H0Z"/><path d="M125 135L176 0H211L263 135H228L218 106H168L158 135ZM177 79H209L193 33Z"/><path d="M267 0H305L333 43L361 0H399L353 65L402 135H362L333 88L303 135H264L312 65Z"/><path d="M418 0H450V135H418Z"/><path d="M547 -2C590 -2 615 25 615 67C615 110 590 137 547 137C504 137 479 110 479 67C479 25 504 -2 547 -2ZM547 27C525 27 513 42 513 67C513 93 525 108 547 108C569 108 581 93 581 67C581 42 569 27 547 27Z"/></g></g></svg></div>
     <h1>Agenda de Imágenes</h1>
     <p class="sub">Ingresa con tu usuario del centro.</p>
     <div class="field"><label for="usuario">Usuario</label><input id="usuario" autocomplete="username" autocapitalize="none" required></div>
@@ -47,6 +48,6 @@ fetch("/api/config").then(r=>r.json()).then(c=>{
 }).catch(()=>{});
 </script>
 <footer class="pie-sistema" id="pie-sistema"></footer>
-<script>fetch("/api/config").then(r=>r.json()).then(c=>{const pie=document.getElementById("pie-sistema");pie.innerHTML='<svg class="msc26-iso" width="14" height="14" viewBox="0 0 160 160" aria-hidden="true"><path d="M54.6 134.4 A60 60 0 1 1 105.4 134.4" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/><circle cx="80" cy="82" r="18" fill="currentColor"/><rect x="6" y="104" width="148" height="16" rx="8" fill="#14B8A6"/></svg>';pie.append(location.host+" · Versión "+(c.version||"")+" · © 2026 MSC26")}).catch(()=>{})</script>
+<script>fetch("/api/config").then(r=>r.json()).then(c=>{const pie=document.getElementById("pie-sistema");pie.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" class="raxio-iso" viewBox="-8 -8 263 256" aria-hidden="true"><path fill="currentColor" d="M0 0H138C200 0 232 30 232 86C232 130 207 157 159 165L107 116H134C156 116 168 107 168 88C168 69 156 61 134 61H0V0ZM0 61L61 122V240H0Z"/><path fill="#14B8A6" d="M25 77L147 240H247Z"/></svg>';pie.append(location.host+" · Versión "+(c.version||"")+" · © 2026 Raxio by MSC26")}).catch(()=>{})</script>
 </body>
 </html>
