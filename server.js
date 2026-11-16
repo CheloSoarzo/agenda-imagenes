@@ -114,6 +114,13 @@ const cookie = (valor, maxAge) =>
 // ---------- citas ----------
 const EQUIPOS = ["tc", "rx", "eco"];
 const ESTADOS = ["agendado", "confirmado", "llego", "atendido", "ausente", "cancelado"];
+
+// Tiempo en sala: guarda cuándo la cita pasó a «En espera» (solo la primera vez);
+// si vuelve a agendado o confirmado, se borra.
+function marcarLlegada(id) {
+  db.prepare(`UPDATE citas SET llego_en = CASE WHEN estado = 'llego' AND llego_en = '' THEN datetime('now')
+    WHEN estado IN ('agendado','confirmado') THEN '' ELSE llego_en END WHERE id = ?`).run(id);
+}
 // Paletas de colores que puede elegir cada usuario (los colores están en public/estilos.css)
 const PALETAS = ["azul", "rosa", "verde", "violeta", "cobre"];
 const ROLES = ["admin", "recepcion", "lectura"];
@@ -351,6 +358,7 @@ const rutas = [
       .run({ ...c, uid: u.id });
     const nuevoId = Number(r.lastInsertRowid);
     db.prepare("UPDATE citas SET accesion = ? WHERE id = ?").run(db.accesionDe(nuevoId), nuevoId);
+    marcarLlegada(nuevoId);
     integ.avisar(nuevoId);
     return [201, citaPorId(nuevoId)];
   }],
@@ -376,6 +384,7 @@ const rutas = [
       codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,contraste=@contraste,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");
+    marcarLlegada(id);
     if (pago && pago.fecha !== c.fecha) db.prepare("UPDATE pagos SET fecha = ? WHERE cita_id = ? AND anulado = 0").run(c.fecha, id);
     integ.avisar(id);
     return [200, citaPorId(id)];
@@ -389,6 +398,7 @@ const rutas = [
     if (!ESTADOS.includes(estado)) fallo(400, "El estado no es válido.");
     const r = db.prepare("UPDATE citas SET estado = ?, actualizado_por = ?, actualizado = datetime('now') WHERE id = ?").run(estado, u.id, id);
     if (!r.changes) fallo(404, "La cita ya no existe.");
+    marcarLlegada(id);
     integ.avisar(id);
     return [200, paraUsuario(citaPorId(id), u)];
   }],
@@ -447,6 +457,7 @@ const rutas = [
       c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta,
       medio2, monto2, cheque, contraste, boletaContraste);
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
+    marcarLlegada(id);
     // Clave para ver el examen en línea: se crea al pagar (solo la primera vez que viene el paciente)
     const portal = integ.activa ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;
     integ.avisar(id);

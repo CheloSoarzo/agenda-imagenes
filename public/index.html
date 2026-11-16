@@ -568,7 +568,10 @@ function render(){
       if(dur/STEP*ROW<40) el.classList.add("corta");   // bloque de una fila: examen en la misma línea
       if(c.notas){const n=el.querySelector(".n");n.hidden=false;n.textContent="💬 "+c.notas.replace(/\s+/g," ")}
       el.querySelector(".e").textContent=c.examen||"";
-      el.querySelector(".st").textContent=est.n+(SIN_DINERO?"":(c.pago_id?" · pagado":(c.estado==="llego"||c.estado==="atendido")&&c.valor?" · por cobrar":""))+(PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
+      const sala=minEnSala(c);
+      if(sala!=null){el.classList.add("en-sala");if(sala>=SALA_ROJO)el.classList.add("sala-rojo");else if(sala>=SALA_AMARILLO)el.classList.add("sala-amarillo")}
+      if(sala!=null&&el.classList.contains("corta")){const sm=document.createElement("span");sm.className="sala-min";sm.textContent=durSala(sala);sm.title="Tiempo en sala";el.querySelector(".l1").appendChild(sm)}
+      el.querySelector(".st").textContent=est.n+(sala!=null?" · "+durSala(sala):"")+(SIN_DINERO?"":(c.pago_id?" · pagado":(c.estado==="llego"||c.estado==="atendido")&&c.valor?" · por cobrar":""))+(PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
       if(c.pacs_estado) el.classList.add("pacs-"+c.pacs_estado);
       if(c.pago_id&&!SIN_DINERO) el.classList.add("paid");
       el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.notas?" · Comentario: "+c.notas:""}${c.adjuntos?" · orden adjunta":""}${c.accesion?" · N° acceso "+c.accesion:""}${PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:""}`;
@@ -604,6 +607,12 @@ function render(){
 
 /* ---------- tarjeta de detalle al pasar el mouse (solo con mouse; en el celular se toca la cita) ---------- */
 const HOVER=matchMedia("(hover:hover) and (pointer:fine)").matches;
+/* tiempo en sala: desde que la cita quedó «En espera» (llego_en, hora UTC del servidor) */
+const SALA_AMARILLO=20, SALA_ROJO=40;   // minutos
+function minEnSala(c){if(c.estado!=="llego"||!c.llego_en)return null;const t=Date.parse(c.llego_en.replace(" ","T")+"Z");
+  return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/60000))}
+const durSala=m=>m<60?m+" min":Math.floor(m/60)+" h "+String(m%60).padStart(2,"0");
+const horaLocal=s=>{const t=Date.parse(String(s).replace(" ","T")+"Z");return isNaN(t)?"":new Date(t).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false})};
 const plata=n=>"$"+Number(n||0).toLocaleString("es-CL");
 function edadDe(nac){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(nac||"");if(!m)return"";const h=new Date();let a=h.getFullYear()-m[1];
   if(h.getMonth()+1<+m[2]||(h.getMonth()+1==+m[2]&&h.getDate()<+m[3]))a--;return a>=0&&a<130?a+" años":""}
@@ -624,13 +633,16 @@ function mostrarTarjeta(c,el){
     if(!exs.length&&c.examen) exs=[c.examen];
     const lst=add("ul","hc-ex"); for(const x of exs){const li=document.createElement("li");li.textContent=x;lst.appendChild(li)}
     const filas=[["Hora",`${c.hora} – ${fin} · ${(EQUIPOS.find(e=>e.id===c.equipo)||{}).nombre||c.equipo}`],
+      ["En sala",minEnSala(c)!=null?`${durSala(minEnSala(c))} · llegó ${horaLocal(c.llego_en)}`:""],
       ["Previsión",c.prevision],["Médico",c.medico],
       ["Contraste",Number(c.contraste)>0?"Sí · "+plata(c.contraste):""],
       ["Pago",SIN_DINERO||["ausente","cancelado"].includes(c.estado)?"":(c.pago_id?"Pagado":(c.valor?((c.estado==="llego"||c.estado==="atendido")?"Por cobrar · ":"A pagar · ")+plata(Number(c.copago||c.valor)+Number(c.contraste||0)):""))],
       ["N° acceso",c.accesion],["PACS",PACS_TXT[c.pacs_estado]||""],["Orden",c.adjuntos?"Adjunta":""]];
     const dl=add("dl","hc-dl");
     for(const [k,v] of filas){if(!v)continue;const dt=document.createElement("dt");dt.textContent=k;const dd=document.createElement("dd");dd.textContent=v;
-      if(k==="Pago")dd.className=c.pago_id?"hc-ok":"hc-pend";dl.append(dt,dd)}
+      if(k==="Pago")dd.className=c.pago_id?"hc-ok":"hc-pend";
+      if(k==="En sala"){const m=minEnSala(c);dd.className=m>=SALA_ROJO?"hc-rojo":m>=SALA_AMARILLO?"hc-pend":""}
+      dl.append(dt,dd)}
     if(c.notas) add("div","hc-nota","💬 "+c.notas);
     add("div","hc-pie","Clic para abrir la cita");
     hc.hidden=false;

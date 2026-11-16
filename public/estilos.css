@@ -537,3 +537,15 @@ body.sin-dinero .ex-vals,body.sin-dinero #ir-cobro,body.sin-dinero #cobro,body.s
 .appt.paid{padding-right:16px}   /* que el «$» no tape el texto en columnas angostas */
 .grid.semana .appt.paid{padding-right:5px}
 .grid.semana .appt .st{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* tiempo en sala (citas «En espera»): amarillo desde 20 min, rojo desde 40 min */
+.appt.en-sala .st{font-variant-numeric:tabular-nums}
+.appt.sala-amarillo{box-shadow:inset 0 0 0 2px var(--warn)}
+.appt.sala-amarillo .st{color:var(--warn)}
+.appt.sala-rojo{box-shadow:inset 0 0 0 2px var(--bad)}
+.appt.sala-rojo .st{color:var(--bad)}
+@media (prefers-reduced-motion:no-preference){.appt.sala-rojo{animation:sala-pulso 2s ease-in-out infinite}}
+@keyframes sala-pulso{50%{box-shadow:inset 0 0 0 2px transparent}}
+.hc-dl dd.hc-rojo{color:var(--bad)}
+.appt .sala-min{flex:none;font-family:var(--f-mono);font-size:10.5px;font-weight:700;padding:1px 5px;border-radius:999px;background:var(--surface);color:var(--warn)}
+.appt.sala-rojo .sala-min{color:var(--bad)}

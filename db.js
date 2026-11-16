@@ -204,7 +204,9 @@ if (!db.prepare("SELECT 1 FROM meta WHERE clave = 'examenes_mayusculas'").get())
     // segundo teléfono y segundo correo del paciente (o de un familiar)
     ["telefono2", "TEXT NOT NULL DEFAULT ''"], ["email2", "TEXT NOT NULL DEFAULT ''"],
     // médico solicitante elegido de la lista del PACS (0 = escrito a mano, sin acceso al PACS)
-    ["medico_id", "INTEGER NOT NULL DEFAULT 0"]]) {
+    ["medico_id", "INTEGER NOT NULL DEFAULT 0"],
+    // hora (UTC) en que el paciente quedó «En espera»: sirve para mostrar el tiempo en sala
+    ["llego_en", "TEXT NOT NULL DEFAULT ''"]]) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE citas ADD COLUMN ${col} ${def}`);
   }
 }
