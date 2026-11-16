@@ -1261,9 +1261,11 @@ function sumarHabiles(f,n){let d=f;while(n>0){d=sumarDias(d,1);const w=parseISO(
 function imprimirHoja(c,clave,w0){
   const esc=t=>String(t??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
   const centro=yo?.centro||"", logo=yo?.logo?location.origin+yo.logo:"";
-  const fecha=parseISO(c.fecha).toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  // fechas en MAYÚSCULAS y dd/mm/aaaa, igual que el resto de los campos de la hoja (ej: LUNES 16/11/2026)
+  const diaMay=f=>(parseISO(f).toLocaleDateString("es-CL",{weekday:"long"})+" "+f.slice(8,10)+"/"+f.slice(5,7)+"/"+f.slice(0,4)).toUpperCase();
+  const fecha=diaMay(c.fecha);
   const url=PORTAL_URL||"(dirección pendiente)";
-  const informeListo=(f=>parseISO(f).toLocaleDateString("es-CL",{weekday:"long"})+" "+f.slice(8,10)+"/"+f.slice(5,7)+"/"+f.slice(0,4))(sumarHabiles(c.fecha,DIAS_INFORME));
+  const informeListo=diaMay(sumarHabiles(c.fecha,DIAS_INFORME));
   const w=w0||window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
   w.document.open();
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Hoja de retiro · ${esc(c.paciente)}</title>
