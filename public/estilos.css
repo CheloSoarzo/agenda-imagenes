@@ -482,7 +482,7 @@ body.sin-dinero .ex-vals,body.sin-dinero #ir-cobro,body.sin-dinero #cobro,body.s
 .msc26-marca .msc26-logo{display:block;height:22px;width:auto}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .msc26-marca{--msc26-acento:#14B8A6}}
 :root[data-theme="dark"] .msc26-marca{--msc26-acento:#14B8A6}
-@media (max-width:900px){.msc26-marca .msc26-txt{display:none}}
+@media (max-width:900px){.msc26-marca .msc26-logo,.raxio-logo{height:18px}}
 @media (max-width:600px){.msc26-marca{border-left:0;padding-left:0}}
 @media print{.msc26-marca{display:none}}
 
@@ -555,9 +555,6 @@ body.sin-dinero .ex-vals,body.sin-dinero #ir-cobro,body.sin-dinero #cobro,body.s
 .raxio-logo{display:block;height:24px;width:auto}
 .raxio-marca + .msc26-marca{border-left:0;padding-left:4px}
 .pie-sistema .raxio-iso{width:14px;height:14px;vertical-align:-2px;margin-right:6px}
-.login-raxio{display:flex;justify-content:center;color:var(--fg);margin:0 0 10px}
-.login-raxio .raxio-logo{height:34px}
 @media (max-width:600px){.raxio-marca{border-left:0;padding-left:0}.raxio-marca + .msc26-marca{display:none}}
 @media print{.raxio-marca{display:none}}
 .marca-producto{display:flex;align-items:center;gap:4px}
-.login-raxio{justify-content:flex-start}
