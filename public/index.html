@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/estilos.css">
 <script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p;var t=localStorage.getItem("agenda-tema");if(t==="claro")document.documentElement.dataset.theme="light";else if(t==="oscuro")document.documentElement.dataset.theme="dark"}catch(e){}</script>
 <script src="/fecha-cl.js"></script>
+<script src="/qr.js"></script>
 <link rel="icon" href="/raxio/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/raxio/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/raxio/apple-touch-icon.png">
@@ -1265,6 +1266,7 @@ function imprimirHoja(c,clave,w0){
   const diaMay=f=>(parseISO(f).toLocaleDateString("es-CL",{weekday:"long"})+" "+f.slice(8,10)+"/"+f.slice(5,7)+"/"+f.slice(0,4)).toUpperCase();
   const fecha=diaMay(c.fecha);
   const url=PORTAL_URL||"(dirección pendiente)";
+  let qr=""; try{if(PORTAL_URL&&window.qrSVG)qr=qrSVG(PORTAL_URL,{modulo:4,margen:2})}catch(e){qr=""}   // QR con la dirección del portal
   const informeListo=diaMay(sumarHabiles(c.fecha,DIAS_INFORME));
   const w=w0||window.open("","hoja","width=720,height=900"); if(!w){toast("Permite las ventanas emergentes para imprimir");return}
   w.document.open();
@@ -1275,23 +1277,26 @@ h1{font-size:20px;margin:0}.sub{color:#555;font-size:13px}table{border-collapse:
 .acceso{border:2px solid #111;border-radius:10px;padding:16px 18px;margin:12px 0 18px}.acceso h2{margin:0 0 10px;font-size:17px}
 .dato{font-size:15px;margin:6px 0}.dato b{font-family:ui-monospace,Menlo,monospace;font-size:20px;letter-spacing:.08em}
 tr.listo td{background:#f3f4f6;font-size:16px}tr.listo .sub{font-size:12px}
-ol{padding-left:20px}li{margin:4px 0}.app{border:1px dashed #888;border-radius:10px;padding:10px 14px;margin:10px 0 14px;font-size:14px}.app>b:first-child{display:block;margin-bottom:4px}.pie{margin-top:24px;font-size:12px;color:#555;border-top:1px solid #ccc;padding-top:10px}
+ol{padding-left:20px}li{margin:4px 0}.app{border:1px dashed #888;border-radius:10px;padding:10px 14px;margin:10px 0 14px;font-size:13.5px}.app .t{display:block;margin-bottom:6px;font-size:14.5px}.app .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}.app .cols ol{margin:2px 0 0;padding-left:18px}.app .cols li{margin:2px 0}
+.acceso{display:flex;gap:16px;align-items:center}.acc-datos{flex:1}.qr{flex:none;text-align:center;font-size:11px;color:#444;line-height:1.25}.qr svg{display:block;width:118px;height:118px;margin:0 auto 4px}.pie{margin-top:24px;font-size:12px;color:#555;border-top:1px solid #ccc;padding-top:10px}
 @media print{body{margin:14mm}button{display:none}}</style></head><body>
 <div class="top">${logo?`<img src="${esc(logo)}" alt="">`:""}<div><h1>${esc(centro?"Centro de imágenes "+centro:"Centro de imágenes")}</h1><div class="sub">Comprobante de atención y retiro de examen</div></div></div>
 <table><tr><td>Paciente</td><td><b>${esc(c.paciente)}</b></td></tr><tr><td>RUT</td><td>${esc(c.rut)}</td></tr>
 <tr><td>Examen</td><td>${esc(c.examen||"")}</td></tr><tr><td>Fecha</td><td>${esc(fecha)} · ${esc(c.hora)}</td></tr>
 <tr><td>N° de acceso</td><td>${esc(c.accesion||"")}</td></tr>
 <tr class="listo"><td>Informe disponible desde</td><td><b>${esc(informeListo)}</b><div class="sub">${DIAS_INFORME} días hábiles después de su examen</div></td></tr></table>
-<div class="acceso"><h2>Ver su examen en línea</h2>
+<div class="acceso"><div class="acc-datos"><h2>Ver su examen en línea</h2>
 <div class="dato">Dirección: <b>${esc(url.replace(/^https?:\/\//,""))}</b></div>
 <div class="dato">Usuario: <b>${esc(c.rut)}</b> (su RUT)</div>
 <div class="dato">Clave: <b>${clave?esc(clave):"la que recibió en su visita anterior"}</b></div></div>
+${qr?`<div class="qr">${qr}<span>Escanee con la cámara<br>de su celular</span></div>`:""}</div>
 <ol><li>Entre a la dirección desde su celular o computador.</li><li>Escriba su RUT y su clave.</li>
 <li>Verá su examen con su estado. Podrá ver sus imágenes apenas estén listas, y cuando el médico radiólogo firme el informe, podrá verlo y descargarlo en PDF.</li>
 <li>Su clave sirve para todos sus exámenes en este centro. Guárdela y no la comparta.</li></ol>
-<div class="app"><b>Tenga sus exámenes como app en su celular</b>
-Entre a la dirección desde el celular y luego: <b>Android</b>: toque «Instalar» en el aviso «Instala Mis exámenes».
-<b>iPhone</b>: en Safari toque <b>Compartir</b> y luego <b>Agregar a inicio</b>. Quedará el ícono «Mis exámenes» en su pantalla de inicio.</div>
+<div class="app"><b class="t">Tenga sus exámenes como app en su celular</b>
+<div class="cols"><div><b>Android</b><ol><li>Escanee el código o abra la dirección en Chrome.</li><li>Toque <b>«Instalar»</b> en el aviso «Instala Mis exámenes».</li></ol></div>
+<div><b>iPhone</b><ol><li>Escanee el código o abra la dirección en Safari.</li><li>Toque <b>Compartir</b> y luego <b>«Agregar a inicio»</b>.</li></ol></div></div>
+Quedará el ícono «Mis exámenes» en su pantalla de inicio. Después de entrar con su clave podrá activar el ingreso con su <b>huella o cara</b>.</div>
 <p>Si olvida su clave, pida una nueva en recepción presentando su carnet.</p>
 <div class="pie">Impreso el ${esc((d=>`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`)(new Date()))}${yo?.nombre?" por "+esc(yo.nombre):""}.</div>
 <script>window.onload=()=>{setTimeout(()=>window.print(),200)}<\/script></body></html>`);
