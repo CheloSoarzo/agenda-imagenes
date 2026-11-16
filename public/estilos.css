@@ -576,3 +576,9 @@ a.raxio-marca:hover{opacity:.85}
   .appt.corta .hoja{display:none}
   .appt.corta:has(.hoja) > .l1{margin-right:8px}
 }
+
+/* v1.1.66: RUT obligatorio válido, casilla de paciente extranjero */
+.field .chk-ext,.chk-ext{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12.5px;font-weight:500;color:var(--muted);text-transform:none!important;letter-spacing:0!important;cursor:pointer}
+.field .chk-ext input{width:auto;margin:0}
+.rut-err{margin-top:4px;font-size:12.5px;font-weight:700;color:var(--bad)}
+input.invalido{border-color:var(--bad)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 18%,transparent)}

@@ -137,6 +137,14 @@ function validarCita(b) {
     codigo: "", valor: 0, bonificacion: 0, copago: 0, examenes: "",
   };
   if (!c.paciente) fallo(400, "Escribe el nombre del paciente.");
+  // RUT: si se escribe, debe ser válido. Extranjeros sin RUT: se guarda «PAS » + su pasaporte o N° de documento.
+  if (/^PAS\s/i.test(c.rut)) {
+    const doc = c.rut.slice(4).trim().toUpperCase();
+    if (doc.replace(/[^0-9A-Z]/g, "").length < 5) fallo(400, "Escribe el pasaporte o número de documento del paciente extranjero (al menos 5 letras o números).");
+    c.rut = "PAS " + doc;
+  } else if (c.rut && !integ.rutValido(c.rut)) {
+    fallo(400, "El RUT no es válido. Revísalo, o marca «Paciente extranjero» si no tiene RUT.");
+  }
   if (!reFecha.test(c.fecha)) fallo(400, "La fecha no es válida.");
   if (!reHora.test(c.hora)) fallo(400, "La hora no es válida.");
   if (!EQUIPOS.includes(c.equipo)) fallo(400, "Elige un equipo.");
@@ -420,6 +428,9 @@ const rutas = [
     if (!c) fallo(404, "La cita ya no existe.");
     if (pagoActivo(id)) fallo(409, "Esta cita ya tiene un pago registrado.");
     if (!c.valor) fallo(400, "Elige el examen y su valor antes de cobrar.");
+    if (!(/^PAS\s/i.test(c.rut || "") || integ.rutValido(c.rut))) fallo(400, c.rut
+      ? "El RUT de esta cita no es válido. Corrígelo en «Editar cita» (o marca «Paciente extranjero») antes de cobrar."
+      : "Falta el RUT del paciente (o su pasaporte si es extranjero). Escríbelo en «Editar cita» antes de cobrar.");
     // El pago se registra en la caja del día agendado (no en el día en que se cobra)
     const fecha = c.fecha;
     if (cajaCerrada(fecha)) fallo(409, `La caja del ${fechaCL(fecha)} ya está cerrada. Un administrador debe reabrirla para registrar pagos.`);
