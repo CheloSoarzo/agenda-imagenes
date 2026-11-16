@@ -42,6 +42,17 @@ const rutValido = (rut) => {
   const res = 11 - (suma % 11);
   return dv === (res === 11 ? "0" : res === 10 ? "K" : String(res));
 };
+// Documento del paciente: su RUT (como siempre) o, para extranjeros sin RUT, «P» + el pasaporte.
+// Un pasaporte se reconoce porque lleva letras (un RUT solo puede tener la K al final).
+// Si el pasaporte es solo de números, se escribe con «PAS» adelante (ej: PAS 123456789).
+// Debe ser igual a doc_norm() del PACS.
+const docNorm = (v) => {
+  const s = String(v || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  if (/^\d*K?$/.test(s) || s.length < 5) return normRut(v);
+  return "P" + s;
+};
+const esPasaporte = (k) => /^P[0-9A-Z]{5,}$/.test(k || "");
+const docValido = (k) => esPasaporte(k) || rutValido(k);
 
 module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) {
   // ---------- órdenes hacia el PACS ----------
@@ -53,7 +64,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     const sinContraste = examenes.filter((l) => !/^\s*(cobro\s+(de\s+)?)?(medio\s+de\s+)?contraste\b/i.test(l.nombre || ""));
     if (sinContraste.length) examenes = sinContraste;
     const pagado = !!db.prepare("SELECT 1 FROM pagos WHERE cita_id = ? AND anulado = 0").get(cita.id);
-    const rut = normRut(cita.rut);
+    const rut = docNorm(cita.rut);
     const clave = rut ? db.prepare("SELECT clave_hash FROM portal_claves WHERE rut = ?").get(rut) : null;
     return {
       accesion: cita.accesion || db.accesionDe(cita.id), cita_id: cita.id,
@@ -85,7 +96,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
   // Todas las citas de un paciente (cuando cambia su clave)
   function avisarPaciente(rut) {
     if (!ACTIVA || !rut) return;
-    const ids = db.prepare(`SELECT id FROM citas WHERE UPPER(REPLACE(REPLACE(REPLACE(rut,'.',''),'-',''),' ','')) = ?`).all(rut);
+    const ids = db.prepare("SELECT id, rut FROM citas WHERE rut <> ''").all().filter((c) => docNorm(c.rut) === rut);
     for (const { id } of ids) { const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id); encolar.run(id, JSON.stringify(datosOrden(c))); }
     enviarPronto();
   }
@@ -217,8 +228,8 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
   // ---------- clave del paciente ----------
   // Si el paciente aún no tiene clave, la crea. Devuelve la clave nueva (solo esa vez) o null si ya tenía.
   function asegurarClave(rut, usuarioId) {
-    const r = normRut(rut);
-    if (!r || !rutValido(r)) return { estado: "sin_rut" };
+    const r = docNorm(rut);
+    if (!r || !docValido(r)) return { estado: "sin_rut" };
     if (db.prepare("SELECT 1 FROM portal_claves WHERE rut = ?").get(r)) return { estado: "existente" };
     const clave = claveNueva();
     db.prepare("INSERT INTO portal_claves (rut, clave_hash, clave_cifrada, usuario_id, creado) VALUES (?,?,?,?,?)")
@@ -226,8 +237,8 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     return { estado: "nueva", clave };
   }
   function cambiarClave(rut, usuarioId) {
-    const r = normRut(rut);
-    if (!r || !rutValido(r)) fallo(400, "La cita necesita un RUT válido para crear la clave del paciente.");
+    const r = docNorm(rut);
+    if (!r || !docValido(r)) fallo(400, "La cita necesita un RUT válido (o un pasaporte) para crear la clave del paciente. Si el pasaporte es solo de números, escríbelo con PAS adelante, ej: PAS 123456789.");
     const clave = claveNueva();
     db.prepare(`INSERT INTO portal_claves (rut, clave_hash, clave_cifrada, usuario_id, creado) VALUES (?,?,?,?,?)
       ON CONFLICT(rut) DO UPDATE SET clave_hash = excluded.clave_hash, clave_cifrada = excluded.clave_cifrada,
@@ -265,7 +276,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     ["GET", /^\/api\/citas\/(\d+)\/clave$/, "admin", async (req, u, url, m) => {
       const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(Number(m[1]));
       if (!c) fallo(404, "La cita ya no existe.");
-      const r = normRut(c.rut);
+      const r = docNorm(c.rut);
       const fila = r ? db.prepare(`SELECT p.clave_cifrada, p.creado, us.nombre AS creada_por FROM portal_claves p
         LEFT JOIN usuarios us ON us.id = p.usuario_id WHERE p.rut = ?`).get(r) : null;
       if (!fila) fallo(404, "Este paciente aún no tiene clave. Se crea al pagar, o con «Nueva clave».");
@@ -280,7 +291,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
       const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(Number(m[1]));
       if (!c) fallo(404, "La cita ya no existe.");
       if (!ACTIVA) fallo(400, "La agenda aún no está conectada al PACS.");
-      const r = normRut(c.rut);
+      const r = docNorm(c.rut);
       if (!r) return [200, { clave: null, motivo: "sin_rut" }];
       const fila = db.prepare("SELECT clave_cifrada FROM portal_claves WHERE rut = ?").get(r);
       if (!fila) return [200, { clave: null, motivo: "sin_clave" }];
@@ -296,5 +307,5 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     }],
   ];
 
-  return { activa: ACTIVA, resincronizar, portalUrl: PORTAL_URL, get pacsPublico() { return ACTIVA ? (PACS_PUBLICO || pacsDelPacs) : ""; }, avisar, avisarEliminada, asegurarClave, rutas, normRut, rutValido };
+  return { activa: ACTIVA, resincronizar, portalUrl: PORTAL_URL, get pacsPublico() { return ACTIVA ? (PACS_PUBLICO || pacsDelPacs) : ""; }, avisar, avisarEliminada, asegurarClave, rutas, normRut, rutValido, docNorm };
 };
