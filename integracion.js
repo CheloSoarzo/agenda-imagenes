@@ -285,6 +285,21 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
       db.prepare("INSERT INTO portal_claves_vistas (rut, cita_id, usuario_id, visto) VALUES (?,?,?,?)").run(r, c.id, u.id, ahoraCaja());
       return [200, { clave, creado: fila.creado, creada_por: fila.creada_por || "", portal_url: PORTAL_URL }];
     }],
+    // Paciente extranjero con documento solo de números (no es un RUT válido): se guarda como «PAS 123456789»
+    // y se crea su clave. En el portal puede entrar escribiendo solo los números.
+    ["POST", /^\/api\/citas\/(\d+)\/extranjero$/, "escribir", async (req, u, url, m) => {
+      const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(Number(m[1]));
+      if (!c) fallo(404, "La cita ya no existe.");
+      if (!ACTIVA) fallo(400, "La agenda aún no está conectada al PACS.");
+      if (docValido(docNorm(c.rut))) fallo(400, "Esta cita ya tiene un RUT o pasaporte válido.");
+      const num = String(c.rut || "").replace(/[^0-9]/g, "");
+      if (!/^\d{5,}$/.test(num) || /[A-JL-Z]/i.test(c.rut)) fallo(400, "Escribe el número del documento en «Editar cita».");
+      const nuevo = "PAS " + num;
+      db.prepare("UPDATE citas SET rut = ? WHERE id = ?").run(nuevo, c.id);
+      const r = asegurarClave(nuevo, u.id);
+      avisar(c.id);
+      return [200, { rut: nuevo, ...r, url: PORTAL_URL }];
+    }],
     // Reimprimir la hoja de retiro con la clave actual del paciente (recepción y administrador).
     // Queda registrado quién la reimprimió. Si la clave es de antes de la versión 1.1.15 no se puede recuperar.
     ["GET", /^\/api\/citas\/(\d+)\/hoja$/, "escribir", async (req, u, url, m) => {
@@ -292,7 +307,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
       if (!c) fallo(404, "La cita ya no existe.");
       if (!ACTIVA) fallo(400, "La agenda aún no está conectada al PACS.");
       const r = docNorm(c.rut);
-      if (!r) return [200, { clave: null, motivo: "sin_rut" }];
+      if (!r || !docValido(r)) return [200, { clave: null, motivo: "sin_rut" }];
       const fila = db.prepare("SELECT clave_cifrada FROM portal_claves WHERE rut = ?").get(r);
       if (!fila) return [200, { clave: null, motivo: "sin_clave" }];
       const clave = descifrar(fila.clave_cifrada);
