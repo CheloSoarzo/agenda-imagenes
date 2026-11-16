@@ -1275,7 +1275,7 @@ h1{font-size:20px;margin:0}.sub{color:#555;font-size:13px}table{border-collapse:
 .acceso{border:2px solid #111;border-radius:10px;padding:16px 18px;margin:12px 0 18px}.acceso h2{margin:0 0 10px;font-size:17px}
 .dato{font-size:15px;margin:6px 0}.dato b{font-family:ui-monospace,Menlo,monospace;font-size:20px;letter-spacing:.08em}
 tr.listo td{background:#f3f4f6;font-size:16px}tr.listo .sub{font-size:12px}
-ol{padding-left:20px}li{margin:4px 0}.pie{margin-top:24px;font-size:12px;color:#555;border-top:1px solid #ccc;padding-top:10px}
+ol{padding-left:20px}li{margin:4px 0}.app{border:1px dashed #888;border-radius:10px;padding:10px 14px;margin:10px 0 14px;font-size:14px}.app>b:first-child{display:block;margin-bottom:4px}.pie{margin-top:24px;font-size:12px;color:#555;border-top:1px solid #ccc;padding-top:10px}
 @media print{body{margin:14mm}button{display:none}}</style></head><body>
 <div class="top">${logo?`<img src="${esc(logo)}" alt="">`:""}<div><h1>${esc(centro?"Centro de imágenes "+centro:"Centro de imágenes")}</h1><div class="sub">Comprobante de atención y retiro de examen</div></div></div>
 <table><tr><td>Paciente</td><td><b>${esc(c.paciente)}</b></td></tr><tr><td>RUT</td><td>${esc(c.rut)}</td></tr>
@@ -1289,6 +1289,9 @@ ol{padding-left:20px}li{margin:4px 0}.pie{margin-top:24px;font-size:12px;color:#
 <ol><li>Entre a la dirección desde su celular o computador.</li><li>Escriba su RUT y su clave.</li>
 <li>Verá su examen con su estado. Podrá ver sus imágenes apenas estén listas, y cuando el médico radiólogo firme el informe, podrá verlo y descargarlo en PDF.</li>
 <li>Su clave sirve para todos sus exámenes en este centro. Guárdela y no la comparta.</li></ol>
+<div class="app"><b>Tenga sus exámenes como app en su celular</b>
+Entre a la dirección desde el celular y luego: <b>Android</b>: toque «Instalar» en el aviso «Instala Mis exámenes».
+<b>iPhone</b>: en Safari toque <b>Compartir</b> y luego <b>Agregar a inicio</b>. Quedará el ícono «Mis exámenes» en su pantalla de inicio.</div>
 <p>Si olvida su clave, pida una nueva en recepción presentando su carnet.</p>
 <div class="pie">Impreso el ${esc((d=>`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`)(new Date()))}${yo?.nombre?" por "+esc(yo.nombre):""}.</div>
 <script>window.onload=()=>{setTimeout(()=>window.print(),200)}<\/script></body></html>`);
