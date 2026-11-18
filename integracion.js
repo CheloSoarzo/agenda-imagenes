@@ -10,7 +10,7 @@
 //   PACS_URL            dirección de la app de informes del PACS (ej: https://pacsrancagua.inq.cl
 //                       o, en el mismo servidor, http://rancagua-informes:8000). Vacía = sin integración.
 //   INTEGRACION_TOKEN   clave compartida con el PACS (la misma en ambos lados)
-//   PORTAL_URL          dirección que se imprime en la hoja de retiro (por defecto PACS_URL/paciente)
+//   PORTAL_URL          dirección que se imprime en la hoja de acceso en línea (por defecto PACS_URL/paciente)
 //   ACCESION_PREFIJO    letras al inicio del número de acceso (por defecto AG)
 //   PACS_PUBLICO_URL    dirección del PACS que abre el navegador (botón «Ver en el PACS»). Por defecto PACS_URL
 //                       si es https.
@@ -299,7 +299,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
       avisar(c.id);
       return [200, { rut: nuevo, ...r, url: PORTAL_URL }];
     }],
-    // Reimprimir la hoja de retiro con la clave actual del paciente (recepción y administrador).
+    // Reimprimir la hoja de acceso en línea con la clave actual del paciente (recepción y administrador).
     // Queda registrado quién la reimprimió. Si la clave es de antes de la versión 1.1.15 no se puede recuperar.
     ["GET", /^\/api\/citas\/(\d+)\/hoja$/, "escribir", async (req, u, url, m) => {
       const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(Number(m[1]));
