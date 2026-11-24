@@ -86,7 +86,7 @@ tr.off td{opacity:.55}
         </div>
       </details>
       <div class="msg" id="msg" style="margin-top:10px"></div>
-      <div class="barra" style="margin-top:10px"><span class="spacer"></span><button type="button" class="btn" id="cancelar" hidden>Cancelar</button><button class="btn primary" id="guardar">Agregar</button></div>
+      <div class="barra" style="margin-top:10px"><button type="button" class="btn danger" id="eliminar-prof" hidden>Eliminar profesional</button><span class="spacer"></span><button type="button" class="btn" id="cancelar" hidden>Cancelar</button><button class="btn primary" id="guardar">Agregar</button></div>
     </form>
     <!-- Horario de atención y bloqueos del profesional que se está editando -->
     <div class="card" id="hor-card" hidden>
@@ -170,16 +170,24 @@ function limpiar(){
   editId=null; $("#f-titulo").textContent="Agregar profesional"; $("#guardar").textContent="Agregar"; $("#cancelar").hidden=true;
   for(const id of ["p-nombre","p-rut","p-esp","p-reg","n-usr","n-clave"]) $("#"+id).value="";
   $("#p-titulo").value="Dr."; $("#p-dur").value="20"; $("#p-act").value="1"; $("#msg").textContent=""; llenarUsuarios("");
-  $("#hor-card").hidden=true; horProf=null;
+  $("#hor-card").hidden=true; horProf=null; $("#eliminar-prof").hidden=true;
 }
 function editar(p){
   editId=p.id; $("#f-titulo").textContent="Editar "+p.nombre; $("#guardar").textContent="Guardar cambios"; $("#cancelar").hidden=false;
   $("#p-titulo").value=p.titulo; $("#p-nombre").value=p.nombre; $("#p-rut").value=p.rut?rutTxt(p.rut):""; $("#p-esp").value=p.especialidad; $("#p-reg").value=p.registro;
   $("#p-dur").value=String(p.duracion); $("#p-act").value=p.activo?"1":"0"; llenarUsuarios(p.usuario_id||""); $("#msg").textContent="";
   $("#form").scrollIntoView({behavior:"smooth"});
+  $("#eliminar-prof").hidden=false;
   abrirHorario(p);
 }
 $("#cancelar").addEventListener("click",limpiar);
+// Eliminar: su agenda deja de aparecer; sus fichas, atenciones y documentos se conservan (no se borran por ley)
+$("#eliminar-prof").addEventListener("click",async()=>{
+  const p=PROFS.find(x=>x.id===editId); if(!p) return;
+  if(!confirm(`¿Eliminar a ${`${p.titulo} ${p.nombre}`.trim()}?\n\nSu agenda deja de aparecer y ya no se le pueden dar horas. Sus fichas, atenciones y documentos se conservan.`)) return;
+  try{await api("/api/profesionales/"+p.id,{method:"DELETE"});toast("Profesional eliminado: su agenda ya no aparece");limpiar();await cargar()}
+  catch(e){$("#msg").className="msg err";$("#msg").textContent=e.message}
+});
 $("#n-crear").addEventListener("click",async()=>{
   const usuario=$("#n-usr").value.trim().toLowerCase(), clave=$("#n-clave").value;
   try{await api("/api/usuarios",{method:"POST",body:{usuario,clave,nombre:$("#p-nombre").value.trim()||usuario,rol:"medico"}});

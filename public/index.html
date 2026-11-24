@@ -373,6 +373,12 @@
         <span class="pill" id="k-estado"></span>
       </div>
     </div>
+    <div class="k-vista noprint" id="k-vista">
+      <span class="meta">Ver:</span><div class="rangos" id="k-vistas" role="group" aria-label="Qué caja ver"></div>
+      <button type="button" class="linkbtn" id="k-cajas-cfg" hidden>Configurar cajas</button>
+    </div>
+    <div class="k-agendas noprint" id="k-agendas" hidden></div>
+    <div class="k-estado-cajas" id="k-estado-cajas" hidden></div>
     <div class="tiles" id="k-tiles"></div>
     <div class="caja-grid">
       <div><h3>Por medio de pago</h3><div class="tbl" id="k-medio"></div></div>
@@ -409,6 +415,21 @@
       <span class="spacer"></span>
       <button type="button" class="btn" id="kcerrar">Cerrar</button>
     </div>
+  </div>
+</div>
+
+<!-- Configurar cajas (administrador) -->
+<div class="scrim" id="cajscrim" hidden>
+  <div class="panel">
+    <h2>Cajas</h2>
+    <p class="meta" style="margin:0">Cada caja se cierra por separado con su propio efectivo contado (por ejemplo «Imágenes» con TC, RX y ECO, y «Consultas» con los médicos). Cada agenda va en una sola caja. Lo que no esté en ninguna queda en la caja <b>General</b>. Sin cajas, todo se cierra junto como siempre.</p>
+    <div id="caj-lista"></div>
+    <h3 style="margin:16px 0 6px;font-size:15px" id="caj-form-tit">Nueva caja</h3>
+    <div class="field"><label for="caj-nombre">Nombre</label><input id="caj-nombre" maxlength="60" placeholder="Imágenes"></div>
+    <div class="caj-agendas" id="caj-agendas"></div>
+    <div class="msg" id="caj-msg"></div>
+    <div class="actions"><button type="button" class="btn danger" id="caj-borrar" hidden>Eliminar caja</button><span class="spacer"></span>
+      <button type="button" class="btn" id="caj-cerrar">Listo</button><button type="button" class="btn primary" id="caj-guardar">Guardar caja</button></div>
   </div>
 </div>
 
@@ -1548,8 +1569,10 @@ async function cargarUsuarios(){
         const x=document.createElement("button");x.type="button";x.className="linkbtn eliminar";x.textContent="Eliminar";
         x.title="Ya no podrá entrar. La caja y las citas siguen mostrando su nombre.";
         x.addEventListener("click",async()=>{
-          if(!x.classList.contains("armed")){x.classList.add("armed");x.textContent="¿Eliminar a "+u.nombre+"?";return}
-          try{await api("/api/usuarios/"+u.id,{method:"DELETE"});toast("Usuario "+u.usuario+" eliminado");cargarUsuarios()}catch(e){toast(e.message)}
+          if(!x.classList.contains("armed")){x.classList.add("armed");x.textContent="¿Eliminar a "+u.nombre+(u.rol==="medico"?" y quitar su agenda?":"?");return}
+          try{const r=await api("/api/usuarios/"+u.id,{method:"DELETE"});
+            toast("Usuario "+u.usuario+" eliminado"+(r.sin_agenda&&r.sin_agenda.length?" · se quitó la agenda de "+r.sin_agenda.join(", "):""));cargarUsuarios()}
+          catch(e){x.classList.remove("armed");x.textContent="Eliminar";toast(e.message)}
         });
         row.append(k,t,x);
       }
@@ -1702,6 +1725,42 @@ $("#cform").addEventListener("submit",async e=>{
 /* ---------- caja ---------- */
 const EQN={tc:"TC",rx:"RX",eco:"ECO"};
 let cajaData=null, cajaRango={desde:null,hasta:null};
+// Qué se ve en caja: todo, una caja (cierre propio) o una selección libre de agendas
+let cajaVista={tipo:"todo"};
+const nombreAgenda=k=>EQN[k]||String(k).toUpperCase();
+function vistaQuery(){
+  if(cajaVista.tipo==="caja") return "&caja="+cajaVista.id;
+  if(cajaVista.tipo==="agendas"&&cajaVista.lista.length) return "&agendas="+encodeURIComponent(cajaVista.lista.join(","));
+  return "";
+}
+function vistaTxt(){
+  const d=cajaData;
+  if(cajaVista.tipo==="caja") return " · Caja "+((d?.cajas||[]).find(c=>c.id===cajaVista.id)?.nombre||"General");
+  if(cajaVista.tipo==="agendas"&&cajaVista.lista.length) return " · "+cajaVista.lista.map(nombreAgenda).join(", ");
+  return "";
+}
+function pintarVistas(d){
+  const box=$("#k-vistas"); box.innerHTML="";
+  const boton=(txt,activo,fn)=>{const b=document.createElement("button");b.type="button";b.className="rango";b.textContent=txt;b.setAttribute("aria-pressed",String(activo));b.addEventListener("click",fn);box.appendChild(b)};
+  const hay=(d.cajas||[]).length>0;
+  boton(hay?"Todas las cajas":"Todo",cajaVista.tipo==="todo",()=>{cajaVista={tipo:"todo"};abrirCaja()});
+  if(hay){
+    boton("General",cajaVista.tipo==="caja"&&cajaVista.id===0,()=>{cajaVista={tipo:"caja",id:0};abrirCaja()});
+    for(const c of d.cajas) boton(c.nombre,cajaVista.tipo==="caja"&&cajaVista.id===c.id,()=>{cajaVista={tipo:"caja",id:c.id};abrirCaja()});
+  }
+  boton("Elegir agendas…",cajaVista.tipo==="agendas",()=>{cajaVista={tipo:"agendas",lista:cajaVista.lista||EQUIPOS.map(e=>e.id)};pintarAgendasCaja();$("#k-agendas").hidden=false;abrirCaja()});
+  $("#k-cajas-cfg").hidden=!(yo&&yo.rol==="admin");
+  $("#k-agendas").hidden=cajaVista.tipo!=="agendas";
+  if(cajaVista.tipo==="agendas") pintarAgendasCaja();
+}
+function pintarAgendasCaja(){
+  const box=$("#k-agendas"); box.innerHTML="";
+  for(const e of EQUIPOS){
+    const l=document.createElement("label"); const cb=document.createElement("input"); cb.type="checkbox"; cb.value=e.id; cb.checked=cajaVista.lista.includes(e.id);
+    cb.addEventListener("change",()=>{cajaVista.lista=[...box.querySelectorAll("input:checked")].map(x=>x.value);if(cajaVista.lista.length)abrirCaja()});
+    l.append(cb," "+e.nombre); box.appendChild(l);
+  }
+}
 const fCorta=f=>{const [y,m,d]=f.split("-");return `${d}-${m}-${y}`};
 // Hora del cobro; si se cobró otro día que el agendado, también la fecha del cobro
 const cobradoTxt=p=>(p.creado.slice(0,10)!==p.fecha?p.creado.slice(8,10)+"/"+p.creado.slice(5,7)+" ":"")+p.creado.slice(11,16);
@@ -1782,13 +1841,19 @@ async function abrirCaja(rango){
   if(rango) cajaRango=rango;
   if(!cajaRango.desde) cajaRango=rangoPreset("hoy");
   $("#kmsg").textContent="";
-  try{cajaData=await api(`/api/caja?desde=${cajaRango.desde}&hasta=${cajaRango.hasta}`)}catch(e){$("#kmsg").className="msg err";$("#kmsg").textContent=e.message;$("#kscrim").hidden=false;return}
+  try{cajaData=await api(`/api/caja?desde=${cajaRango.desde}&hasta=${cajaRango.hasta}${vistaQuery()}`)}catch(e){$("#kmsg").className="msg err";$("#kmsg").textContent=e.message;$("#kscrim").hidden=false;return}
   const d=cajaData, t=d.totales;
   $("#kscrim").hidden=false;
-  $("#k-titulo").textContent=(d.un_dia?"Caja del día":"Resumen de caja")+(centroNombre?" · "+centroNombre:"");
+  $("#k-titulo").textContent=(d.un_dia?"Caja del día":"Resumen de caja")+(centroNombre?" · "+centroNombre:"")+vistaTxt();
+  pintarVistas(d); pintarEstadoCajas(d);
   $("#k-desde").value=d.desde; $("#k-hasta").value=d.hasta;
   const st=$("#k-estado");
-  if(d.un_dia){
+  const sinCierrePropio=d.libre||(d.caja===null&&(d.cajas||[]).length>0);
+  if(d.un_dia&&sinCierrePropio){
+    const ec=d.estado_cajas||[], c2=ec.filter(x=>x.cerrada).length;
+    st.textContent=(d.desde===d.hoy?"":fCorta(d.desde)+" · ")+(d.libre?"Vista filtrada":`${c2} de ${ec.length} cajas cerradas`);
+    st.className="pill "+(!d.libre&&ec.length&&c2===ec.length?"closed":"open");
+  }else if(d.un_dia){
     st.textContent=(d.desde===d.hoy?"":fCorta(d.desde)+" · ")+(d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"—"} · ${d.cierre.creado.slice(11,16)}`:"Abierta");
     st.className="pill "+(d.cierre?"closed":"open");
   }else{
@@ -1827,7 +1892,9 @@ async function abrirCaja(rango){
   if(!d.pagos.length) $("#k-pagos").innerHTML=`<tr><td class="meta">${d.un_dia?"Aún no hay pagos registrados este día.":"No hay pagos en este período."}</td></tr>`;
   // cierre
   const k=$("#k-cierre"); k.innerHTML="";
-  if(!d.un_dia){
+  if(sinCierrePropio){
+    k.innerHTML=`<p class="meta">${d.libre?"Vista filtrada por agendas: solo para revisar y descargar.":"Hay varias cajas."} Para cerrar o reabrir, elige la caja arriba${d.un_dia&&!d.libre?" o en la lista de cajas del día":""}.</p>`;
+  }else if(!d.un_dia){
     if(d.cierres.length) k.innerHTML=`<p class="meta">Diferencias de efectivo en el período: <b>${(t.diferencias>0?"+":t.diferencias<0?"−":"")+$$(Math.abs(t.diferencias))}</b>. Para cerrar o reabrir la caja de un día, elige ese día.</p>`;
   }else if(d.cierre){
     const c=d.cierre;
@@ -1837,7 +1904,7 @@ async function abrirCaja(rango){
     k.querySelector(".obs").textContent=c.observaciones?"Observaciones: "+c.observaciones:"";
     if(yo.rol==="admin"){const b=document.createElement("button");b.type="button";b.className="btn noprint";b.textContent="Reabrir caja";
       b.addEventListener("click",async()=>{if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="Confirmar: reabrir caja";return}
-        try{await api("/api/caja/reabrir",{method:"POST",body:{fecha:d.fecha}});toast("Caja reabierta");abrirCaja()}catch(e){toast(e.message)}});k.appendChild(b)}
+        try{await api("/api/caja/reabrir",{method:"POST",body:{fecha:d.fecha,caja:d.caja??0}});toast("Caja reabierta");abrirCaja()}catch(e){toast(e.message)}});k.appendChild(b)}
   }else if(canWrite&&d.desde<=d.hoy){
     k.innerHTML=`<h3>Cerrar caja</h3>
       <div class="cuadre"><div><span>Efectivo esperado</span><b id="k-esperado"></b></div>
@@ -1845,7 +1912,7 @@ async function abrirCaja(rango){
       <div><span>Diferencia</span><b id="k-dif">—</b></div></div>
       <div class="field"><label for="k-obs">Observaciones</label><textarea id="k-obs" placeholder="Ej. sencillo inicial, retiros, diferencias"></textarea></div>
       <p class="meta">Al cerrar la caja no se pueden registrar ni anular pagos de este día.</p>
-      <button type="button" class="btn primary" id="k-cerrar">Cerrar caja del ${parseISO(d.fecha).toLocaleDateString("es-CL").replace(/-/g,"/")}</button>`;
+      <button type="button" class="btn primary" id="k-cerrar">Cerrar caja${(d.cajas||[]).length?" «"+vistaTxt().replace(" · Caja ","")+"»":""} del ${parseISO(d.fecha).toLocaleDateString("es-CL").replace(/-/g,"/")}</button>`;
     $("#k-esperado").textContent=$$(t.efectivo_esperado);
     $("#k-contado").addEventListener("input",e=>{const v=pesos(e.target.value);const dif=v-t.efectivo_esperado;
       $("#k-dif").textContent=e.target.value?(dif>0?"+":dif<0?"−":"")+$$(Math.abs(dif)):"—";$("#k-dif").className=e.target.value?(dif?"bad":"ok"):""});
@@ -1854,14 +1921,63 @@ async function abrirCaja(rango){
       const b=$("#k-cerrar"), m=$("#kmsg"); m.className="msg err";
       if(!$("#k-contado").value){m.textContent="Ingresa el efectivo contado en caja.";return}
       if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="Confirmar cierre de caja";return}
-      try{await api("/api/caja/cerrar",{method:"POST",body:{fecha:d.fecha,efectivo_contado:pesos($("#k-contado").value),observaciones:$("#k-obs").value}});
+      try{await api("/api/caja/cerrar",{method:"POST",body:{fecha:d.fecha,caja:d.caja??0,efectivo_contado:pesos($("#k-contado").value),observaciones:$("#k-obs").value}});
         toast("Caja cerrada");abrirCaja()}catch(e){m.textContent=e.message}
     });
   }
 }
 // Botones de período de la caja (Hoy, Ayer, 3 días, Última semana, Este mes, Mes pasado, Elegir fechas)
 function marcarRango(v){for(const b of document.querySelectorAll("#k-rango .rango"))b.setAttribute("aria-pressed",String(b.dataset.r===v))}
-$("#btnCaja").addEventListener("click",()=>{marcarRango("hoy");$("#k-entre").hidden=true;abrirCaja(rangoPreset("hoy"))});
+$("#btnCaja").addEventListener("click",()=>{marcarRango("hoy");$("#k-entre").hidden=true;cajaVista={tipo:"todo"};abrirCaja(rangoPreset("hoy"))});
+
+// Cajas del día (con varias cajas): estado de cada una y acceso directo para cerrarla
+function pintarEstadoCajas(d){
+  const box=$("#k-estado-cajas"), ec=d.estado_cajas||[];
+  box.hidden=!(d.un_dia&&ec.length&&d.caja===null&&!d.libre); box.innerHTML="";
+  if(box.hidden) return;
+  const h=document.createElement("h3"); h.textContent="Cajas del día"; box.appendChild(h);
+  for(const c of ec){
+    const b=document.createElement("button"); b.type="button"; b.className="k-caja-fila "+(c.cerrada?"cerrada":"abierta");
+    b.innerHTML="<b></b><span></span><span></span><em></em>";
+    b.children[0].textContent=c.nombre; b.children[1].textContent=`${c.atenciones} ${c.atenciones===1?"pago":"pagos"}`;
+    b.children[2].textContent=$$(c.recaudado); b.children[3].textContent=c.cerrada?"Cerrada"+(c.cerrada_por?" por "+c.cerrada_por:""):(c.atenciones?"Abierta · cerrar →":"Sin pagos");
+    b.addEventListener("click",()=>{cajaVista={tipo:"caja",id:c.id};abrirCaja()}); box.appendChild(b);
+  }
+}
+// Configurar cajas (administrador)
+let CAJ_EDIT=null;
+async function abrirCajasCfg(){
+  try{const lista=await api("/api/cajas"); pintarCajasCfg(lista); $("#cajscrim").hidden=false}catch(e){toast(e.message)}
+}
+function pintarCajasCfg(lista){
+  const box=$("#caj-lista"); box.innerHTML="";
+  if(!lista.length) box.innerHTML='<p class="meta">Aún no hay cajas: todo se cierra junto en una sola caja.</p>';
+  for(const c of lista){const f=document.createElement("div");f.className="caj-fila";const t=document.createElement("span");t.innerHTML="<b></b> <span class=meta></span>";
+    t.children[0].textContent=c.nombre;t.children[1].textContent=c.agendas.map(nombreAgenda).join(", ");
+    const e=document.createElement("button");e.type="button";e.className="linkbtn";e.textContent="Editar";e.addEventListener("click",()=>formCaja(c,lista));f.append(t,e);box.appendChild(f)}
+  formCaja(null,lista);
+}
+function formCaja(c,lista){
+  CAJ_EDIT=c; $("#caj-form-tit").textContent=c?"Editar caja «"+c.nombre+"»":"Nueva caja"; $("#caj-nombre").value=c?c.nombre:""; $("#caj-msg").textContent="";
+  $("#caj-borrar").hidden=!c;
+  const otras=new Map(); for(const x of lista) if(!c||x.id!==c.id) for(const a of x.agendas) otras.set(a,x.nombre);
+  const box=$("#caj-agendas"); box.innerHTML="";
+  for(const e of EQUIPOS){const l=document.createElement("label");const cb=document.createElement("input");cb.type="checkbox";cb.value=e.id;
+    cb.checked=!!c&&c.agendas.includes(e.id); cb.disabled=otras.has(e.id);
+    l.append(cb," "+e.nombre+(otras.has(e.id)?` (en «${otras.get(e.id)}»)`:"")); if(cb.disabled) l.className="meta"; box.appendChild(l)}
+}
+$("#k-cajas-cfg").addEventListener("click",abrirCajasCfg);
+$("#caj-cerrar").addEventListener("click",()=>{$("#cajscrim").hidden=true;abrirCaja()});
+$("#caj-guardar").addEventListener("click",async()=>{
+  const body={nombre:$("#caj-nombre").value,agendas:[...$("#caj-agendas").querySelectorAll("input:checked")].map(x=>x.value)};
+  try{const lista=await api(CAJ_EDIT?"/api/cajas/"+CAJ_EDIT.id:"/api/cajas",{method:CAJ_EDIT?"PUT":"POST",body});pintarCajasCfg(lista);toast("Caja guardada")}
+  catch(e){$("#caj-msg").className="msg err";$("#caj-msg").textContent=e.message}
+});
+$("#caj-borrar").addEventListener("click",async()=>{
+  if(!CAJ_EDIT||!confirm(`¿Eliminar la caja «${CAJ_EDIT.nombre}»? Sus agendas pasan a la caja General.`)) return;
+  try{const lista=await api("/api/cajas/"+CAJ_EDIT.id,{method:"DELETE"});cajaVista={tipo:"todo"};pintarCajasCfg(lista);toast("Caja eliminada")}
+  catch(e){$("#caj-msg").className="msg err";$("#caj-msg").textContent=e.message}
+});
 $("#k-rango").addEventListener("click",e=>{
   const b=e.target.closest(".rango"); if(!b) return;
   const v=b.dataset.r; marcarRango(v); $("#k-entre").hidden=v!=="entre";
@@ -1983,7 +2099,7 @@ async function exportarPDF(){
   const W=doc.internal.pageSize.getWidth(), M=14;
   const logo=await logoParaPDF(); let tx=M;
   if(logo){const h=16, w=Math.min(46,h*logo.w/logo.h); doc.addImage(logo.data,"PNG",M,9,w,w*logo.h/logo.w); tx=M+w+6}
-  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text((d.un_dia?"Cierre de caja":"Resumen de caja")+(centroNombre?" · "+centroNombre:""),tx,17);
+  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text((d.un_dia?"Cierre de caja":"Resumen de caja")+(centroNombre?" · "+centroNombre:"")+vistaTxt(),tx,17);
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(90);
   doc.text(textoPeriodo(d),tx,23);
   doc.text(d.un_dia?(d.cierre?`Cerrada por ${d.cierre.usuario_nombre||"-"} a las ${d.cierre.creado.slice(11,16)}`:"Caja abierta (sin cerrar)"):`${d.por_dia.filter(x=>x.cerrada).length} de ${d.por_dia.length} días cerrados`,W-M,18,{align:"right"});
@@ -2082,7 +2198,7 @@ async function exportarExcel(){
   const t=d.totales, c=d.cierre, FMT='"$"#,##0';
   const wb=XLSX.utils.book_new();
   // Hoja Resumen
-  const res=[[(d.un_dia?"Cierre de caja":"Resumen de caja")+(centroNombre?" · "+centroNombre:""),textoPeriodo(d)],["Estado",d.un_dia?(c?`Cerrada por ${c.usuario_nombre||"-"} a las ${c.creado.slice(11,16)}`:"Abierta (sin cerrar)"):`${d.por_dia.filter(x=>x.cerrada).length} de ${d.por_dia.length} días cerrados`],[],
+  const res=[[(d.un_dia?"Cierre de caja":"Resumen de caja")+(centroNombre?" · "+centroNombre:"")+vistaTxt(),textoPeriodo(d)],["Estado",d.un_dia?(c?`Cerrada por ${c.usuario_nombre||"-"} a las ${c.creado.slice(11,16)}`:"Abierta (sin cerrar)"):`${d.por_dia.filter(x=>x.cerrada).length} de ${d.por_dia.length} días cerrados`],[],
     ["Atenciones cobradas",t.atenciones],["Valor total",t.valor],["Bonificación (bonos)",t.bonificacion],["Descuentos",t.descuentos||0],["Recaudado en caja",t.recaudado],["Pagos anulados",t.anulados],[],
     ["Efectivo esperado",t.efectivo_esperado],["Efectivo contado",d.un_dia?(c?c.efectivo_contado:""):d.cierres.reduce((x,y)=>x+y.efectivo_contado,0)],["Diferencia",d.un_dia?(c?c.diferencia:""):t.diferencias||0],["Observaciones",d.un_dia?(c?.observaciones||""):d.cierres.filter(x=>x.observaciones).map(x=>fCorta(x.fecha)+": "+x.observaciones).join(" | ")],[]];
   const bloques=[["Por medio de pago",filasGrupo(t.por_medio)],["Por previsión",filasGrupo(t.por_prevision)],["Por equipo",filasGrupo(t.por_equipo,k=>EQN[k]||k)]];

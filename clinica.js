@@ -322,7 +322,16 @@ ${publico ? "" : `<div class="acc"><button onclick="window.close()">Cerrar</butt
     // ----- profesionales (administración) -----
     ["GET", /^\/api\/profesionales$/, "admin", async () =>
       [200, plainAll(db.prepare(`SELECT p.*, u.usuario, u.nombre AS usuario_nombre FROM profesionales p
-        LEFT JOIN usuarios u ON u.id = p.usuario_id ORDER BY p.activo DESC, p.nombre`).all())]],
+        LEFT JOIN usuarios u ON u.id = p.usuario_id WHERE p.eliminado = 0 ORDER BY p.activo DESC, p.nombre`).all())]],
+    // Eliminar un profesional: deja de aparecer en la agenda y en la lista; sus fichas y documentos se conservan
+    ["DELETE", /^\/api\/profesionales\/(\d+)$/, "admin", async (req, u, url, m) => {
+      const pid = Number(m[1]);
+      const p = db.prepare("SELECT * FROM profesionales WHERE id = ? AND eliminado = 0").get(pid);
+      if (!p) fallo(404, "El profesional ya no existe.");
+      exigirSinCitasFuturas(pid);
+      db.prepare("UPDATE profesionales SET activo = 0, eliminado = 1, usuario_id = NULL WHERE id = ?").run(pid);
+      return [200, { ok: true }];
+    }],
 
     ["POST", /^\/api\/profesionales$/, "admin", async (req) => guardarProf(null, await leerCuerpo(req))],
     ["PUT", /^\/api\/profesionales\/(\d+)$/, "admin", async (req, u, url, m) => guardarProf(Number(m[1]), await leerCuerpo(req))],
@@ -532,6 +541,23 @@ ${publico ? "" : `<div class="acc"><button onclick="window.close()">Cerrar</butt
     }],
   ];
 
+  // Citas desde hoy que aún no se atienden: hay que reagendarlas o cancelarlas antes de quitar la agenda
+  function citasFuturas(pid) {
+    return db.prepare(`SELECT COUNT(*) AS n, MIN(fecha) AS desde FROM citas WHERE equipo = ? AND fecha >= ?
+      AND estado NOT IN ('cancelado','atendido','ausente')`).get("m" + pid, hoyCaja());
+  }
+  function exigirSinCitasFuturas(pid) {
+    const f = citasFuturas(pid);
+    if (f.n) fallo(409, `${nombreProf(pid)} tiene ${f.n} ${f.n === 1 ? "cita" : "citas"} desde el ${fCL(f.desde)} en adelante. Reagéndalas o cancélalas antes de quitar su agenda.`);
+  }
+  // Al eliminar el usuario de un médico: su agenda deja de aparecer (el profesional queda inactivo, sin usuario)
+  function quitarUsuarioMedico(usuarioId) {
+    const profs = db.prepare("SELECT id, nombre, titulo FROM profesionales WHERE usuario_id = ? AND eliminado = 0").all(usuarioId);
+    for (const p of profs) if (p) exigirSinCitasFuturas(p.id);
+    db.prepare("UPDATE profesionales SET activo = 0, usuario_id = NULL WHERE usuario_id = ?").run(usuarioId);
+    return profs.map((p) => `${p.titulo} ${p.nombre}`.trim());
+  }
+
   function guardarProf(id, b) {
     const p = {
       nombre: txt(b.nombre, 120), rut: normRut(b.rut || ""), especialidad: txt(b.especialidad, 120), registro: txt(b.registro, 40),
@@ -551,6 +577,8 @@ ${publico ? "" : `<div class="acc"><button onclick="window.close()">Cerrar</butt
       db.prepare("UPDATE usuarios SET rol = 'medico' WHERE id = ?").run(p.usuario_id);
     }
     if (id) {
+      const antes = db.prepare("SELECT activo FROM profesionales WHERE id = ?").get(id);
+      if (antes && antes.activo && !p.activo) exigirSinCitasFuturas(id);
       const r = db.prepare(`UPDATE profesionales SET nombre=@nombre, rut=@rut, especialidad=@especialidad, registro=@registro, titulo=@titulo,
         duracion=@duracion, activo=@activo, usuario_id=@usuario_id WHERE id=@id`).run({ ...p, id });
       if (!r.changes) fallo(404, "El profesional no existe.");
@@ -751,10 +779,13 @@ ${publico ? "" : `<div class="acc"><button onclick="window.close()">Cerrar</butt
     );
     CREATE INDEX IF NOT EXISTS idx_bloqueos_prof ON bloqueos(profesional_id, desde_fecha);
     `);
+    // Profesionales eliminados: ya no aparecen, pero sus fichas y documentos se conservan
+    if (!db.prepare("PRAGMA table_info(profesionales)").all().some((c) => c.name === "eliminado"))
+      db.exec("ALTER TABLE profesionales ADD COLUMN eliminado INTEGER NOT NULL DEFAULT 0");
     // Citas dadas fuera del horario del médico con confirmación (sobrecupo)
     if (!db.prepare("PRAGMA table_info(citas)").all().some((c) => c.name === "sobrecupo"))
       db.exec("ALTER TABLE citas ADD COLUMN sobrecupo INTEGER NOT NULL DEFAULT 0");
   }
 
-  return { activo: true, rutas, agendas, esAgenda, esConsulta, esGrupoArancel, agendasDeMedico, paginaVerificar, revisarHorario, fueraDeHorario, equiposBase };
+  return { activo: true, rutas, agendas, esAgenda, esConsulta, esGrupoArancel, agendasDeMedico, paginaVerificar, revisarHorario, fueraDeHorario, quitarUsuarioMedico, equiposBase };
 };

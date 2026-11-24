@@ -5,6 +5,52 @@ const db = require("./db");
 const CAJA_TZ = process.env.CAJA_TZ || "America/Santiago";
 const plainAll = (a) => a.map((o) => (o ? { ...o } : o));
 
+// ---------- Varias cajas (opcional) ----------
+// Sin cajas definidas, todo es una sola caja del día (como siempre, cierres en la tabla «cierres»).
+// Con cajas (ej. «Imágenes» = tc,rx,eco · «Consultas» = m1,m2), cada una se cierra por separado (tabla «cierres_cajas»).
+// La caja 0 («General») reúne las agendas que no están en ninguna caja y sigue usando la tabla «cierres».
+db.exec(`CREATE TABLE IF NOT EXISTS cajas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre TEXT NOT NULL,
+  agendas TEXT NOT NULL DEFAULT '',          -- agendas separadas por coma (tc,rx,eco,m1…)
+  creado TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS cierres_cajas (
+  fecha TEXT NOT NULL,
+  caja_id INTEGER NOT NULL,
+  usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  creado TEXT NOT NULL DEFAULT (datetime('now')),
+  resumen TEXT NOT NULL,
+  efectivo_contado INTEGER NOT NULL DEFAULT 0,
+  diferencia INTEGER NOT NULL DEFAULT 0,
+  observaciones TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (fecha, caja_id)
+);`);
+const listaAgendas = (t) => String(t || "").split(",").map((x) => x.trim()).filter(Boolean);
+function cajas() {
+  return plainAll(db.prepare("SELECT id, nombre, agendas FROM cajas ORDER BY nombre").all()).map((c) => ({ ...c, agendas: listaAgendas(c.agendas) }));
+}
+const asignadas = () => cajas().flatMap((c) => c.agendas);
+function cajaDeAgenda(equipo) {
+  const c = cajas().find((x) => x.agendas.includes(equipo));
+  return c ? c.id : 0;
+}
+// Filtro de pagos: { caja: id } (0 = General) o { agendas: [...] } (selección libre)
+function filtroPagos(opc = {}) {
+  if (opc.caja !== undefined && opc.caja !== null && opc.caja !== "") {
+    const id = Number(opc.caja) || 0;
+    if (id) { const c = cajas().find((x) => x.id === id); return { sql: inSql("IN", c ? c.agendas : []), caja: id }; }
+    const a = asignadas();
+    return { sql: a.length ? inSql("NOT IN", a) : { where: "", args: [] }, caja: 0 };
+  }
+  if (Array.isArray(opc.agendas) && opc.agendas.length) return { sql: inSql("IN", opc.agendas), libre: true };
+  return { sql: { where: "", args: [] }, caja: cajas().length ? null : 0 };
+}
+function inSql(op, lista) {
+  if (!lista.length) return { where: op === "IN" ? " AND 0" : "", args: [] };
+  return { where: ` AND p.equipo ${op} (${lista.map(() => "?").join(",")})`, args: lista };
+}
+
 function hoyCaja() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: CAJA_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -90,10 +136,11 @@ function calcularTarjetas(validos, partes) {
 }
 
 // Resumen de caja de un día o de un período (desde–hasta, ambos incluidos)
-function resumenCaja(desde, hasta = desde) {
+function resumenCaja(desde, hasta = desde, opc = {}) {
+  const f = filtroPagos(opc);
   const pagos = plainAll(db.prepare(`SELECT p.*, u.nombre AS usuario_nombre, ua.nombre AS anulado_por_nombre
     FROM pagos p LEFT JOIN usuarios u ON u.id = p.usuario_id LEFT JOIN usuarios ua ON ua.id = p.anulado_por
-    WHERE p.fecha BETWEEN ? AND ? ORDER BY p.fecha, p.creado`).all(desde, hasta));
+    WHERE p.fecha BETWEEN ? AND ?${f.sql.where} ORDER BY p.fecha, p.creado`).all(desde, hasta, ...f.sql.args));
   const pesosTxt = (n) => "$" + Math.round(n || 0).toLocaleString("es-CL");
   for (const p of pagos) p.medio_txt = (p.monto2 > 0 ? `${p.medio} ${pesosTxt(p.copago - p.monto2)} + ${p.medio2} ${pesosTxt(p.monto2)}` : p.medio)
     + (p.cheque ? ` (cheque ${p.cheque})` : "");
@@ -133,7 +180,11 @@ function resumenCaja(desde, hasta = desde) {
     tarjetas: calcularTarjetas(validos, partes),
     contraste: { cantidad: validos.filter((p) => p.contraste > 0).length, monto: suma(validos, "contraste") },
   };
-  const cierres = plainAll(db.prepare(`SELECT c.*, u.nombre AS usuario_nombre FROM cierres c LEFT JOIN usuarios u ON u.id = c.usuario_id
+  // Cierres: los de la caja elegida (General = tabla «cierres»). Todo junto con varias cajas o selección libre: sin cierre propio
+  const cierres = f.caja === null || f.libre ? [] : f.caja
+    ? plainAll(db.prepare(`SELECT c.*, u.nombre AS usuario_nombre FROM cierres_cajas c LEFT JOIN usuarios u ON u.id = c.usuario_id
+      WHERE c.caja_id = ? AND c.fecha BETWEEN ? AND ? ORDER BY c.fecha`).all(f.caja, desde, hasta)).map((c) => ({ ...c, resumen: JSON.parse(c.resumen) }))
+    : plainAll(db.prepare(`SELECT c.*, u.nombre AS usuario_nombre FROM cierres c LEFT JOIN usuarios u ON u.id = c.usuario_id
     WHERE c.fecha BETWEEN ? AND ? ORDER BY c.fecha`).all(desde, hasta)).map((c) => ({ ...c, resumen: JSON.parse(c.resumen) }));
   // Detalle por día (para períodos de varios días)
   const dias = {};
@@ -149,7 +200,15 @@ function resumenCaja(desde, hasta = desde) {
   });
   totales.diferencias = cierres.reduce((t, c) => t + c.diferencia, 0);
   const cierre = desde === hasta ? cierres[0] || null : null;
-  return { fecha: desde, desde, hasta, un_dia: desde === hasta, hoy: hoyCaja(), pagos, totales, cierre, cierres, por_dia };
+  return { fecha: desde, desde, hasta, un_dia: desde === hasta, hoy: hoyCaja(), pagos, totales, cierre, cierres, por_dia,
+    caja: f.caja === undefined ? null : f.caja, libre: !!f.libre, agendas: Array.isArray(opc.agendas) ? opc.agendas : [] };
+}
+// ¿Está cerrada la caja de ese día para esa agenda? (sin agenda: la caja General)
+function cajaCerradaDe(fecha, equipo) {
+  const id = equipo ? cajaDeAgenda(equipo) : 0;
+  return id ? !!db.prepare("SELECT 1 FROM cierres_cajas WHERE fecha = ? AND caja_id = ?").get(fecha, id)
+    : !!db.prepare("SELECT 1 FROM cierres WHERE fecha = ?").get(fecha);
 }
 
-module.exports = { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas, habilSiguiente, iniciarUF };
+module.exports = { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas, habilSiguiente, iniciarUF,
+  cajas, cajaDeAgenda, cajaCerradaDe, listaAgendas };

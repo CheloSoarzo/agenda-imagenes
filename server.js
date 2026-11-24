@@ -23,7 +23,7 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE === "1";
 const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 const SESION_HORAS = Number(process.env.SESION_HORAS) || 12;
 const COOKIE = "agenda_sesion";
-const { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas, iniciarUF } = require("./caja");
+const { resumenCaja, hoyCaja, CAJA_TZ, configTarjetas, guardarTarjetas, iniciarUF, cajas: listaCajas, cajaCerradaDe, listaAgendas } = require("./caja");
 iniciarUF();   // valor de la UF para la comisión fija de las tarjetas
 const CENTRO = txtEnv(process.env.CENTRO_NOMBRE); // nombre del centro que se muestra en pantalla
 function txtEnv(v) { return String(v || "").trim().slice(0, 60); }
@@ -222,7 +222,46 @@ function ahoraCaja() {
   return `${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}:${g("second")}`;
 }
 const fechaCL = (iso) => String(iso).split("-").reverse().join("/");
-const cajaCerrada = (fecha) => !!db.prepare("SELECT 1 FROM cierres WHERE fecha = ?").get(fecha);
+// ¿Está cerrada la caja de ese día para esa agenda? (con varias cajas, cada una tiene su cierre)
+const cajaCerrada = (fecha, equipo) => cajaCerradaDe(fecha, equipo);
+// Filtro de la pantalla y el CSV de caja: ?caja=<id> (0 = General) o ?agendas=tc,rx (selección libre)
+function opcCaja(url) {
+  const caja = url.searchParams.get("caja"), ag = url.searchParams.get("agendas");
+  if (caja !== null && caja !== "") return { caja: Math.max(0, Math.round(Number(caja)) || 0) };
+  if (ag) return { agendas: listaAgendas(ag).filter((e) => clin.esAgenda(e)).slice(0, 50) };
+  return {};
+}
+const nombreCaja = (id) => (id ? (listaCajas().find((c) => c.id === id) || {}).nombre || "Caja " + id : "General");
+// Nombre visible de cada agenda (equipos y médicos), para el CSV y los mensajes de caja
+const EQN_CAJA = () => { const o = { tc: "TC", rx: "RX", eco: "ECO" }; if (CLINICO && clin.agendas) for (const a of clin.agendas()) o[a.id] = a.nombre; return o; };
+function guardarCaja(id, b, req, u) {
+  const nombre = txt(b.nombre, 60);
+  const agendas = [...new Set(listaAgendas(Array.isArray(b.agendas) ? b.agendas.join(",") : b.agendas))].filter((e) => clin.esAgenda(e));
+  if (!nombre) fallo(400, "Escribe el nombre de la caja.");
+  if (!agendas.length) fallo(400, "Elige al menos una agenda para esta caja.");
+  for (const c of listaCajas()) {
+    if (c.id === id) continue;
+    if (c.nombre.toLowerCase() === nombre.toLowerCase()) fallo(409, `Ya existe una caja llamada «${c.nombre}».`);
+    const rep = agendas.filter((e) => c.agendas.includes(e));
+    if (rep.length) fallo(409, `${rep.map((e) => EQN_CAJA()[e] || e.toUpperCase()).join(", ")} ya ${rep.length === 1 ? "está" : "están"} en la caja «${c.nombre}». Cada agenda va en una sola caja.`);
+  }
+  if (id) {
+    if (!db.prepare("UPDATE cajas SET nombre = ?, agendas = ? WHERE id = ?").run(nombre, agendas.join(","), id).changes) fallo(404, "La caja ya no existe.");
+  } else id = Number(db.prepare("INSERT INTO cajas (nombre, agendas) VALUES (?,?)").run(nombre, agendas.join(",")).lastInsertRowid);
+  auditar(req, u, "otro", { detalle: `caja «${nombre}»: ${agendas.map((e) => EQN_CAJA()[e] || e.toUpperCase()).join(", ")}` });
+  return [200, listaCajas()];
+}
+// Estado de cada caja en un día (para la pantalla): cerrada o no, recaudado y efectivo esperado
+function estadoCajas(fecha) {
+  const lista = listaCajas();
+  if (!lista.length) return [];
+  return [{ id: 0, nombre: "General", agendas: [] }, ...lista].map((c) => {
+    const r = resumenCaja(fecha, fecha, { caja: c.id });
+    if (c.id === 0 && !r.totales.atenciones && !r.cierre) return null;   // General vacía: no se muestra
+    return { id: c.id, nombre: c.nombre, agendas: c.agendas, atenciones: r.totales.atenciones, recaudado: r.totales.recaudado,
+      efectivo_esperado: r.totales.efectivo_esperado, cerrada: !!r.cierre, cerrada_por: r.cierre ? r.cierre.usuario_nombre : "" };
+  }).filter(Boolean);
+}
 const MEDIOS = ["Efectivo", "Débito", "Crédito", "Transferencia", "Cheque", "Sin copago"];
 
 // Lee ?fecha= o ?desde=&hasta= (máximo un año)
@@ -393,6 +432,7 @@ const OTRAS = [
   ["POST", /^\/api\/aranceles/, "aranceles", () => "cambió los aranceles"],
   ["DELETE", /^\/api\/aranceles\/([\w.-]+)$/, "aranceles", (m) => "eliminó el arancel " + m[1]],
   ["PUT", /^\/api\/caja\/tarjetas$/, "otro", () => "cambió las comisiones de tarjetas"],
+  ["DELETE", /^\/api\/profesionales\/(\d+)$/, "otro", (m) => "eliminó el profesional n° " + m[1] + " (su agenda ya no aparece)"],
 ];
 function registrarOtro(req, u, p) {
   for (const [met, re, accion, det, conCita] of OTRAS) {
@@ -562,8 +602,8 @@ const rutas = [
       Object.assign(c, plain(prev));
       // Si la cita pagada cambia de día, el pago se mueve con ella a la caja del nuevo día
       if (pago.fecha !== c.fecha) {
-        if (cajaCerrada(pago.fecha)) fallo(409, `Esta cita está pagada y la caja del ${fechaCL(pago.fecha)} ya está cerrada. Un administrador debe reabrirla para cambiarla de día.`);
-        if (cajaCerrada(c.fecha)) fallo(409, `Esta cita está pagada y la caja del ${fechaCL(c.fecha)} ya está cerrada. Un administrador debe reabrirla para moverla a ese día.`);
+        if (cajaCerrada(pago.fecha, pago.equipo)) fallo(409, `Esta cita está pagada y la caja del ${fechaCL(pago.fecha)} ya está cerrada. Un administrador debe reabrirla para cambiarla de día.`);
+        if (cajaCerrada(c.fecha, c.equipo)) fallo(409, `Esta cita está pagada y la caja del ${fechaCL(c.fecha)} ya está cerrada. Un administrador debe reabrirla para moverla a ese día.`);
       }
     }
     const r = db.prepare(`UPDATE citas SET fecha=@fecha,hora=@hora,duracion=@duracion,equipo=@equipo,paciente=@paciente,rut=@rut,
@@ -619,7 +659,7 @@ const rutas = [
       : "Falta el RUT del paciente (o su pasaporte si es extranjero). Escríbelo en «Editar cita» antes de cobrar.");
     // El pago se registra en la caja del día agendado (no en el día en que se cobra)
     const fecha = c.fecha;
-    if (cajaCerrada(fecha)) fallo(409, `La caja del ${fechaCL(fecha)} ya está cerrada. Un administrador debe reabrirla para registrar pagos.`);
+    if (cajaCerrada(fecha, c.equipo)) fallo(409, `La caja del ${fechaCL(fecha)} ya está cerrada. Un administrador debe reabrirla para registrar pagos.`);
     // Descuento sobre el copago del paciente (la bonificación del bono no cambia)
     const tipoDesc = txt(b.descuento_tipo, 10), motivoDesc = txt(b.descuento_motivo, 120);
     let descuento = 0, detalle = "";
@@ -667,7 +707,7 @@ const rutas = [
     const b = await leerCuerpo(req);
     const p = db.prepare("SELECT * FROM pagos WHERE id = ?").get(Number(m[1]));
     if (!p || p.anulado) fallo(404, "El pago no existe o ya fue anulado.");
-    if (cajaCerrada(p.fecha)) fallo(409, "La caja de ese día ya está cerrada. Un administrador debe reabrirla.");
+    if (cajaCerrada(p.fecha, p.equipo)) fallo(409, "La caja de ese día ya está cerrada. Un administrador debe reabrirla.");
     if (u.rol !== "admin" && p.usuario_id !== u.id) fallo(403, "Solo quien registró el pago o un administrador puede anularlo.");
     const motivo = txt(b.motivo, 200);
     if (!motivo) fallo(400, "Escribe el motivo de la anulación.");
@@ -679,21 +719,32 @@ const rutas = [
   }],
 
   // ----- caja -----
-  ["GET", /^\/api\/caja$/, "caja", async (req, u, url) => [200, resumenCaja(...rangoCaja(url))]],
+  ["GET", /^\/api\/caja$/, "caja", async (req, u, url) => {
+    const [desde, hasta] = rangoCaja(url);
+    const r = resumenCaja(desde, hasta, opcCaja(url));
+    return [200, { ...r, cajas: listaCajas(), estado_cajas: desde === hasta ? estadoCajas(desde) : [] }];
+  }],
 
   ["POST", /^\/api\/caja\/cerrar$/, "escribir", async (req, u) => {
     const b = await leerCuerpo(req);
     const fecha = txt(b.fecha, 10);
     if (!reFecha.test(fecha)) fallo(400, "La fecha no es válida.");
     if (fecha > hoyCaja()) fallo(400, "No puedes cerrar una caja de un día futuro.");
-    if (cajaCerrada(fecha)) fallo(409, "La caja de ese día ya está cerrada.");
+    // Con varias cajas se cierra cada una por separado (0 = General: las agendas que no están en ninguna caja)
+    const hay = listaCajas().length > 0;
+    const caja = hay ? Math.max(0, Math.round(Number(b.caja)) || 0) : 0;
+    if (hay && (b.caja === undefined || b.caja === null || b.caja === "")) fallo(400, "Elige qué caja vas a cerrar.");
+    if (caja && !listaCajas().some((c) => c.id === caja)) fallo(400, "Esa caja no existe.");
+    const yaCerrada = caja ? db.prepare("SELECT 1 FROM cierres_cajas WHERE fecha = ? AND caja_id = ?").get(fecha, caja) : db.prepare("SELECT 1 FROM cierres WHERE fecha = ?").get(fecha);
+    if (yaCerrada) fallo(409, hay ? `La caja «${nombreCaja(caja)}» de ese día ya está cerrada.` : "La caja de ese día ya está cerrada.");
     if (b.efectivo_contado === undefined || b.efectivo_contado === "") fallo(400, "Ingresa el efectivo contado en caja.");
-    const r = resumenCaja(fecha);
+    const r = resumenCaja(fecha, fecha, { caja });
     const contado = entero(b.efectivo_contado);
-    db.prepare("INSERT INTO cierres (fecha, usuario_id, resumen, efectivo_contado, diferencia, observaciones, creado) VALUES (?,?,?,?,?,?,?)")
-      .run(fecha, u.id, JSON.stringify(r.totales), contado, contado - r.totales.efectivo_esperado, txt(b.observaciones, 1000), ahoraCaja());
-    auditar(req, u, "cerrar_caja", { detalle: `caja del ${fechaCL(fecha)} · efectivo contado $${contado.toLocaleString("es-CL")} · diferencia $${(contado - r.totales.efectivo_esperado).toLocaleString("es-CL")}` });
-    return [200, resumenCaja(fecha)];
+    const vals = [fecha, u.id, JSON.stringify(r.totales), contado, contado - r.totales.efectivo_esperado, txt(b.observaciones, 1000), ahoraCaja()];
+    if (caja) db.prepare("INSERT INTO cierres_cajas (fecha, usuario_id, resumen, efectivo_contado, diferencia, observaciones, creado, caja_id) VALUES (?,?,?,?,?,?,?,?)").run(...vals, caja);
+    else db.prepare("INSERT INTO cierres (fecha, usuario_id, resumen, efectivo_contado, diferencia, observaciones, creado) VALUES (?,?,?,?,?,?,?)").run(...vals);
+    auditar(req, u, "cerrar_caja", { detalle: `caja${hay ? " «" + nombreCaja(caja) + "»" : ""} del ${fechaCL(fecha)} · efectivo contado $${contado.toLocaleString("es-CL")} · diferencia $${(contado - r.totales.efectivo_esperado).toLocaleString("es-CL")}` });
+    return [200, { ...resumenCaja(fecha, fecha, hay ? { caja } : {}), cajas: listaCajas(), estado_cajas: estadoCajas(fecha) }];
   }],
 
   ["GET", /^\/api\/caja\/tarjetas$/, "caja", async () => [200, configTarjetas()]],
@@ -702,17 +753,33 @@ const rutas = [
   }],
   ["POST", /^\/api\/caja\/reabrir$/, "admin", async (req, u) => {
     const b = await leerCuerpo(req);
-    const rc = db.prepare("DELETE FROM cierres WHERE fecha = ?").run(txt(b.fecha, 10));
-    if (rc.changes) auditar(req, u, "reabrir_caja", { detalle: `caja del ${fechaCL(txt(b.fecha, 10))}` });
-    return [200, resumenCaja(txt(b.fecha, 10))];
+    const fecha = txt(b.fecha, 10), hay = listaCajas().length > 0;
+    const caja = hay ? Math.max(0, Math.round(Number(b.caja)) || 0) : 0;
+    const rc = caja ? db.prepare("DELETE FROM cierres_cajas WHERE fecha = ? AND caja_id = ?").run(fecha, caja) : db.prepare("DELETE FROM cierres WHERE fecha = ?").run(fecha);
+    if (rc.changes) auditar(req, u, "reabrir_caja", { detalle: `caja${hay ? " «" + nombreCaja(caja) + "»" : ""} del ${fechaCL(fecha)}` });
+    return [200, { ...resumenCaja(fecha, fecha, hay ? { caja } : {}), cajas: listaCajas(), estado_cajas: estadoCajas(fecha) }];
+  }],
+
+  // ----- cajas (varias cajas con cierre propio; las define el administrador) -----
+  ["GET", /^\/api\/cajas$/, "caja", async () => [200, listaCajas()]],
+  ["POST", /^\/api\/cajas$/, "admin", async (req, u) => guardarCaja(null, await leerCuerpo(req), req, u)],
+  ["PUT", /^\/api\/cajas\/(\d+)$/, "admin", async (req, u, url, m) => guardarCaja(Number(m[1]), await leerCuerpo(req), req, u)],
+  ["DELETE", /^\/api\/cajas\/(\d+)$/, "admin", async (req, u, url, m) => {
+    const id = Number(m[1]), c = listaCajas().find((x) => x.id === id);
+    if (!c) fallo(404, "La caja ya no existe.");
+    if (db.prepare("SELECT 1 FROM cierres_cajas WHERE caja_id = ?").get(id)) fallo(409, `La caja «${c.nombre}» ya tiene cierres guardados: no se puede eliminar (puedes cambiarle las agendas).`);
+    db.prepare("DELETE FROM cajas WHERE id = ?").run(id);
+    auditar(req, u, "otro", { detalle: `eliminó la caja «${c.nombre}»` });
+    return [200, listaCajas()];
   }],
 
   ["GET", /^\/api\/caja\/csv$/, "caja", async (req, u, url) => {
     const [desde, hasta] = rangoCaja(url);
-    const r = resumenCaja(desde, hasta);
+    const opc = opcCaja(url);
+    const r = resumenCaja(desde, hasta, opc);
     const esc = (v) => { const t = String(v ?? ""); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
     const filas = [["Fecha", "Hora", "Paciente", "RUT", "Equipo", "Código", "Examen", "Previsión", "Valor", "Bonificación", "Descuento", "Motivo descuento", "Pagado", "Medio", "Folio bono", "Boleta", "Cajero", "Estado"]];
-    for (const p of r.pagos) filas.push([p.fecha.split("-").reverse().join("/"), p.creado.slice(11, 16), p.paciente, p.rut, p.equipo.toUpperCase(), p.codigo, p.examen, p.prevision,
+    for (const p of r.pagos) filas.push([p.fecha.split("-").reverse().join("/"), p.creado.slice(11, 16), p.paciente, p.rut, (EQN_CAJA()[p.equipo] || p.equipo.toUpperCase()), p.codigo, p.examen, p.prevision,
       p.valor, p.bonificacion, p.descuento, p.descuento_motivo, p.copago, p.medio_txt, p.folio_bono, p.boleta, p.usuario_nombre, p.anulado ? "ANULADO: " + p.motivo_anulacion : "OK"]);
     filas.push([]);
     filas.push(["Total atenciones", r.totales.atenciones]);
@@ -722,11 +789,14 @@ const rutas = [
     filas.push(["Total recaudado", r.totales.recaudado]);
     for (const [k, v] of Object.entries(r.totales.por_medio)) filas.push(["Recaudado " + k, v.copago]);
     if (r.cierre) { filas.push(["Efectivo contado", r.cierre.efectivo_contado]); filas.push(["Diferencia", r.cierre.diferencia]); }
+    if (opc.caja !== undefined && listaCajas().length) filas.unshift(["Caja: " + nombreCaja(opc.caja)]);
+    if (opc.agendas) filas.unshift(["Agendas: " + opc.agendas.map((e) => EQN_CAJA()[e] || e.toUpperCase()).join(", ")]);
     const csv = "\ufeff" + filas.map((f) => f.map(esc).join(";")).join("\r\n");
     return ["RAW", csv, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="caja-${desde === hasta ? desde : desde + "_a_" + hasta}.csv"` }];
   }],
 
   // ----- aranceles -----
+  // (nombres de las agendas para el CSV de caja: equipos y médicos)
   ["GET", /^\/api\/aranceles$/, "sesion", async () =>
     [200, plainAll(db.prepare("SELECT * FROM aranceles ORDER BY equipo, codigo").all())]],
 
@@ -846,10 +916,12 @@ const rutas = [
     if (id === idProveedor()) fallo(404, "Ese usuario ya no existe.");
     const x = db.prepare("SELECT * FROM usuarios WHERE id = ? AND eliminado = 0").get(id);
     if (!x) fallo(404, "Ese usuario ya no existe.");
+    // Módulo clínico: si era un médico, su agenda deja de aparecer (antes se revisa que no tenga citas pendientes)
+    const sinAgenda = CLINICO && clin.quitarUsuarioMedico ? clin.quitarUsuarioMedico(id) : [];
     db.prepare("UPDATE usuarios SET eliminado = 1, activo = 0, usuario = ? WHERE id = ?").run(`${x.usuario}~eliminado${id}`, id);
-    auditar(req, u, "eliminar_usuario", { detalle: `${x.nombre} (${x.usuario})` });
+    auditar(req, u, "eliminar_usuario", { detalle: `${x.nombre} (${x.usuario})` + (sinAgenda.length ? ` · se quitó la agenda de ${sinAgenda.join(", ")}` : "") });
     db.prepare("DELETE FROM sesiones WHERE usuario_id = ?").run(id);
-    return [200, { ok: true }];
+    return [200, { ok: true, sin_agenda: sinAgenda }];
   }],
   ...integ.rutas,
   ["GET", /^\/api\/modulos$/, "admin", async (req, u) => [200, { ...estadoModulos(), puede: esProveedor(u) }]],

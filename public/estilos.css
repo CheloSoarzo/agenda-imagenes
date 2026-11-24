@@ -613,3 +613,16 @@ details.historial{margin:10px 0;border:1px solid var(--line-soft);border-radius:
 details.historial summary{cursor:pointer;font-weight:700;font-size:13px}
 details.historial ol{margin:6px 0 0;padding-left:18px}
 details.historial li{margin:3px 0}
+
+/* Caja: varias cajas y vista por agendas */
+.k-vista{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
+.k-agendas{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 8px;font-size:13px}
+.k-estado-cajas{margin:8px 0 12px}
+.k-estado-cajas h3{margin:0 0 6px}
+.k-caja-fila{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:1.4fr .8fr 1fr 1.4fr;gap:8px;width:100%;padding:8px 10px;border:1px solid var(--line-soft);border-radius:8px;margin-bottom:6px;font-size:14px}
+.k-caja-fila:hover{background:var(--sunk)}
+.k-caja-fila em{font-style:normal;font-weight:700;text-align:right}
+.k-caja-fila.cerrada em{color:var(--ok)} .k-caja-fila.abierta em{color:var(--warn)}
+.caj-fila{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:14px}
+.caj-agendas{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0;font-size:14px}
+@media print{.k-vista,.k-agendas{display:none}}
