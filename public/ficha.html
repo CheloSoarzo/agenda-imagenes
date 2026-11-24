@@ -7,12 +7,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/estilos.css">
-<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
+<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p;var t=localStorage.getItem("agenda-tema");if(t==="claro")document.documentElement.dataset.theme="light";else if(t==="oscuro")document.documentElement.dataset.theme="dark"}catch(e){}</script>
+<link rel="icon" href="/raxio/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/raxio/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/raxio/apple-touch-icon.png">
 <script src="/fecha-cl.js"></script>
 <style>
+/* Encabezado igual al de la agenda */
+header.top{margin-bottom:6px}
+.toolbar.mod{margin:-6px 0 14px}
+
 /* Ficha clínica: pacientes del día a la izquierda, ficha del paciente a la derecha */
 .fx{display:grid;grid-template-columns:290px 1fr;gap:16px;align-items:start}
-@media (max-width:900px){.fx{grid-template-columns:1fr}}
+@media (max-width:900px){.fx{grid-template-columns:minmax(0,1fr)}}
+.fx>*{min-width:0}
+@media (max-width:520px){.wrap{padding-left:12px;padding-right:12px}}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
 .dia-nav{display:flex;gap:6px;align-items:center;margin-bottom:10px}
 .dia-nav input{flex:1;min-width:0}
@@ -58,25 +67,22 @@ table.t td{padding:7px 8px;border-bottom:1px solid var(--line-soft);vertical-ali
 .rx-row .ind{grid-column:1/-1}
 .rx-row input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;width:100%}
 @media (max-width:640px){.rx-row{grid-template-columns:1fr 1fr}}
-.top-ficha{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
-.top-ficha .brand-row{display:flex;gap:12px;align-items:center}
-.top-ficha h1{margin:0;font-size:20px}
 .buscar-rut{display:flex;gap:6px;margin-top:12px}
 .buscar-rut input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 9px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header class="top-ficha">
+  <header class="top">
     <div class="brand-row">
       <div class="marca" id="logo" hidden><img alt=""></div>
-      <div><span class="meta" id="centro">Ficha clínica</span><h1 id="yo">—</h1></div>
+      <div class="brand"><span id="centro">Ficha clínica</span><h1 id="yo">—</h1></div>
     </div>
-    <div class="userbar">
-      <a class="linkbtn" href="/">Agenda</a>
-      <button class="linkbtn" id="salir">Salir</button>
-    </div>
+    <div class="marca-producto" data-auto></div>
   </header>
+  <div class="toolbar mod"><span></span>
+    <div class="userbar"><span>Sesión: <b id="me">—</b></span><a class="linkbtn" href="/">Agenda</a><button class="linkbtn" id="salir">Salir</button></div>
+  </div>
   <div class="notice" id="notice" hidden></div>
 
   <div class="fx">
@@ -541,7 +547,7 @@ $("#salir").addEventListener("click",async()=>{await guardarAhora();await fetch(
   await cargarDia();
   if(q.get("rut")) abrir(q.get("rut"),null);
 })();
-fetch("/api/config").then(r=>r.json()).then(c=>{$("#pie-sistema").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 Raxio by MSC26"}).catch(()=>{});
 </script>
+<script src="/marca.js"></script>
 </body>
 </html>

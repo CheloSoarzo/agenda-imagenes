@@ -7,8 +7,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/estilos.css">
-<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
+<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p;var t=localStorage.getItem("agenda-tema");if(t==="claro")document.documentElement.dataset.theme="light";else if(t==="oscuro")document.documentElement.dataset.theme="dark"}catch(e){}</script>
+<link rel="icon" href="/raxio/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/raxio/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/raxio/apple-touch-icon.png">
 <style>
+/* Encabezado igual al de la agenda */
+header.top{margin-bottom:6px}
+.toolbar.mod{margin:-6px 0 14px}
+
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
 .cab{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .cab h1{margin:0;font-size:20px}
@@ -27,7 +34,16 @@ tr.off td{opacity:.55}
 </head>
 <body>
 <div class="wrap">
-  <div class="cab"><h1>Profesionales y ficha clínica</h1><a class="linkbtn" href="/">← Volver a la agenda</a></div>
+  <header class="top">
+    <div class="brand-row">
+      <div class="marca" id="logo" hidden><img alt=""></div>
+      <div class="brand"><span>Administración · <span id="centro-nombre"></span></span><h1>Profesionales y ficha clínica</h1></div>
+    </div>
+    <div class="marca-producto" data-auto></div>
+  </header>
+  <div class="toolbar mod"><span></span>
+    <div class="userbar"><span>Sesión: <b id="me">—</b></span><a class="linkbtn" href="/">← Volver a la agenda</a></div>
+  </div>
   <nav class="tabs"><button data-t="prof" aria-selected="true">Profesionales</button><button data-t="aud">Auditoría de fichas</button></nav>
 
   <section data-p="prof">
@@ -162,7 +178,7 @@ $$(".tabs button").forEach(b=>b.addEventListener("click",()=>{$$(".tabs button")
   try{const yo=await api("/api/me"); if(yo.rol!=="admin"){document.querySelector(".wrap").innerHTML='<p style="padding:40px">Solo un administrador puede ver esta página. <a href="/">Volver</a></p>';return}
     await cargar()}catch(e){if(e.message!=="sesion")toast(e.message)}
 })();
-fetch("/api/config").then(r=>r.json()).then(c=>{$("#pie-sistema").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 Raxio by MSC26"}).catch(()=>{});
 </script>
+<script src="/marca.js"></script>
 </body>
 </html>
