@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ficha clínica</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
+<script src="/fecha-cl.js"></script>
+<style>
+/* Ficha clínica: pacientes del día a la izquierda, ficha del paciente a la derecha */
+.fx{display:grid;grid-template-columns:290px 1fr;gap:16px;align-items:start}
+@media (max-width:900px){.fx{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.dia-nav{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+.dia-nav input{flex:1;min-width:0}
+.pl{display:flex;flex-direction:column;gap:6px}
+.pl button{all:unset;cursor:pointer;display:grid;grid-template-columns:44px 1fr;gap:2px 8px;padding:8px 10px;border-radius:10px;border:1px solid var(--line-soft);background:var(--bg)}
+.pl button:hover,.pl button[aria-current="true"]{border-color:var(--med);background:var(--med-bg)}
+.pl .h{font-family:var(--f-mono);font-weight:600;font-size:13px}
+.pl .n{font-weight:700;font-size:14px}
+.pl .s{grid-column:2;font-size:12px;color:var(--muted)}
+.tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;background:var(--sunk);color:var(--muted)}
+.tag.ok{background:var(--eb-confirmado);color:var(--e-confirmado)}
+.tag.bor{background:var(--eb-llego);color:var(--warn)}
+.tag.bad{background:var(--eb-ausente);color:var(--bad)}
+.pac-head{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline}
+.pac-head h2{margin:0;font-size:22px}
+.alergia{margin-top:8px;padding:8px 12px;border-radius:8px;background:var(--eb-ausente);color:var(--bad);font-weight:700;font-size:13px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:14px 0 12px;overflow-x:auto}
+.tabs button{all:unset;cursor:pointer;padding:8px 12px;font-weight:700;font-size:13px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--med)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:640px){.grid2{grid-template-columns:1fr}}
+.signos{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.signos .field input{padding:6px 8px}
+.stack{display:flex;flex-direction:column;gap:10px}
+.dx{display:flex;flex-direction:column;gap:6px}
+.dx-row{display:grid;grid-template-columns:90px 1fr 30px;gap:6px}
+.dx-row input{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 9px;width:100%}
+.barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.barra .spacer{flex:1}
+.guardado{font-size:12px;color:var(--muted)}
+.hist{display:flex;flex-direction:column;gap:12px}
+.hist article{border:1px solid var(--line-soft);border-radius:10px;padding:12px 14px;background:var(--bg)}
+.hist h4{margin:0 0 4px;font-size:14px}
+.hist .bloque{margin:6px 0 0;white-space:pre-wrap;font-size:14px}
+.hist .bloque b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.adenda{margin-top:8px;padding:8px 10px;border-left:3px solid var(--med);background:var(--surface);font-size:13.5px;white-space:pre-wrap}
+table.t{width:100%;border-collapse:collapse;font-size:13.5px}
+table.t th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+table.t td{padding:7px 8px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+.vacio{color:var(--muted);font-size:14px;padding:18px 4px}
+.rx-row{border:1px solid var(--line-soft);border-radius:10px;padding:10px;display:grid;grid-template-columns:repeat(6,1fr);gap:8px;background:var(--bg)}
+.rx-row .med{grid-column:1/-2}.rx-row .x{grid-column:-2/-1;align-self:end}
+.rx-row .ind{grid-column:1/-1}
+.rx-row input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;width:100%}
+@media (max-width:640px){.rx-row{grid-template-columns:1fr 1fr}}
+.top-ficha{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+.top-ficha .brand-row{display:flex;gap:12px;align-items:center}
+.top-ficha h1{margin:0;font-size:20px}
+.buscar-rut{display:flex;gap:6px;margin-top:12px}
+.buscar-rut input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 9px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top-ficha">
+    <div class="brand-row">
+      <div class="marca" id="logo" hidden><img alt=""></div>
+      <div><span class="meta" id="centro">Ficha clínica</span><h1 id="yo">—</h1></div>
+    </div>
+    <div class="userbar">
+      <a class="linkbtn" href="/">Agenda</a>
+      <button class="linkbtn" id="salir">Salir</button>
+    </div>
+  </header>
+  <div class="notice" id="notice" hidden></div>
+
+  <div class="fx">
+    <aside class="card">
+      <div class="dia-nav">
+        <button class="btn icon" id="prev" aria-label="Día anterior">‹</button>
+        <input type="date" id="fecha" aria-label="Fecha">
+        <button class="btn icon" id="next" aria-label="Día siguiente">›</button>
+      </div>
+      <div class="meta" id="dia-res" style="margin-bottom:8px"></div>
+      <div class="pl" id="lista"></div>
+      <form class="buscar-rut" id="fbuscar"><input id="rut-buscar" placeholder="Abrir ficha por RUT" autocomplete="off" aria-label="RUT del paciente"><button class="btn">Abrir</button></form>
+    </aside>
+
+    <main class="card" id="ficha">
+      <div class="vacio" id="sin-paciente">Elige un paciente de la lista para abrir su ficha.</div>
+      <div id="con-paciente" hidden>
+        <div class="pac-head">
+          <h2 id="p-nombre"></h2>
+          <span class="meta" id="p-datos"></span>
+          <span class="spacer" style="flex:1"></span>
+          <span id="turno-box" hidden><span class="tag bor" id="turno-txt"></span> <button type="button" class="btn primary" id="turno-llamar">Llamar a mi box</button></span>
+        </div>
+        <div class="alergia" id="p-alergias" hidden></div>
+        <nav class="tabs" role="tablist" id="tabs">
+          <button role="tab" data-t="atencion" aria-selected="true">Atención</button>
+          <button role="tab" data-t="historial">Historial</button>
+          <button role="tab" data-t="antecedentes">Antecedentes</button>
+          <button role="tab" data-t="documentos">Documentos</button>
+          <button role="tab" data-t="examenes">Exámenes</button>
+        </nav>
+
+        <!-- Atención en curso -->
+        <section data-p="atencion">
+          <div id="at-vacia" class="stack">
+            <p class="meta" style="margin:0" id="at-vacia-txt">No hay una atención abierta para este paciente.</p>
+            <div><button class="btn primary" id="at-iniciar">Iniciar atención</button></div>
+          </div>
+          <form id="at-form" class="stack" hidden novalidate>
+            <div class="field"><label for="a-motivo">Motivo de consulta</label><input id="a-motivo" autocomplete="off"></div>
+            <div class="field"><label for="a-anamnesis">Anamnesis</label><textarea id="a-anamnesis" rows="5"></textarea></div>
+            <div class="field"><label>Signos vitales</label>
+              <div class="signos">
+                <div class="field"><label for="s-pa">PA mmHg</label><input id="s-pa" data-s="pa" placeholder="120/80"></div>
+                <div class="field"><label for="s-fc">FC lpm</label><input id="s-fc" data-s="fc" inputmode="numeric"></div>
+                <div class="field"><label for="s-fr">FR rpm</label><input id="s-fr" data-s="fr" inputmode="numeric"></div>
+                <div class="field"><label for="s-temp">T° °C</label><input id="s-temp" data-s="temp" inputmode="decimal"></div>
+                <div class="field"><label for="s-sat">Sat O₂ %</label><input id="s-sat" data-s="sat" inputmode="numeric"></div>
+                <div class="field"><label for="s-peso">Peso kg</label><input id="s-peso" data-s="peso" inputmode="decimal"></div>
+                <div class="field"><label for="s-talla">Talla cm</label><input id="s-talla" data-s="talla" inputmode="numeric"></div>
+                <div class="field"><label for="s-hgt">HGT mg/dl</label><input id="s-hgt" data-s="hgt" inputmode="numeric"></div>
+                <div class="field"><label>IMC</label><input id="s-imc" readonly tabindex="-1"></div>
+              </div>
+            </div>
+            <div class="field"><label for="a-ef">Examen físico</label><textarea id="a-ef" rows="4"></textarea></div>
+            <div class="field"><label>Diagnósticos <span class="opc">(código CIE-10 opcional)</span></label>
+              <div class="dx" id="dx"></div>
+              <div><button type="button" class="linkbtn" id="dx-add">+ Agregar diagnóstico</button></div>
+            </div>
+            <div class="field"><label for="a-plan">Indicaciones y plan</label><textarea id="a-plan" rows="4"></textarea></div>
+            <div class="barra">
+              <button type="button" class="btn" data-doc="receta">Receta</button>
+              <button type="button" class="btn" data-doc="orden">Orden de exámenes</button>
+              <button type="button" class="btn" data-doc="certificado">Certificado</button>
+              <button type="button" class="btn" data-doc="interconsulta">Interconsulta</button>
+              <button type="button" class="btn" data-doc="indicaciones">Indicaciones</button>
+            </div>
+            <div class="meta" id="at-docs"></div>
+            <div class="barra">
+              <span class="guardado" id="guardado"></span><span class="spacer"></span>
+              <button type="button" class="btn danger" id="at-descartar">Descartar borrador</button>
+              <button type="button" class="btn primary" id="at-firmar">Firmar y cerrar atención</button>
+            </div>
+            <div class="msg" id="at-msg"></div>
+          </form>
+        </section>
+
+        <section data-p="historial" hidden><div class="hist" id="hist"></div></section>
+
+        <section data-p="antecedentes" hidden>
+          <form id="ant-form" class="stack" novalidate>
+            <div class="field"><label for="an-alergias">Alergias</label><textarea id="an-alergias" data-a="alergias" rows="2" placeholder="Sin alergias conocidas"></textarea></div>
+            <div class="grid2">
+              <div class="field"><label for="an-morbidos">Mórbidos</label><textarea id="an-morbidos" data-a="morbidos" rows="3"></textarea></div>
+              <div class="field"><label for="an-farmacos">Fármacos en uso</label><textarea id="an-farmacos" data-a="farmacos" rows="3"></textarea></div>
+              <div class="field"><label for="an-quirurgicos">Quirúrgicos</label><textarea id="an-quirurgicos" data-a="quirurgicos" rows="3"></textarea></div>
+              <div class="field"><label for="an-familiares">Familiares</label><textarea id="an-familiares" data-a="familiares" rows="3"></textarea></div>
+              <div class="field"><label for="an-habitos">Hábitos</label><textarea id="an-habitos" data-a="habitos" rows="3" placeholder="Tabaco, alcohol, actividad física…"></textarea></div>
+              <div class="field"><label for="an-gineco">Gineco-obstétricos</label><textarea id="an-gineco" data-a="gineco" rows="3"></textarea></div>
+            </div>
+            <div class="barra"><span class="meta" id="ant-meta"></span><span class="spacer"></span><button class="btn primary">Guardar antecedentes</button></div>
+            <div class="msg" id="ant-msg"></div>
+          </form>
+        </section>
+
+        <section data-p="documentos" hidden><div id="docs"></div></section>
+        <section data-p="examenes" hidden><div id="exams"></div></section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Panel de documento -->
+<div class="scrim" id="dscrim" hidden>
+  <form class="panel wide" id="dform" novalidate>
+    <h2 id="d-titulo">Documento</h2>
+    <div id="d-cuerpo" class="stack"></div>
+    <div class="msg" id="d-msg"></div>
+    <div class="actions"><span class="spacer"></span><button type="button" class="btn" id="d-cerrar">Cancelar</button><button class="btn primary" id="d-emitir">Emitir e imprimir</button></div>
+  </form>
+</div>
+
+<datalist id="dl-med"></datalist>
+<datalist id="dl-dx"></datalist>
+<datalist id="dl-ex"></datalist>
+<div class="toast" id="toast" hidden></div>
+<footer class="pie-sistema" id="pie-sistema"></footer>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const pad=n=>String(n).padStart(2,"0");
+const hoyISO=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+const fCL=s=>s?String(s).slice(0,10).split("-").reverse().join("/"):"";
+const fhCL=s=>s?fCL(s)+" "+String(s).slice(11,16):"";
+const sumarDias=(f,n)=>{const [y,m,d]=f.split("-").map(Number);const x=new Date(y,m-1,d+n);return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate())};
+const el=(tag,props={},...hijos)=>{const e=document.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==="class")e.className=v;else if(k==="text")e.textContent=v;else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v)}for(const h of hijos)if(h!=null)e.append(h);return e};
+function toast(t){const e=$("#toast");e.textContent=t;e.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>e.hidden=true,2400)}
+function notice(t){$("#notice").textContent=t||"";$("#notice").hidden=!t}
+async function api(url,opts={}){
+  const r=await fetch(url,{...opts,headers:{"Content-Type":"application/json"},body:opts.body?JSON.stringify(opts.body):undefined});
+  if(r.status===401){location.href="/login";throw new Error("sesion")}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||"Ocurrió un error en el servidor.");
+  return j;
+}
+const ESTADOS={agendado:"Agendado",confirmado:"Confirmado",llego:"En espera",atendido:"Atendido",ausente:"No asistió",cancelado:"Cancelado"};
+const TIPOS={receta:"Receta médica",orden:"Orden de exámenes",certificado:"Certificado médico",interconsulta:"Interconsulta",indicaciones:"Indicaciones"};
+const PACS={imagenes:"Imágenes listas",informado:"Informado",entregado:"Entregado"};
+
+let PROF=null, dia=hoyISO(), F=null, rutSel="", citaSel=null, AT=null, TURNOS={};
+
+/* ---------- pacientes del día ---------- */
+async function cargarDia(){
+  $("#fecha").value=dia;
+  try{
+    const d=await api("/api/clinica/dia?fecha="+dia);
+    // Turnos del tótem: quién ya llegó y está en la sala de espera (solo hoy)
+    TURNOS={}; if(dia===hoyISO()){try{for(const t of (await api("/api/turnos")).turnos) if(t.cita_id) TURNOS[t.cita_id]=t}catch(e){}}
+    pintarTurno();
+    const lista=$("#lista"); lista.innerHTML="";
+    $("#dia-res").textContent=d.citas.length?`${d.citas.length} ${d.citas.length===1?"paciente":"pacientes"} · ${d.citas.filter(c=>c.firmada).length} atendidos`:"Sin pacientes agendados este día.";
+    for(const c of d.citas){
+      const tu=TURNOS[c.id];
+      const tag=c.firmada?el("span",{class:"tag ok",text:"Atendido"}):c.atencion_id?el("span",{class:"tag bor",text:"Borrador"}):c.estado==="ausente"?el("span",{class:"tag bad",text:"No asistió"})
+        :tu&&tu.estado==="espera"?el("span",{class:"tag bor",text:`${tu.etapa==="box"?"En sala":"En recepción"} · ${tu.codigo} · ${tu.espera_min} min`}):tu&&tu.estado==="llamado"?el("span",{class:"tag ok",text:`Llamado · ${tu.codigo}`}):el("span",{class:"tag",text:ESTADOS[c.estado]||c.estado});
+      const b=el("button",{type:"button","aria-current":String(citaSel===c.id)},
+        el("span",{class:"h",text:c.hora}),el("span",{class:"n",text:c.paciente}),
+        el("span",{class:"s"},[c.edad,c.prevision].filter(Boolean).join(" · ")+" ",tag));
+      b.addEventListener("click",()=>abrir(c.rut_norm,c.id));
+      lista.appendChild(b);
+    }
+  }catch(e){notice(e.message)}
+}
+$("#prev").addEventListener("click",()=>{dia=sumarDias(dia,-1);cargarDia()});
+$("#next").addEventListener("click",()=>{dia=sumarDias(dia,1);cargarDia()});
+$("#fecha").addEventListener("change",e=>{if(e.target.value){dia=e.target.value;cargarDia()}});
+$("#fbuscar").addEventListener("submit",e=>{e.preventDefault();const r=$("#rut-buscar").value.replace(/[^0-9kK]/g,"").toUpperCase();if(r.length>=7)abrir(r,null);else toast("Escribe un RUT válido.")});
+
+/* ---------- abrir ficha ---------- */
+async function abrir(rut,citaId){
+  if(AT&&!AT.firmada) await guardarAhora();
+  try{
+    F=await api("/api/clinica/paciente?rut="+encodeURIComponent(rut));
+    rutSel=F.paciente.rut; citaSel=citaId;
+    history.replaceState(null,"","/ficha?rut="+rutSel+(citaId?"&cita="+citaId:"")+"#"+dia);
+    notice(""); pintarFicha(); cargarDia();
+  }catch(e){toast(e.message)}
+}
+function pintarFicha(){
+  $("#sin-paciente").hidden=true; $("#con-paciente").hidden=false;
+  const p=F.paciente;
+  $("#p-nombre").textContent=p.paciente||"Paciente";
+  $("#p-datos").textContent=[p.rut_txt,p.edad,p.fecha_nac?"nac. "+fCL(p.fecha_nac):"",p.prevision,p.telefono].filter(Boolean).join(" · ");
+  const al=(F.antecedentes.alergias||"").trim();
+  $("#p-alergias").hidden=!al; $("#p-alergias").textContent="Alergias: "+al;
+  // atención abierta: borrador propio de esta cita (o el último borrador propio si se abrió por RUT)
+  AT=F.atenciones.find(a=>!a.firmada&&a.profesional_id===PROF.id&&(!citaSel||a.cita_id===citaSel))||null;
+  pintarAtencion(); pintarHistorial(); pintarAntecedentes(); pintarDocs(); pintarExamenes(); pintarTurno();
+}
+
+/* ---------- llamar al paciente desde la ficha (pantalla de la sala de espera) ---------- */
+function pintarTurno(){
+  const t=citaSel&&TURNOS[citaSel];
+  $("#turno-box").hidden=!t||!["espera","llamado"].includes(t.estado);
+  if(t){$("#turno-txt").textContent=t.estado==="espera"?`${t.etapa==="box"?"En sala":"En recepción"} · ${t.codigo} · ${t.espera_min} min`:`Llamado · ${t.codigo}${t.puesto?" · "+t.puesto:""}`;$("#turno-llamar").textContent=t.estado==="llamado"?"Volver a llamar":"Llamar a mi box"}
+}
+$("#turno-llamar").addEventListener("click",async()=>{
+  const t=TURNOS[citaSel]; if(!t) return;
+  let box=""; try{box=localStorage.getItem("turno-box")||""}catch(e){}
+  if(!box){box=(prompt("¿En qué box atiende? (por ejemplo «Box 3»)")||"").trim(); if(!box) return; try{localStorage.setItem("turno-box",box)}catch(e){}}
+  try{const r=await api("/api/turnos/llamar",{method:"POST",body:{id:t.id,puesto:`${PROF.titulo||""} ${PROF.nombre.split(" ")[0]} ${PROF.nombre.split(" ")[1]||""} · ${box}`.replace(/\s+/g," ").trim()}});
+    TURNOS[citaSel]=r; pintarTurno(); toast(`Llamando a ${r.codigo} en la pantalla`)}catch(e){toast(e.message)}
+});
+
+/* ---------- pestañas ---------- */
+$$("#tabs button").forEach(b=>b.addEventListener("click",()=>verTab(b.dataset.t)));
+function verTab(t){$$("#tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.t===t)));$$("[data-p]").forEach(s=>s.hidden=s.dataset.p!==t)}
+
+/* ---------- atención ---------- */
+function pintarAtencion(){
+  const yaFirmada=citaSel&&F.atenciones.find(a=>a.cita_id===citaSel&&a.firmada&&a.profesional_id===PROF.id);
+  $("#at-vacia").hidden=!!AT; $("#at-form").hidden=!AT;
+  $("#at-vacia-txt").textContent=yaFirmada?`La atención de esta cita ya está firmada (${fhCL(yaFirmada.firmada_en)}). Puedes verla en Historial y agregar una adenda.`:"No hay una atención abierta para este paciente.";
+  $("#at-iniciar").textContent=yaFirmada?"Iniciar otra atención":"Iniciar atención";
+  if(!AT) return;
+  $("#a-motivo").value=AT.motivo||""; $("#a-anamnesis").value=AT.anamnesis||""; $("#a-ef").value=AT.examen_fisico||""; $("#a-plan").value=AT.plan||"";
+  for(const i of $$("[data-s]")) i.value=AT.signos?.[i.dataset.s]||"";
+  imc();
+  $("#dx").innerHTML=""; for(const d of (AT.diagnosticos.length?AT.diagnosticos:[{}])) addDx(d);
+  $("#guardado").textContent="Borrador guardado "+fhCL(AT.actualizado);
+  $("#at-msg").textContent="";
+  const docs=F.documentos.filter(d=>d.atencion_id===AT.id&&!d.anulado);
+  $("#at-docs").textContent=docs.length?"Emitidos en esta atención: "+docs.map(d=>TIPOS[d.tipo]).join(", "):"";
+  const des=$("#at-descartar"); des.classList.remove("armed"); des.textContent="Descartar borrador"; des.hidden=docs.length>0;
+}
+$("#at-iniciar").addEventListener("click",async()=>{
+  try{AT=await api("/api/clinica/atenciones",{method:"POST",body:{rut:rutSel,cita_id:citaSel}});F.atenciones.unshift(AT);pintarAtencion();cargarDia();$("#a-motivo").focus()}
+  catch(e){toast(e.message)}
+});
+function addDx(d={}){
+  const row=el("div",{class:"dx-row"},
+    el("input",{class:"dx-c",placeholder:"Código","aria-label":"Código CIE-10",maxlength:"10"}),
+    el("input",{class:"dx-n",placeholder:"Diagnóstico",list:"dl-dx","aria-label":"Diagnóstico"}),
+    el("button",{type:"button",class:"linkbtn",title:"Quitar","aria-label":"Quitar diagnóstico",text:"×"}));
+  row.querySelector(".dx-c").value=d.codigo||""; row.querySelector(".dx-n").value=d.nombre||"";
+  row.querySelector("button").addEventListener("click",()=>{row.remove();if(!$$(".dx-row").length)addDx();programarGuardado()});
+  const n=row.querySelector(".dx-n");
+  n.addEventListener("input",()=>{sugerir("diagnostico",n.value,"#dl-dx",v=>v[1]);
+    // si elige una sugerencia, completa el código
+    const s=SUG.diagnostico.find(v=>v[1]===n.value); if(s&&s[0]&&!row.querySelector(".dx-c").value) row.querySelector(".dx-c").value=s[0]});
+  $("#dx").appendChild(row);
+}
+$("#dx-add").addEventListener("click",()=>{addDx();$$(".dx-n").at(-1).focus()});
+function imc(){const p=parseFloat(($("#s-peso").value||"").replace(",",".")),t=parseFloat(($("#s-talla").value||"").replace(",","."))/100;
+  $("#s-imc").value=p>0&&t>0.4?(p/(t*t)).toFixed(1).replace(".",","):""}
+$("#s-peso").addEventListener("input",imc); $("#s-talla").addEventListener("input",imc);
+function datosAtencion(){
+  return {motivo:$("#a-motivo").value,anamnesis:$("#a-anamnesis").value,examen_fisico:$("#a-ef").value,plan:$("#a-plan").value,
+    signos:Object.fromEntries($$("[data-s]").map(i=>[i.dataset.s,i.value.trim()])),
+    diagnosticos:$$(".dx-row").map(r=>({codigo:r.querySelector(".dx-c").value.trim(),nombre:r.querySelector(".dx-n").value.trim()})).filter(d=>d.codigo||d.nombre)};
+}
+// Guardado automático del borrador (2 segundos después de dejar de escribir)
+let tGuardar=null, guardando=null;
+function programarGuardado(){if(!AT||AT.firmada)return;$("#guardado").textContent="Cambios sin guardar…";clearTimeout(tGuardar);tGuardar=setTimeout(guardarAhora,2000)}
+async function guardarAhora(){
+  clearTimeout(tGuardar); tGuardar=null; if(!AT||AT.firmada) return;
+  const id=AT.id, datos=datosAtencion();
+  guardando=api("/api/clinica/atenciones/"+id,{method:"PUT",body:datos});
+  try{const r=await guardando; if(AT&&AT.id===id){Object.assign(AT,r);$("#guardado").textContent="Borrador guardado "+fhCL(r.actualizado)}}
+  catch(e){$("#guardado").textContent="No se pudo guardar: "+e.message}
+  finally{guardando=null}
+}
+$("#at-form").addEventListener("input",programarGuardado);
+window.addEventListener("beforeunload",e=>{if(tGuardar){guardarAhora();e.preventDefault()}});
+$("#at-firmar").addEventListener("click",async()=>{
+  const b=$("#at-firmar");
+  if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="¿Firmar? Ya no se podrá editar";setTimeout(()=>{b.classList.remove("armed");b.textContent="Firmar y cerrar atención"},4000);return}
+  b.classList.remove("armed"); b.textContent="Firmar y cerrar atención";
+  try{await guardarAhora();await api(`/api/clinica/atenciones/${AT.id}/firmar`,{method:"POST"});AT.firmada=1;toast("Atención firmada");await abrir(rutSel,citaSel);verTab("historial")}
+  catch(e){$("#at-msg").textContent=e.message;$("#at-msg").className="msg err"}
+});
+$("#at-descartar").addEventListener("click",async()=>{
+  const b=$("#at-descartar");
+  if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="¿Descartar? Se borra lo escrito";return}
+  try{clearTimeout(tGuardar);tGuardar=null;await api("/api/clinica/atenciones/"+AT.id,{method:"DELETE"});AT=null;toast("Borrador descartado");await abrir(rutSel,citaSel)}
+  catch(e){toast(e.message)}
+});
+
+/* ---------- historial ---------- */
+function pintarHistorial(){
+  const box=$("#hist"); box.innerHTML="";
+  const firmadas=F.atenciones.filter(a=>a.firmada);
+  if(!firmadas.length){box.append(el("div",{class:"vacio",text:"Sin atenciones firmadas."}));return}
+  for(const a of firmadas){
+    const s=a.signos||{}, sv=[s.pa&&"PA "+s.pa,s.fc&&"FC "+s.fc,s.fr&&"FR "+s.fr,s.temp&&"T° "+s.temp,s.sat&&"Sat "+s.sat+"%",s.peso&&"Peso "+s.peso+" kg",s.talla&&"Talla "+s.talla+" cm",s.hgt&&"HGT "+s.hgt].filter(Boolean).join(" · ");
+    const bloque=(t,v)=>v?el("div",{class:"bloque"},el("b",{text:t}),v):null;
+    const art=el("article",{},
+      el("h4",{text:`${fhCL(a.fecha)} · ${a.titulo||""} ${a.profesional}${a.especialidad?" · "+a.especialidad:""}`}),
+      el("div",{class:"meta",text:"Firmada "+fhCL(a.firmada_en)}),
+      bloque("Motivo",a.motivo),bloque("Anamnesis",a.anamnesis),bloque("Signos vitales",sv),bloque("Examen físico",a.examen_fisico),
+      bloque("Diagnósticos",a.diagnosticos.map(d=>(d.codigo?d.codigo+" · ":"")+d.nombre).join("\n")),bloque("Indicaciones y plan",a.plan));
+    for(const d of a.adendas) art.append(el("div",{class:"adenda"},el("b",{text:`Adenda ${fhCL(d.creado)} · ${d.titulo||""} ${d.profesional}: `}),d.texto));
+    const add=el("button",{type:"button",class:"linkbtn",text:"+ Agregar adenda"});
+    add.addEventListener("click",()=>{
+      add.hidden=true;
+      const ta=el("textarea",{rows:"3",placeholder:"Corrección o información adicional (queda con tu nombre, fecha y hora)"});
+      const ok=el("button",{type:"button",class:"btn primary",text:"Guardar adenda"}), no=el("button",{type:"button",class:"btn",text:"Cancelar"});
+      const f=el("div",{class:"stack",style:"margin-top:8px"},el("div",{class:"field"},ta),el("div",{class:"barra"},no,ok));
+      no.addEventListener("click",()=>{f.remove();add.hidden=false});
+      ok.addEventListener("click",async()=>{try{await api(`/api/clinica/atenciones/${a.id}/adenda`,{method:"POST",body:{texto:ta.value}});toast("Adenda guardada");await abrir(rutSel,citaSel);verTab("historial")}catch(e){toast(e.message)}});
+      art.append(f); ta.focus();
+    });
+    art.append(el("div",{style:"margin-top:6px"},add));
+    box.append(art);
+  }
+}
+
+/* ---------- antecedentes ---------- */
+function pintarAntecedentes(){
+  for(const t of $$("[data-a]")) t.value=F.antecedentes[t.dataset.a]||"";
+  $("#ant-meta").textContent=F.antecedentes.actualizado?"Última actualización "+fhCL(F.antecedentes.actualizado):"";
+  $("#ant-msg").textContent="";
+}
+$("#ant-form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  try{F.antecedentes=await api("/api/clinica/antecedentes",{method:"PUT",body:{rut:rutSel,...Object.fromEntries($$("[data-a]").map(t=>[t.dataset.a,t.value]))}});
+    pintarAntecedentes(); const al=(F.antecedentes.alergias||"").trim(); $("#p-alergias").hidden=!al; $("#p-alergias").textContent="Alergias: "+al; toast("Antecedentes guardados")}
+  catch(err){$("#ant-msg").textContent=err.message;$("#ant-msg").className="msg err"}
+});
+
+/* ---------- documentos ---------- */
+function resumenDoc(d){
+  const c=d.contenido||{};
+  if(d.tipo==="receta") return (c.items||[]).map(i=>i.medicamento).join(", ");
+  if(d.tipo==="orden") return (c.examenes||[]).join(", ");
+  if(d.tipo==="interconsulta") return "A "+c.especialidad;
+  return (c.texto||"").slice(0,90);
+}
+function pintarDocs(){
+  const box=$("#docs"); box.innerHTML="";
+  if(!F.documentos.length){box.append(el("div",{class:"vacio",text:"Sin documentos emitidos."}));return}
+  const t=el("table",{class:"t"}); t.innerHTML="<thead><tr><th>Fecha</th><th>Documento</th><th>Detalle</th><th>Médico</th><th></th></tr></thead>";
+  const tb=el("tbody"); t.append(tb);
+  for(const d of F.documentos){
+    const acc=el("td",{style:"white-space:nowrap"});
+    const ver=el("a",{class:"linkbtn",href:`/api/clinica/documentos/${d.id}/imprimir`,target:"_blank",rel:"noopener",text:"Ver"}); acc.append(ver);
+    if(!d.anulado&&d.profesional_id===PROF.id){
+      const an=el("button",{type:"button",class:"linkbtn eliminar",text:"Anular"});
+      an.addEventListener("click",async()=>{const m=prompt("Motivo de la anulación:");if(!m)return;
+        try{await api(`/api/clinica/documentos/${d.id}/anular`,{method:"POST",body:{motivo:m}});toast("Documento anulado");await abrir(rutSel,citaSel);verTab("documentos")}catch(e){toast(e.message)}});
+      acc.append(an);
+    }
+    tb.append(el("tr",{},el("td",{text:fhCL(d.creado)}),el("td",{},d.tipo_txt+" ",d.anulado?el("span",{class:"tag bad",text:"Anulado"}):""),
+      el("td",{text:resumenDoc(d)}),el("td",{text:`${d.titulo||""} ${d.profesional}`}),acc));
+  }
+  box.append(t);
+}
+function pintarExamenes(){
+  const box=$("#exams"); box.innerHTML="";
+  if(!F.examenes.length){box.append(el("div",{class:"vacio",text:"Sin exámenes de imágenes en este centro."}));return}
+  const t=el("table",{class:"t"}); t.innerHTML="<thead><tr><th>Fecha</th><th>Examen</th><th>Estado</th><th></th></tr></thead>";
+  const tb=el("tbody"); t.append(tb);
+  for(const x of F.examenes){
+    const est=PACS[x.pacs_estado]||ESTADOS[x.estado]||x.estado;
+    const td=el("td");
+    if(F.pacs_publico&&x.accesion&&x.pacs_estado) td.append(el("a",{class:"linkbtn",href:F.pacs_publico+"/agenda/"+encodeURIComponent(x.accesion),target:"_blank",rel:"noopener",text:x.pacs_estado==="imagenes"?"Ver imágenes":"Ver informe"}));
+    tb.append(el("tr",{},el("td",{text:fCL(x.fecha)+" "+x.hora}),el("td",{text:x.examen||"—"}),el("td",{},el("span",{class:"tag"+(x.pacs_estado==="informado"||x.pacs_estado==="entregado"?" ok":""),text:est})),td));
+  }
+  box.append(t);
+}
+
+/* ---------- sugerencias (lo ya usado en el centro) ---------- */
+const SUG={diagnostico:[],medicamento:[],examen:[]};
+let tSug={};
+function sugerir(tipo,q,dl,etiqueta){
+  clearTimeout(tSug[tipo]);
+  tSug[tipo]=setTimeout(async()=>{try{SUG[tipo]=await api(`/api/clinica/sugerencias?tipo=${tipo}&q=${encodeURIComponent(q||"")}`);
+    const d=$(dl); d.innerHTML=""; for(const v of SUG[tipo]) d.append(el("option",{value:etiqueta(v)}))}catch(e){}},200);
+}
+
+/* ---------- emitir documentos ---------- */
+let docTipo="";
+const campo=(etq,input)=>el("div",{class:"field"},el("label",{text:etq}),input);
+function filaRx(i={}){
+  const inp=(cls,ph,v,extra={})=>{const x=el("input",{class:cls,placeholder:ph,...extra});x.value=v||"";return x};
+  const med=inp("r-med","Medicamento y concentración (ej. Paracetamol 500 mg)",i.medicamento,{list:"dl-med"});
+  const row=el("div",{class:"rx-row"},
+    el("div",{class:"med"},med),
+    el("div",{class:"x"},el("button",{type:"button",class:"linkbtn",text:"Quitar"})),
+    inp("r-dosis","Dosis",i.dosis),inp("r-via","Vía",i.via),inp("r-frec","Frecuencia",i.frecuencia),inp("r-dur","Duración",i.duracion),inp("r-cant","Cantidad",i.cantidad),
+    el("div",{}),
+    el("div",{class:"ind"},inp("r-ind","Indicaciones (opcional)",i.indicaciones)));
+  row.querySelector(".x button").addEventListener("click",()=>{row.remove();if(!$$(".rx-row").length)$("#rx-list").append(filaRx())});
+  med.addEventListener("input",()=>{
+    sugerir("medicamento",med.value,"#dl-med",v=>v[0]);
+    const s=SUG.medicamento.find(v=>v[0]===med.value);
+    if(s){const [,dosis,via,frec,dur]=s;const set=(c,v)=>{const x=row.querySelector(c);if(!x.value)x.value=v||""};set(".r-dosis",dosis);set(".r-via",via);set(".r-frec",frec);set(".r-dur",dur)}
+  });
+  return row;
+}
+function dxTexto(){const a=AT?datosAtencion():null;return a?a.diagnosticos.map(d=>(d.codigo?d.codigo+" ":"")+d.nombre).join("; "):""}
+function abrirDoc(tipo){
+  docTipo=tipo; $("#d-titulo").textContent=TIPOS[tipo]; $("#d-msg").textContent=""; $("#d-msg").className="msg";
+  const c=$("#d-cuerpo"); c.innerHTML="";
+  const p=F.paciente;
+  if(tipo==="receta"){
+    c.append(el("p",{class:"meta",style:"margin:0",text:`${p.paciente} · ${p.rut_txt}`}),el("div",{id:"rx-list",class:"stack"},filaRx()),
+      el("div",{},el("button",{type:"button",class:"linkbtn",id:"rx-add",text:"+ Agregar medicamento",onclick:()=>{$("#rx-list").append(filaRx());$$(".r-med").at(-1).focus()}})),
+      campo("Notas",el("textarea",{id:"rx-notas",rows:"2"})));
+    sugerir("medicamento","","#dl-med",v=>v[0]);
+  }else if(tipo==="orden"){
+    const area=el("select",{id:"o-area"}); for(const [v,t] of [["imagenes","Imagenología"],["laboratorio","Laboratorio"],["otro","Otro"]]) area.append(el("option",{value:v,text:t}));
+    const ex=el("input",{id:"o-nuevo",list:"dl-ex",placeholder:"Escribe un examen y presiona Enter"});
+    const lista=el("ul",{id:"o-lista",style:"margin:0;padding-left:20px"});
+    const agregar=()=>{const v=ex.value.trim();if(!v)return;const li=el("li",{},v+" ",el("button",{type:"button",class:"linkbtn",text:"×",onclick:()=>li.remove()}));li.dataset.v=v;lista.append(li);ex.value=""};
+    ex.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();agregar()}});
+    ex.addEventListener("input",()=>sugerir("examen",ex.value,"#dl-ex",v=>v[0]));
+    const dg=el("input",{id:"o-dx"}); dg.value=dxTexto();
+    c.append(campo("Área",area),campo("Exámenes",el("div",{class:"stack"},el("div",{class:"barra"},ex,el("button",{type:"button",class:"btn",text:"Agregar",onclick:agregar})),lista)),
+      campo("Diagnóstico o sospecha",dg),campo("Indicaciones (preparación, urgencia…)",el("textarea",{id:"o-ind",rows:"2"})));
+    sugerir("examen","","#dl-ex",v=>v[0]);
+  }else if(tipo==="interconsulta"){
+    const ant=el("textarea",{id:"i-ant",rows:"4"}); ant.value=[dxTexto()&&"Diagnósticos: "+dxTexto(),F.antecedentes.morbidos&&"Mórbidos: "+F.antecedentes.morbidos,F.antecedentes.farmacos&&"Fármacos: "+F.antecedentes.farmacos].filter(Boolean).join("\n");
+    c.append(campo("Especialidad a la que se deriva",el("input",{id:"i-esp"})),campo("Motivo",el("textarea",{id:"i-mot",rows:"4"})),campo("Antecedentes relevantes",ant));
+  }else{
+    const t=el("textarea",{id:"t-texto",rows:"8"});
+    if(tipo==="certificado") t.value=`Certifico que ${p.paciente}, RUT ${p.rut_txt}, fue atendido(a) en este centro el ${fCL(new Date().toISOString())}${dxTexto()?" por "+dxTexto():""}.\n\nSe extiende el presente certificado a petición del interesado(a) para los fines que estime conveniente.`;
+    if(tipo==="indicaciones") t.value=AT?$("#a-plan").value:"";
+    c.append(campo("Texto",t));
+  }
+  $("#dscrim").hidden=false;
+}
+$$("[data-doc]").forEach(b=>b.addEventListener("click",()=>abrirDoc(b.dataset.doc)));
+$("#d-cerrar").addEventListener("click",()=>$("#dscrim").hidden=true);
+$("#dform").addEventListener("submit",async e=>{
+  e.preventDefault();
+  let contenido={};
+  if(docTipo==="receta") contenido={items:$$(".rx-row").map(r=>({medicamento:r.querySelector(".r-med").value,dosis:r.querySelector(".r-dosis").value,via:r.querySelector(".r-via").value,
+    frecuencia:r.querySelector(".r-frec").value,duracion:r.querySelector(".r-dur").value,cantidad:r.querySelector(".r-cant").value,indicaciones:r.querySelector(".r-ind").value})),notas:$("#rx-notas").value};
+  else if(docTipo==="orden"){if($("#o-nuevo").value.trim())$("#o-nuevo").dispatchEvent(new KeyboardEvent("keydown",{key:"Enter"}));
+    contenido={area:$("#o-area").value,examenes:$$("#o-lista li").map(li=>li.dataset.v),diagnostico:$("#o-dx").value,indicaciones:$("#o-ind").value}}
+  else if(docTipo==="interconsulta") contenido={especialidad:$("#i-esp").value,motivo:$("#i-mot").value,antecedentes:$("#i-ant").value};
+  else contenido={texto:$("#t-texto").value};
+  // la ventana se abre antes de esperar al servidor para que el navegador no la bloquee
+  const w=window.open("about:blank","_blank");
+  try{
+    if(AT&&!AT.firmada) await guardarAhora();
+    const d=await api("/api/clinica/documentos",{method:"POST",body:{tipo:docTipo,rut:rutSel,atencion_id:AT&&!AT.firmada?AT.id:null,contenido}});
+    if(w) w.location.href=`/api/clinica/documentos/${d.id}/imprimir`; else location.href=`/api/clinica/documentos/${d.id}/imprimir`;
+    $("#dscrim").hidden=true; toast(TIPOS[docTipo]+" emitida");
+    F=await api("/api/clinica/paciente?rut="+rutSel); pintarDocs(); if(AT){const docs=F.documentos.filter(x=>x.atencion_id===AT.id&&!x.anulado);$("#at-docs").textContent="Emitidos en esta atención: "+docs.map(x=>TIPOS[x.tipo]).join(", ");$("#at-descartar").hidden=docs.length>0}
+  }catch(err){if(w)w.close();$("#d-msg").textContent=err.message;$("#d-msg").className="msg err"}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")$("#dscrim").hidden=true});
+$("#dscrim").addEventListener("click",e=>{if(e.target.id==="dscrim")$("#dscrim").hidden=true});
+
+/* ---------- inicio ---------- */
+$("#salir").addEventListener("click",async()=>{await guardarAhora();await fetch("/api/logout",{method:"POST"});location.href="/login"});
+(async()=>{
+  try{
+    const yo=await api("/api/me");
+    if(yo.centro){$("#centro").textContent="Ficha clínica · "+yo.centro;document.title="Ficha clínica · "+yo.centro}
+    if(yo.logo){const b=$("#logo"),i=b.querySelector("img");i.onload=()=>b.hidden=false;i.src=yo.logo}
+    PROF=await api("/api/clinica/yo");
+    $("#yo").textContent=`${PROF.titulo||""} ${PROF.nombre}`.trim();
+  }catch(e){if(e.message!=="sesion"){notice(e.message);$("#ficha").hidden=true;$(".fx aside").hidden=true}return}
+  // Cada 10 segundos se actualiza quién llegó o pasó a la sala (solo el día de hoy)
+  setInterval(()=>{if(dia===hoyISO()&&document.visibilityState==="visible")cargarDia()},10000);
+  const q=new URLSearchParams(location.search);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(location.hash.slice(1))) dia=location.hash.slice(1);
+  if(q.get("cita")){try{const c=await api("/api/clinica/cita/"+Number(q.get("cita")));dia=c.fecha;await cargarDia();return abrir(c.rut,c.id)}catch(e){toast(e.message)}}
+  await cargarDia();
+  if(q.get("rut")) abrir(q.get("rut"),null);
+})();
+fetch("/api/config").then(r=>r.json()).then(c=>{$("#pie-sistema").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 Raxio by MSC26"}).catch(()=>{});
+</script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Tótem de turnos</title>
+<style>
+/* Tótem de llegada: pantalla táctil vertical u horizontal, letras grandes, pensado también para adultos mayores */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#0f1a2b;color:#fff;font-family:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none;overflow:hidden}
+.p{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4vmin;gap:3.2vmin;text-align:center}
+.p[hidden]{display:none}
+.logo{max-height:12vmin;max-width:50vw;background:#fff;border-radius:2vmin;padding:1.4vmin 2.4vmin}
+h1{font-size:6vmin;margin:0;font-weight:800;letter-spacing:-.02em}
+.sub{font-size:3.2vmin;color:#a9b6cc;margin:0}
+.op{display:grid;gap:3vmin;width:min(92vw,1100px)}
+@media (orientation:landscape){.op{grid-template-columns:1fr 1fr}}
+.big{border:0;border-radius:3vmin;padding:5vmin 3vmin;font:inherit;font-weight:800;font-size:5vmin;color:#fff;cursor:pointer;line-height:1.15;box-shadow:0 1vmin 0 rgba(0,0,0,.25)}
+.big small{display:block;font-size:2.8vmin;font-weight:600;opacity:.85;margin-top:1.4vmin}
+.big:active{transform:translateY(.6vmin);box-shadow:0 .4vmin 0 rgba(0,0,0,.25)}
+.b1{background:#7a3fc4}.b2{background:#1f6fb2}
+.rut{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:8vmin;font-weight:700;letter-spacing:.04em;background:#fff;color:#0f1a2b;border-radius:2.4vmin;padding:2vmin 4vmin;min-width:min(80vw,720px);min-height:12vmin;display:flex;align-items:center;justify-content:center}
+.rut.vacio{color:#9aa6b8;font-size:4.4vmin;font-family:inherit;font-weight:600}
+.err{color:#ffb4a8;font-size:3.2vmin;min-height:4vmin;font-weight:700}
+.tec{display:grid;grid-template-columns:repeat(3,1fr);gap:2vmin;width:min(80vw,720px)}
+.tec button{border:0;border-radius:2.4vmin;background:#24344f;color:#fff;font:inherit;font-weight:800;font-size:6vmin;padding:2.4vmin 0;cursor:pointer}
+.tec button:active{background:#33486b}
+.tec .k{background:#2f3f5c}
+.acc{display:flex;gap:2.4vmin;width:min(80vw,720px)}
+.acc button{flex:1;border:0;border-radius:2.4vmin;font:inherit;font-weight:800;font-size:4vmin;padding:2.6vmin;cursor:pointer}
+.volver{background:#3a4660;color:#fff}.seguir{background:#2fa85a;color:#fff}.seguir:disabled{opacity:.4}
+.num{font-size:22vmin;font-weight:800;line-height:1;letter-spacing:-.02em;font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+.msg{font-size:3.6vmin;max-width:min(90vw,1000px);line-height:1.35;color:#dbe3f0}
+.aviso{font-size:3vmin;color:#ffd27a;font-weight:700}
+.pie{position:absolute;bottom:2vmin;left:0;right:0;text-align:center;font-size:1.8vmin;color:#5d6c86}
+.bloq{font-size:3.4vmin;color:#ffb4a8;max-width:80vw}
+/* ticket impreso (impresora térmica de 58 u 80 mm) */
+#ticket{display:none}
+@media print{
+  @page{size:80mm auto;margin:3mm}
+  body{background:#fff;color:#000;overflow:visible;height:auto}
+  .p,.pie{display:none!important}
+  #ticket{display:block;width:72mm;text-align:center;font-family:system-ui,sans-serif;color:#000}
+  #ticket .tc{font-size:13pt;font-weight:700}#ticket .tn{font-size:40pt;font-weight:800;margin:3mm 0}
+  #ticket .tm{font-size:10pt}#ticket .tf{font-size:8pt;margin-top:3mm}
+}
+</style>
+</head>
+<body>
+<!-- inicio -->
+<section class="p" id="p-inicio">
+  <img class="logo" id="logo" alt="" hidden>
+  <h1 id="bienvenida">Bienvenido</h1>
+  <p class="sub">Toque una opción para obtener su número de atención</p>
+  <div class="op">
+    <button class="big b1" id="con-hora">Tengo hora<small>Ingrese su RUT y avisamos su llegada</small></button>
+    <button class="big b2" id="sin-hora">No tengo hora<small>Otros trámites · pagos · retiro de exámenes</small></button>
+  </div>
+</section>
+
+<!-- RUT -->
+<section class="p" id="p-rut" hidden>
+  <h1>Ingrese su RUT</h1>
+  <div class="rut vacio" id="rut">Sin puntos ni guion</div>
+  <div class="err" id="err"></div>
+  <div class="tec" id="tec"></div>
+  <div class="acc"><button class="volver" id="volver">Volver</button><button class="seguir" id="seguir" disabled>Continuar</button></div>
+</section>
+
+<!-- número -->
+<section class="p" id="p-num" hidden>
+  <p class="sub" id="n-hola">Su número es</p>
+  <div class="num" id="n-num">—</div>
+  <div class="aviso" id="n-aviso" hidden></div>
+  <div class="msg" id="n-msg"></div>
+  <p class="sub" id="n-ticket" hidden>Retire su ticket</p>
+  <div class="acc" style="width:min(60vw,500px)"><button class="seguir" id="listo">Listo</button></div>
+</section>
+
+<section class="p" id="p-bloq" hidden><h1>Tótem no disponible</h1><p class="bloq" id="bloq-msg"></p></section>
+<div class="pie" id="pie"></div>
+
+<div id="ticket"><div class="tc" id="t-centro"></div><div class="tm" id="t-tipo"></div><div class="tn" id="t-num"></div><div class="tm" id="t-msg"></div><div class="tf" id="t-fecha"></div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const K=new URLSearchParams(location.search).get("k")||"";
+let CFG={imprimir:false}, rut="", tVolver=null, ocupado=false;
+const ver=id=>{for(const p of document.querySelectorAll(".p"))p.hidden=p.id!==id};
+const fRut=r=>{if(r.length<2)return r;const c=r.slice(0,-1),d=r.slice(-1);return c.replace(/\B(?=(\d{3})+(?!\d))/g,".")+"-"+d};
+function rutValido(r){if(!/^\d{7,8}[0-9K]$/.test(r))return false;let s=0,m=2;for(let i=r.length-2;i>=0;i--){s+=Number(r[i])*m;m=m===7?2:m+1}const x=11-(s%11);return r.slice(-1)===(x===11?"0":x===10?"K":String(x))}
+function pintarRut(){const e=$("#rut");e.classList.toggle("vacio",!rut);e.textContent=rut?fRut(rut):"Sin puntos ni guion";$("#seguir").disabled=!rutValido(rut);$("#err").textContent=rut.length>=8&&!rutValido(rut)?"Revise el RUT: el dígito verificador no coincide.":""}
+function inactividad(seg){clearTimeout(tVolver);tVolver=setTimeout(inicio,seg*1000)}
+function inicio(){rut="";pintarRut();ocupado=false;ver("p-inicio");clearTimeout(tVolver)}
+// teclado
+for(const t of ["1","2","3","4","5","6","7","8","9","K","0","⌫"]){
+  const b=document.createElement("button");b.textContent=t;if(t==="K"||t==="⌫")b.className="k";
+  b.addEventListener("click",()=>{inactividad(40);if(t==="⌫")rut=rut.slice(0,-1);else if(rut.length<9&&!(t==="K"&&rut.length<7))rut+=t;pintarRut()});
+  $("#tec").appendChild(b);
+}
+$("#con-hora").addEventListener("click",()=>{rut="";pintarRut();ver("p-rut");inactividad(40)});
+$("#volver").addEventListener("click",inicio);
+$("#sin-hora").addEventListener("click",()=>pedir({tipo:"general"}));
+$("#seguir").addEventListener("click",()=>pedir({tipo:"cita",rut}));
+$("#listo").addEventListener("click",inicio);
+async function pedir(body){
+  if(ocupado)return; ocupado=true;
+  try{
+    const r=await fetch("/api/turnos/totem",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,k:K})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){ocupado=false;if(r.status===403)return bloquear(j.error);$("#err").textContent=j.error||"No se pudo obtener el número.";return}
+    $("#n-hola").textContent=j.nombre?`Hola ${j.nombre}, su número es`:"Su número es";
+    $("#n-num").textContent=j.codigo; $("#n-msg").textContent=j.mensaje||"";
+    $("#n-aviso").hidden=!j.sin_cita&&!j.repetido; $("#n-aviso").textContent=j.repetido?"Ya tenía un número asignado":"Diríjase a recepción cuando lo llamen";
+    $("#n-ticket").hidden=!CFG.imprimir||j.repetido;
+    ver("p-num"); inactividad(12);
+    if(CFG.imprimir&&!j.repetido){
+      $("#t-centro").textContent=CFG.centro||""; $("#t-tipo").textContent=body.tipo==="cita"?"Con hora":"Atención general";
+      $("#t-num").textContent=j.codigo; $("#t-msg").textContent=j.mensaje||"";
+      $("#t-fecha").textContent=(j.fecha||"").slice(0,10).split("-").reverse().join("/")+" "+(j.fecha||"").slice(11,16);
+      setTimeout(()=>window.print(),150);
+    }
+  }catch(e){ocupado=false;$("#err").textContent="Sin conexión. Intente de nuevo o acérquese a recepción."}
+}
+function bloquear(m){$("#bloq-msg").textContent=m||"Este dispositivo no está autorizado.";ver("p-bloq")}
+(async()=>{
+  if(!K) return bloquear("Falta la clave del tótem en la dirección. Pide la dirección completa al administrador.");
+  try{const r=await fetch("/api/turnos/publico?k="+encodeURIComponent(K));const j=await r.json();if(!r.ok)return bloquear(j.error);CFG=j;
+    if(j.centro){$("#bienvenida").textContent="Bienvenido a "+j.centro}
+    if(j.logo){$("#logo").onload=()=>$("#logo").hidden=false;$("#logo").src=j.logo}}
+  catch(e){bloquear("Sin conexión con el servidor.")}
+  fetch("/api/config").then(r=>r.json()).then(c=>{$("#pie").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 Raxio by MSC26"}).catch(()=>{});
+})();
+document.addEventListener("contextmenu",e=>e.preventDefault());
+</script>
+</body>
+</html>

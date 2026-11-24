@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Profesionales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
+<style>
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.cab{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.cab h1{margin:0;font-size:20px}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+table.t th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+table.t td{padding:8px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+tr.off td{opacity:.55}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media (max-width:760px){.g3{grid-template-columns:1fr}}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tabs button{all:unset;cursor:pointer;padding:8px 12px;font-weight:700;font-size:13px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--med)}
+.barra{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.barra .spacer{flex:1}
+.nuevo-u{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="cab"><h1>Profesionales y ficha clínica</h1><a class="linkbtn" href="/">← Volver a la agenda</a></div>
+  <nav class="tabs"><button data-t="prof" aria-selected="true">Profesionales</button><button data-t="aud">Auditoría de fichas</button></nav>
+
+  <section data-p="prof">
+    <div class="card">
+      <p class="meta" style="margin-top:0">Cada profesional tiene su propia agenda. Vincúlalo a un usuario para que entre a su ficha clínica: ese usuario pasa a tener el rol <b>Médico</b> y ve solo su agenda.</p>
+      <div id="lista"></div>
+    </div>
+    <form class="card" id="form" novalidate>
+      <h2 id="f-titulo" style="margin:0 0 12px;font-size:17px">Agregar profesional</h2>
+      <div class="g3">
+        <div class="field"><label for="p-titulo">Título</label><select id="p-titulo"><option>Dr.</option><option>Dra.</option><option value="">(sin título)</option></select></div>
+        <div class="field" style="grid-column:span 2"><label for="p-nombre">Nombre completo</label><input id="p-nombre" autocomplete="off"></div>
+        <div class="field"><label for="p-rut">RUT</label><input id="p-rut" autocomplete="off" placeholder="12.345.678-9"></div>
+        <div class="field"><label for="p-esp">Especialidad</label><input id="p-esp" autocomplete="off" placeholder="Medicina general"></div>
+        <div class="field"><label for="p-reg">N° registro Superintendencia</label><input id="p-reg" autocomplete="off"></div>
+        <div class="field"><label for="p-dur">Minutos por consulta</label><input id="p-dur" type="number" min="5" max="240" step="5" value="20"></div>
+        <div class="field"><label for="p-usr">Usuario que entra a la ficha</label><select id="p-usr"></select></div>
+        <div class="field"><label for="p-act">Estado</label><select id="p-act"><option value="1">Activo</option><option value="0">Inactivo (sin agenda)</option></select></div>
+      </div>
+      <details style="margin-top:12px"><summary class="linkbtn" style="display:inline-block">Crear un usuario nuevo para este médico</summary>
+        <div class="nuevo-u" style="margin-top:8px">
+          <div class="field"><label for="n-usr">Usuario</label><input id="n-usr" autocomplete="off" autocapitalize="none" placeholder="drperez"></div>
+          <div class="field"><label for="n-clave">Clave</label><input id="n-clave" autocomplete="new-password" placeholder="Mínimo 8 caracteres"></div>
+          <button type="button" class="btn" id="n-crear">Crear y elegir</button>
+        </div>
+      </details>
+      <div class="msg" id="msg" style="margin-top:10px"></div>
+      <div class="barra" style="margin-top:10px"><span class="spacer"></span><button type="button" class="btn" id="cancelar" hidden>Cancelar</button><button class="btn primary" id="guardar">Agregar</button></div>
+    </form>
+  </section>
+
+  <section data-p="aud" hidden>
+    <div class="card">
+      <form class="barra" id="aud-f"><input id="aud-rut" placeholder="Filtrar por RUT del paciente" style="border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 9px"><button class="btn">Buscar</button><span class="spacer"></span><span class="meta">Cada vez que un médico abre, escribe o imprime algo de una ficha queda registrado aquí.</span></form>
+      <div id="aud" style="margin-top:12px"></div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<footer class="pie-sistema" id="pie-sistema"></footer>
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const fhCL=s=>s?String(s).slice(0,10).split("-").reverse().join("/")+" "+String(s).slice(11,16):"";
+const rutTxt=r=>{r=String(r||"");return r.length<2?r:r.slice(0,-1).replace(/\B(?=(\d{3})+(?!\d))/g,".")+"-"+r.slice(-1)};
+function toast(t){const e=$("#toast");e.textContent=t;e.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>e.hidden=true,2400)}
+async function api(url,opts={}){
+  const r=await fetch(url,{...opts,headers:{"Content-Type":"application/json"},body:opts.body?JSON.stringify(opts.body):undefined});
+  if(r.status===401){location.href="/login";throw new Error("sesion")}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||"Ocurrió un error en el servidor.");
+  return j;
+}
+const td=t=>{const x=document.createElement("td");x.textContent=t??"";return x};
+let PROFS=[], USUARIOS=[], editId=null;
+
+async function cargar(){
+  [PROFS,USUARIOS]=await Promise.all([api("/api/profesionales"),api("/api/usuarios")]);
+  const box=$("#lista"); box.innerHTML="";
+  if(!PROFS.length){box.innerHTML='<p class="meta">Aún no hay profesionales. Agrega el primero con el formulario de abajo.</p>';}
+  else{
+    const t=document.createElement("table"); t.className="t";
+    t.innerHTML="<thead><tr><th>Profesional</th><th>Especialidad</th><th>RUT · Registro</th><th>Consulta</th><th>Usuario</th><th></th></tr></thead>";
+    const tb=document.createElement("tbody");
+    for(const p of PROFS){
+      const tr=document.createElement("tr"); if(!p.activo) tr.className="off";
+      tr.append(td(`${p.titulo} ${p.nombre}`.trim()+(p.activo?"":" (inactivo)")),td(p.especialidad),td([p.rut&&rutTxt(p.rut),p.registro&&"Reg. "+p.registro].filter(Boolean).join(" · ")),
+        td(p.duracion+" min"),td(p.usuario?p.usuario:"— sin usuario —"));
+      const a=document.createElement("td"); const b=document.createElement("button"); b.type="button"; b.className="linkbtn"; b.textContent="Editar";
+      b.addEventListener("click",()=>editar(p)); a.append(b); tr.append(a); tb.append(tr);
+    }
+    t.append(tb); box.append(t);
+  }
+  llenarUsuarios();
+}
+function llenarUsuarios(sel){
+  const s=$("#p-usr"), actual=sel??s.value; s.innerHTML="";
+  const o=(v,t)=>{const x=document.createElement("option");x.value=v;x.textContent=t;return x};
+  s.append(o("","— sin usuario (solo agenda) —"));
+  const ocupados=new Set(PROFS.filter(p=>p.usuario_id&&p.id!==editId).map(p=>p.usuario_id));
+  for(const u of USUARIOS.filter(u=>u.rol!=="admin"&&!ocupados.has(u.id))) s.append(o(String(u.id),`${u.nombre} (${u.usuario})${u.rol==="medico"?"":" · pasará a Médico"}`));
+  s.value=actual&&[...s.options].some(x=>x.value===String(actual))?String(actual):"";
+}
+function limpiar(){
+  editId=null; $("#f-titulo").textContent="Agregar profesional"; $("#guardar").textContent="Agregar"; $("#cancelar").hidden=true;
+  for(const id of ["p-nombre","p-rut","p-esp","p-reg","n-usr","n-clave"]) $("#"+id).value="";
+  $("#p-titulo").value="Dr."; $("#p-dur").value="20"; $("#p-act").value="1"; $("#msg").textContent=""; llenarUsuarios("");
+}
+function editar(p){
+  editId=p.id; $("#f-titulo").textContent="Editar "+p.nombre; $("#guardar").textContent="Guardar cambios"; $("#cancelar").hidden=false;
+  $("#p-titulo").value=p.titulo; $("#p-nombre").value=p.nombre; $("#p-rut").value=p.rut?rutTxt(p.rut):""; $("#p-esp").value=p.especialidad; $("#p-reg").value=p.registro;
+  $("#p-dur").value=String(p.duracion); $("#p-act").value=p.activo?"1":"0"; llenarUsuarios(p.usuario_id||""); $("#msg").textContent="";
+  $("#form").scrollIntoView({behavior:"smooth"});
+}
+$("#cancelar").addEventListener("click",limpiar);
+$("#n-crear").addEventListener("click",async()=>{
+  const usuario=$("#n-usr").value.trim().toLowerCase(), clave=$("#n-clave").value;
+  try{await api("/api/usuarios",{method:"POST",body:{usuario,clave,nombre:$("#p-nombre").value.trim()||usuario,rol:"medico"}});
+    USUARIOS=await api("/api/usuarios"); const u=USUARIOS.find(x=>x.usuario===usuario); llenarUsuarios(u?u.id:"");
+    $("#msg").className="msg"; $("#msg").textContent=`Usuario «${usuario}» creado con la clave que escribiste. Ahora guarda el profesional.`}
+  catch(e){$("#msg").className="msg err";$("#msg").textContent=e.message}
+});
+$("#form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const body={titulo:$("#p-titulo").value,nombre:$("#p-nombre").value,rut:$("#p-rut").value,especialidad:$("#p-esp").value,registro:$("#p-reg").value,
+    duracion:Number($("#p-dur").value),activo:$("#p-act").value==="1",usuario_id:Number($("#p-usr").value)||null};
+  try{
+    if(editId) await api("/api/profesionales/"+editId,{method:"PUT",body}); else await api("/api/profesionales",{method:"POST",body});
+    toast(editId?"Profesional actualizado":"Profesional agregado: ya tiene su agenda"); limpiar(); await cargar();
+  }catch(err){$("#msg").className="msg err";$("#msg").textContent=err.message}
+});
+
+/* auditoría */
+const ACC={ver_ficha:"Abrió la ficha",antecedentes:"Editó antecedentes",nueva_atencion:"Inició atención",firmar_atencion:"Firmó atención",adenda:"Agregó adenda",
+  descartar_borrador:"Descartó borrador",emitir_receta:"Emitió receta",emitir_orden:"Emitió orden",emitir_certificado:"Emitió certificado",
+  emitir_interconsulta:"Emitió interconsulta",emitir_indicaciones:"Emitió indicaciones",anular_documento:"Anuló documento",imprimir_documento:"Imprimió documento"};
+async function cargarAud(){
+  const box=$("#aud"); box.innerHTML="";
+  try{
+    const filas=await api("/api/auditoria?rut="+encodeURIComponent($("#aud-rut").value.replace(/[^0-9kK]/g,"")));
+    if(!filas.length){box.innerHTML='<p class="meta">Sin registros.</p>';return}
+    const t=document.createElement("table"); t.className="t"; t.innerHTML="<thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Paciente</th><th>Detalle</th><th>IP</th></tr></thead>";
+    const tb=document.createElement("tbody");
+    for(const f of filas){const tr=document.createElement("tr");tr.append(td(fhCL(f.fecha)),td(f.usuario),td(ACC[f.accion]||f.accion),td(f.rut_txt),td(f.detalle),td(f.ip));tb.append(tr)}
+    t.append(tb); box.append(t);
+  }catch(e){box.textContent=e.message}
+}
+$("#aud-f").addEventListener("submit",e=>{e.preventDefault();cargarAud()});
+$$(".tabs button").forEach(b=>b.addEventListener("click",()=>{$$(".tabs button").forEach(x=>x.setAttribute("aria-selected",String(x===b)));
+  $$("[data-p]").forEach(s=>s.hidden=s.dataset.p!==b.dataset.t); if(b.dataset.t==="aud")cargarAud()}));
+
+(async()=>{
+  try{const yo=await api("/api/me"); if(yo.rol!=="admin"){document.querySelector(".wrap").innerHTML='<p style="padding:40px">Solo un administrador puede ver esta página. <a href="/">Volver</a></p>';return}
+    await cargar()}catch(e){if(e.message!=="sesion")toast(e.message)}
+})();
+fetch("/api/config").then(r=>r.json()).then(c=>{$("#pie-sistema").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 Raxio by MSC26"}).catch(()=>{});
+</script>
+</body>
+</html>

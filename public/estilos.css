@@ -2,7 +2,7 @@
 :root{
   --bg:#f3f5f7; --surface:#ffffff; --sunk:#e9edf1; --line:#d6dde4; --line-soft:#e6ebf0;
   --fg:#16212c; --muted:#5d6b78; --accent:#1f5f8b; --accent-fg:#ffffff;
-  --tc:#2f5fd0; --tc-bg:#e6edfc; --rx:#b26a00; --rx-bg:#fbf0de; --eco:#0f8a7a; --eco-bg:#ddf4f0;
+  --tc:#2f5fd0; --tc-bg:#e6edfc; --rx:#b26a00; --rx-bg:#fbf0de; --eco:#0f8a7a; --eco-bg:#ddf4f0; --med:#7a3fc4; --med-bg:#f1e9fb;
   --ok:#2d7a3e; --warn:#a45d00; --bad:#b4342e; --now:#d23b3b;
   /* estados de la cita: color del punto/borde (e-*) y fondo del bloque (eb-*) */
   --e-agendado:#5b7fa6; --eb-agendado:#e8eef6; --e-confirmado:#2d8a46; --eb-confirmado:#d9f2df;
@@ -15,7 +15,7 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f151b; --surface:#16202a; --sunk:#1b2733; --line:#2a3846; --line-soft:#212e3b;
   --fg:#e6edf3; --muted:#93a3b2; --accent:#6fb1e0; --accent-fg:#0b1620;
-  --tc:#86a8ff; --tc-bg:#1d2a4a; --rx:#f0b45a; --rx-bg:#3a2a12; --eco:#4fd1bd; --eco-bg:#123832;
+  --tc:#86a8ff; --tc-bg:#1d2a4a; --rx:#f0b45a; --rx-bg:#3a2a12; --eco:#4fd1bd; --eco-bg:#123832; --med:#c3a0f5; --med-bg:#2b2040;
   --ok:#6cc47e; --warn:#f0b45a; --bad:#ff8a80; --now:#ff6b6b; color-scheme:dark;
   --e-agendado:#8fb3dc; --eb-agendado:#1f2d3d; --e-confirmado:#6cc47e; --eb-confirmado:#16331f;
   --e-llego:#f2cf5b; --eb-llego:#3a3110; --e-atendido:#d4a77a; --eb-atendido:#3a2b1d;
@@ -23,7 +23,7 @@
 :root[data-theme="dark"]{
   --bg:#0f151b; --surface:#16202a; --sunk:#1b2733; --line:#2a3846; --line-soft:#212e3b;
   --fg:#e6edf3; --muted:#93a3b2; --accent:#6fb1e0; --accent-fg:#0b1620;
-  --tc:#86a8ff; --tc-bg:#1d2a4a; --rx:#f0b45a; --rx-bg:#3a2a12; --eco:#4fd1bd; --eco-bg:#123832;
+  --tc:#86a8ff; --tc-bg:#1d2a4a; --rx:#f0b45a; --rx-bg:#3a2a12; --eco:#4fd1bd; --eco-bg:#123832; --med:#c3a0f5; --med-bg:#2b2040;
   --ok:#6cc47e; --warn:#f0b45a; --bad:#ff8a80; --now:#ff6b6b; color-scheme:dark;
   --e-agendado:#8fb3dc; --eb-agendado:#1f2d3d; --e-confirmado:#6cc47e; --eb-confirmado:#16331f;
   --e-llego:#f2cf5b; --eb-llego:#3a3110; --e-atendido:#d4a77a; --eb-atendido:#3a2b1d;
@@ -102,6 +102,8 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-
 .appt.tc{background:var(--tc-bg);border-left:4px solid var(--tc)}
 .appt.rx{background:var(--rx-bg);border-left:4px solid var(--rx)}
 .appt.eco{background:var(--eco-bg);border-left:4px solid var(--eco)}
+/* Módulo clínico (solo se usa si el centro lo tiene encendido) */
+.colhead.med{box-shadow:inset 0 3px 0 var(--med)} .appt.med{background:var(--med-bg);border-left:4px solid var(--med)}
 .appt:hover{border-color:var(--line)}
 .appt .l1{display:flex;gap:6px;align-items:baseline;min-width:0}
 .appt .h{font-family:var(--f-mono);font-size:11px;font-weight:600;flex:none}

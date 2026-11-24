@@ -53,6 +53,9 @@ const docNorm = (v) => {
 const esPasaporte = (k) => /^P[0-9A-Z]{5,}$/.test(k || "");
 const docValido = (k) => esPasaporte(k) || rutValido(k);
 
+// Las consultas médicas (módulo clínico, agendas «m<id>») no van al PACS: no tienen imágenes ni worklist.
+const esConsulta = (equipo) => /^m\d+$/.test(String(equipo || ""));
+
 module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) {
   // ---------- órdenes hacia el PACS ----------
   function datosOrden(cita) {
@@ -81,14 +84,14 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
   function avisar(citaId) {
     if (!ACTIVA) return;
     const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(citaId);
-    if (c) encolar.run(citaId, JSON.stringify(datosOrden(c)));
+    if (c && !esConsulta(c.equipo)) encolar.run(citaId, JSON.stringify(datosOrden(c)));
     enviarPronto();
   }
   // Antes de borrar una cita: avisa al PACS que la orden ya no existe
   function avisarEliminada(citaId) {
     if (!ACTIVA) return;
     const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(citaId);
-    if (!c) return;
+    if (!c || esConsulta(c.equipo)) return;
     encolar.run(citaId, JSON.stringify({ ...datosOrden(c), eliminada: true }));
     enviarPronto();
   }
@@ -96,7 +99,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
   function avisarPaciente(rut) {
     if (!ACTIVA || !rut) return;
     const ids = db.prepare("SELECT id, rut FROM citas WHERE rut <> ''").all().filter((c) => docNorm(c.rut) === rut);
-    for (const { id } of ids) { const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id); encolar.run(id, JSON.stringify(datosOrden(c))); }
+    for (const { id } of ids) { const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id); if (!esConsulta(c.equipo)) encolar.run(id, JSON.stringify(datosOrden(c))); }
     enviarPronto();
   }
 
@@ -174,7 +177,7 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     const hecho = db.prepare("SELECT valor FROM meta WHERE clave = 'pacs_inicial'").get();
     if (!hecho) {
       const ids = db.prepare("SELECT id FROM citas WHERE fecha >= date('now','-30 day')").all();
-      for (const { id } of ids) { const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id); encolar.run(id, JSON.stringify(datosOrden(c))); }
+      for (const { id } of ids) { const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id); if (!esConsulta(c.equipo)) encolar.run(id, JSON.stringify(datosOrden(c))); }
       db.prepare("INSERT INTO meta (clave, valor) VALUES ('pacs_inicial', ?)").run(ahoraCaja());
     }
   }
@@ -185,12 +188,12 @@ module.exports = function integracion(db, { ahoraCaja, hoyCaja, fallo, plain }) 
     db.exec("DELETE FROM pacs_cola");
     const existe = db.prepare("SELECT 1 FROM citas WHERE accesion = ?");
     for (const o of anteriores || []) {
-      if (!o.accesion || existe.get(o.accesion)) continue;
+      if (!o.accesion || esConsulta(o.equipo) || existe.get(o.accesion)) continue;
       encolar.run(-Math.abs(o.id), JSON.stringify({ accesion: o.accesion, cita_id: o.id, fecha: o.fecha, hora: o.hora || "",
         equipo: o.equipo || "tc", paciente: "", rut: "", rut_norm: "", examenes: [], eliminada: true, pagado: false }));
     }
     const ids = db.prepare("SELECT id FROM citas WHERE fecha >= date('now','-60 day')").all();
-    for (const { id } of ids) { const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id); encolar.run(id, JSON.stringify(datosOrden(c))); }
+    for (const { id } of ids) { const c = db.prepare("SELECT * FROM citas WHERE id = ?").get(id); if (!esConsulta(c.equipo)) encolar.run(id, JSON.stringify(datosOrden(c))); }
     enviarPronto();
   }
 

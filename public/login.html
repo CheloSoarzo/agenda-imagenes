@@ -34,7 +34,7 @@ f.addEventListener("submit",async e=>{
     const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({usuario:f.usuario.value.trim(),clave:f.clave.value})});
     const j=await r.json().catch(()=>({}));
-    if(r.ok){location.href="/";return}
+    if(r.ok){location.href=j.ir==="/ficha"?"/ficha":"/";return}
     msg.textContent=j.error||"No se pudo ingresar.";
   }catch(err){msg.textContent="No hay conexión con el servidor."}
   btn.disabled=false;

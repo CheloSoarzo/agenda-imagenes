@@ -41,6 +41,9 @@
     </div>
     <div class="userbar">
       <span>Sesión: <b id="me">—</b></span>
+      <a class="linkbtn" id="btnFicha" href="/ficha" hidden>Ficha clínica</a>
+      <a class="linkbtn" id="btnProfesionales" href="/profesionales" hidden>Profesionales</a>
+      <a class="linkbtn" id="btnTurnos" href="/turnos" hidden>Turnos</a>
       <button class="linkbtn" id="btnCaja">Caja</button>
       <button class="linkbtn" id="btnAranceles">Aranceles</button>
       <button class="linkbtn" id="btnUsuarios" hidden>Usuarios</button>
@@ -419,6 +422,26 @@ const EQUIPOS=[{id:"tc",nombre:"TC",largo:"Tomografía"},{id:"rx",nombre:"RX",la
 let SIN_DINERO=false;   // usuario de solo lectura: no ve valores, pagos ni caja
 const ESTADOS=[{id:"agendado",n:"Agendado"},{id:"confirmado",n:"Confirmado"},{id:"llego",n:"En espera"},{id:"atendido",n:"Atendido"},{id:"ausente",n:"No asistió"},{id:"cancelado",n:"Cancelado"}];
 const ROLES={admin:"Administrador",recepcion:"Recepción",lectura:"Solo lectura"};
+// Módulo clínico (solo si el centro lo tiene encendido): agendas de médicos «m<id>» junto a TC, RX y ECO
+const esMed=id=>/^m\d+$/.test(String(id||""));
+const grupoArancel=id=>esMed(id)?"med":id;            // las consultas usan los aranceles «Consultas»
+let GRUPOS_ARANCEL=EQUIPOS;                            // con el módulo clínico: equipos + «Consultas»
+async function prepararClinico(){
+  ROLES.medico="Médico";
+  {const o=document.createElement("option");o.value="medico";o.textContent="Médico";$("#u-rol").appendChild(o)}
+  $("#btnFicha").hidden=yo.rol!=="medico"; $("#btnProfesionales").hidden=yo.rol!=="admin";
+  let lista=[]; try{lista=await api("/api/agendas")}catch(e){}
+  const todas=$("#agenda-sel").querySelector('option[value="todas"]');
+  for(const e of lista.filter(x=>esMed(x.id))){
+    EQUIPOS.push({id:e.id,nombre:e.nombre,largo:e.largo});
+    EQN[e.id]=e.nombre; DUR_DEF[e.id]=e.duracion||20; EXAMENES[e.id]=["Consulta","Control","Procedimiento"];
+    const o=document.createElement("option");o.value=e.id;o.textContent=`${e.nombre} · ${e.largo}`;$("#agenda-sel").insertBefore(o,todas);
+    const l=document.createElement("label"),cb=document.createElement("input");cb.type="checkbox";cb.value=e.id;l.append(cb," "+e.nombre);$("#u-agendas").appendChild(l);
+  }
+  EQN.med="Consultas"; GRUPOS_ARANCEL=[...EQUIPOS.filter(e=>!esMed(e.id)),{id:"med",nombre:"Consultas"}];
+  {const o=document.createElement("option");o.value="med";o.textContent="Consultas";$("#a-equipo").appendChild(o)}
+  try{const g=localStorage.getItem("agenda-sel");if(g&&EQUIPOS.some(e=>e.id===g)){agendaSel=g;$("#agenda-sel").value=g}}catch(e){}
+}
 const EXAMENES={tc:["TC de cerebro","TC de tórax","TC de abdomen y pelvis","TC de columna lumbar","AngioTC","TC de cavidades paranasales"],
   rx:["RX de tórax AP y lateral","RX de columna lumbar","RX de rodilla","RX de cadera","RX de mano","RX de pelvis"],
   eco:["Eco abdominal","Eco pelviana","Eco tiroidea","Eco mamaria","Eco obstétrica","Eco partes blandas","Eco renal"]};
@@ -484,7 +507,7 @@ function columnas(){
       return {fecha:f,equipos:visibles().map(e=>e.id),titulo:d.toLocaleDateString("es-CL",{weekday:"short"}).replace(".","").replace(/^./,c=>c.toUpperCase()),
         sub:String(d.getDate()),cls:"semdia"+(agendaSel==="todas"?"":" "+agendaSel)+(f===hoy?" hoy":"")+(f===dia?" sel":"")}});
   }
-  return visibles().map(e=>({fecha:dia,equipos:[e.id],titulo:e.nombre,sub:e.largo,cls:e.id}));
+  return visibles().map(e=>({fecha:dia,equipos:[e.id],titulo:e.nombre,sub:e.largo,cls:e.id+(esMed(e.id)?" med":"")}));
 }
 
 /* ---------- grilla ---------- */
@@ -557,7 +580,7 @@ function render(){
       if(ini+dur<=START||ini>=END) continue;
       const clash=c.estado!=="cancelado"&&activos.some(o=>o.id!==c.id&&o.fecha===c.fecha&&o.equipo===c.equipo&&toMin(o.hora)<ini+dur&&ini<toMin(o.hora)+(Number(o.duracion)||15));
       const el=document.createElement("button"); el.type="button";
-      el.className=`appt ${c.equipo} s-${c.estado}`+(clash?" clash":"");
+      el.className=`appt ${c.equipo}${esMed(c.equipo)?" med":""} s-${c.estado}`+(clash?" clash":"");
       el.style.top=((Math.max(ini,START)-START)/STEP*ROW+1)+"px";
       el.style.height=Math.max(dur/STEP*ROW-3,24)+"px";
       const n=anchoGrupo.get(c.id)||1, k=carril.get(c.id)||0;
@@ -580,7 +603,8 @@ function render(){
       el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.notas?" · Comentario: "+c.notas:""}${c.adjuntos?" · orden adjunta":""}${c.accesion?" · N° acceso "+c.accesion:""}${PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:""}`;
       if(HOVER){el.setAttribute("aria-label",el.title);el.removeAttribute("title");
         el.addEventListener("mouseenter",()=>mostrarTarjeta(c,el));el.addEventListener("mouseleave",ocultarTarjeta)}
-      el.addEventListener("click",ev=>{ocultarTarjeta();if(ev.target.closest(".hoja")){ev.stopPropagation();hojaRetiro(c);return} openForm(c)});
+      el.addEventListener("click",ev=>{ocultarTarjeta();if(ev.target.closest(".hoja")){ev.stopPropagation();hojaRetiro(c);return}
+        if(yo?.rol==="medico"&&esMed(c.equipo)){location.href="/ficha?cita="+c.id;return} openForm(c)});
       col.appendChild(el);
     }
     if(colInfo.fecha===isoDate(new Date())){
@@ -808,15 +832,17 @@ function segButtons(cont,items,sel,onPick){
 function setEquipo(id,changeDur){
   equipoSel=id;
   $("#examenes").innerHTML="";
-  for(const e of EXAMENES[id]){const o=document.createElement("option");o.value=e;$("#examenes").appendChild(o)}
-  if(changeDur) $("#f-dur").value=String(DUR_DEF[id]);
+  for(const e of EXAMENES[id]||[]){const o=document.createElement("option");o.value=e;$("#examenes").appendChild(o)}
+  if(changeDur){const v=String(DUR_DEF[id]||15),d=$("#f-dur");
+    if(![...d.options].some(o=>o.value===v)){const o=document.createElement("option");o.value=v;o.textContent=v+" min";d.appendChild(o)}
+    d.value=v}
   for(const row of $$rows()) llenarCodigos(row.querySelector(".ex-cod"),id,row.querySelector(".ex-cod").value);
   recalcular(false);
 }
 function llenarCodigos(s,eq,sel){
   s.innerHTML="";
   const o0=document.createElement("option");o0.value="";o0.textContent="— Sin código / otro examen —";s.appendChild(o0);
-  for(const a of ARANCEL.filter(a=>a.equipo===eq&&(a.activo||a.codigo===sel))){
+  for(const a of ARANCEL.filter(a=>a.equipo===grupoArancel(eq)&&(a.activo||a.codigo===sel))){
     const o=document.createElement("option");o.value=a.codigo;o.textContent=`${a.codigo} · ${a.nombre}`;s.appendChild(o)}
   if(sel&&![...s.options].some(o=>o.value===sel)){const o=document.createElement("option");o.value=sel;o.textContent=sel+" (no está en el arancel)";s.appendChild(o)}
   s.value=sel||"";
@@ -1414,11 +1440,11 @@ async function cargarUsuarios(){
       if(u.rol!=="admin"){
         const ag=document.createElement("span"); ag.className="u-agendas peq";
         const act=String(u.agendas||"").split(",").filter(Boolean);
-        for(const eq of ["tc","rx","eco"]){
+        for(const eq of EQUIPOS.map(e=>e.id)){
           const l=document.createElement("label"), cb=document.createElement("input"); cb.type="checkbox"; cb.value=eq; cb.checked=act.includes(eq);
           cb.addEventListener("change",async()=>{const v=[...ag.querySelectorAll("input:checked")].map(x=>x.value).join(",");
-            try{await api("/api/usuarios/"+u.id,{method:"PUT",body:{agendas:v}});toast(v?"Ve solo: "+v.toUpperCase().replace(/,/g,", "):"Ve todas las agendas")}catch(e){toast(e.message);cargarUsuarios()}});
-          l.append(cb," "+eq.toUpperCase()); ag.appendChild(l);
+            try{await api("/api/usuarios/"+u.id,{method:"PUT",body:{agendas:v}});toast(v?"Ve solo: "+v.split(",").map(x=>esMed(x)?EQN[x]:x.toUpperCase()).join(", "):"Ve todas las agendas")}catch(e){toast(e.message);cargarUsuarios()}});
+          l.append(cb," "+(esMed(eq)?EQN[eq]:eq.toUpperCase())); ag.appendChild(l);
         }
         ag.title="Agendas que ve (ninguna marcada = todas)";
         row.appendChild(ag);
@@ -1696,7 +1722,7 @@ async function abrirAranceles(){
   await cargarAranceles();
   const admin=yo.rol==="admin";
   $("#aform").hidden=!admin;
-  segButtons($("#a-filtro"),EQUIPOS,filtroEq,id=>{filtroEq=id;pintarAranceles()});
+  segButtons($("#a-filtro"),GRUPOS_ARANCEL,filtroEq,id=>{filtroEq=id;pintarAranceles()});
   editarArancel(null); pintarAranceles(); $("#ascrim").hidden=false;
 }
 $("#btnAranceles").addEventListener("click",abrirAranceles);
@@ -1711,7 +1737,7 @@ $("#aform").addEventListener("submit",async e=>{
   try{
     await api("/api/aranceles/"+encodeURIComponent(codigo),{method:"PUT",body:{nombre:$("#a-nombre").value,equipo:$("#a-equipo").value,
       fonasa_total:pesos($("#a-total").value),fonasa_bonif:pesos($("#a-bonif").value),particular:pesos($("#a-part").value),activo:$("#a-activo").value==="1"}});
-    await cargarAranceles(); filtroEq=$("#a-equipo").value; segButtons($("#a-filtro"),EQUIPOS,filtroEq,id=>{filtroEq=id;pintarAranceles()});
+    await cargarAranceles(); filtroEq=$("#a-equipo").value; segButtons($("#a-filtro"),GRUPOS_ARANCEL,filtroEq,id=>{filtroEq=id;pintarAranceles()});
     editarArancel(null); pintarAranceles(); toast("Prestación guardada");
   }catch(err){m.textContent=err.message}
 });
@@ -1723,9 +1749,9 @@ $("#imp-btn").addEventListener("click",async()=>{
   $("#imp-btn").disabled=true;
   for(const [i,l] of lineas.entries()){
     const c=l.split(/\t|;/).map(x=>x.trim());
-    const codigo=(c[0]||"").replace(/\s|-/g,""), equipo=(c[2]||"").toLowerCase().replace("eco","eco");
+    const codigo=(c[0]||"").replace(/\s|-/g,""), equipo=(c[2]||"").toLowerCase().replace(/^consultas?$/,"med");
     if(/^c[oó]digo$/i.test(codigo)) continue;
-    if(!/^[\w.]{1,20}$/.test(codigo)||!["tc","rx","eco"].includes(equipo)||!c[1]){malas.push(i+1);continue}
+    if(!/^[\w.]{1,20}$/.test(codigo)||!GRUPOS_ARANCEL.some(g=>g.id===equipo)||!c[1]){malas.push(i+1);continue}
     try{await api("/api/aranceles/"+encodeURIComponent(codigo),{method:"PUT",body:{nombre:c[1],equipo,fonasa_total:pesos(c[3]),fonasa_bonif:pesos(c[4]),particular:pesos(c[5]),activo:true}});ok++}
     catch(e){malas.push(i+1)}
   }
@@ -1943,17 +1969,21 @@ buildGrid(); render();
     if(yo.centro){$("#brand-centro").textContent="Agenda "+yo.centro;document.title="Agenda "+yo.centro;centroNombre=yo.centro}
     if(yo.logo){centroLogo=yo.logo;
       for(const box of [$("#brand-logo"),$("#k-logo")]){const img=box.querySelector("img");img.alt=yo.centro?"Logo "+yo.centro:"Logo";img.onload=()=>box.hidden=false;img.src=yo.logo}}
-    canWrite=yo.rol!=="lectura";
-    SIN_DINERO=yo.rol==="lectura";
+    if(yo.clinico) await prepararClinico();
+    if(yo.turnos) $("#btnTurnos").hidden=yo.rol==="medico";
+    canWrite=yo.rol!=="lectura"&&yo.rol!=="medico";
+    SIN_DINERO=yo.rol==="lectura"||yo.rol==="medico";
     document.body.classList.toggle("sin-dinero",SIN_DINERO);
     $("#btnCaja").hidden=SIN_DINERO; $("#btnAranceles").hidden=SIN_DINERO;
     // Agendas asignadas al usuario (vacío = todas)
-    const mias=String(yo.agendas||"").split(",").filter(x=>["tc","rx","eco"].includes(x));
+    const mias=String(yo.agendas||"").split(",").filter(x=>EQUIPOS.some(e=>e.id===x));
+    if(yo.rol==="medico"&&!mias.length){EQUIPOS.splice(0,EQUIPOS.length);notice("Tu usuario aún no está vinculado a un profesional. Pide al administrador que lo vincule en «Profesionales».")}
     if(mias.length){
       for(let i=EQUIPOS.length-1;i>=0;i--) if(!mias.includes(EQUIPOS[i].id)) EQUIPOS.splice(i,1);
       for(const o of [...$("#agenda-sel").options]) if(o.value==="todas"?mias.length<2:!mias.includes(o.value)) o.remove();
       if(!mias.includes(agendaSel)&&!(agendaSel==="todas"&&mias.length>1)){agendaSel=mias[0];$("#agenda-sel").value=agendaSel}
     }
+    buildGrid(); render();   // la grilla se vuelve a armar con la agenda que le corresponde al usuario
     PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||""; PACS_PUBLICO=yo.pacs_publico||""; if(yo.contraste_valor)CONTRASTE_VALOR=yo.contraste_valor;
     if(PACS_ON) cargarMedicos();
     $("#nueva").hidden=!canWrite;

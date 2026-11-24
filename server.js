@@ -2,6 +2,11 @@
 // Inicio: npm start
 // Variables opcionales: PORT, HOST, DATA_DIR, ADMIN_CLAVE, SESION_HORAS, COOKIE_SECURE=1, TRUST_PROXY=1, CENTRO_NOMBRE
 // Conexión con el PACS (ver integracion.js): PACS_URL, INTEGRACION_TOKEN, PORTAL_URL, ACCESION_PREFIJO
+// Módulo clínico (ver clinica.js): MODULO_CLINICO=1 lo enciende (agendas de médicos, ficha clínica, recetas y
+// documentos). Apagado por defecto: la agenda funciona exactamente igual y su base de datos no cambia.
+// Con el módulo encendido: AGENDAS_EQUIPOS, CENTRO_DIRECCION, CENTRO_TELEFONO, PUBLIC_URL
+// Turnos (ver turnos.js): MODULO_TURNOS=1 enciende el tótem de números, la pantalla de llamado (con videos) y el
+// panel de turnos. Apagado por defecto, independiente del módulo clínico. Opcional: VIDEOS_MAX_MB
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -97,7 +102,9 @@ function usuarioDeSesion(req) {
   const s = db.prepare(`SELECT u.id, u.usuario, u.nombre, u.rol, u.agendas, u.paleta, s.expira FROM sesiones s
     JOIN usuarios u ON u.id = s.usuario_id WHERE s.token = ? AND u.activo = 1`).get(hash);
   if (!s || s.expira < Date.now()) return null;
-  return { id: s.id, usuario: s.usuario, nombre: s.nombre, rol: s.rol, agendas: s.rol === "admin" ? "" : (s.agendas || ""), paleta: s.paleta || "", tokenHash: hash };
+  // El médico (módulo clínico) ve solo su propia agenda: la de su profesional vinculado
+  const agendas = s.rol === "admin" ? "" : s.rol === "medico" ? (clin.agendasDeMedico(s.id).join(",") || "-") : (s.agendas || "");
+  return { id: s.id, usuario: s.usuario, nombre: s.nombre, rol: s.rol, agendas, paleta: s.paleta || "", tokenHash: hash };
 }
 const intentos = new Map();
 function frenoLogin(ip) {
@@ -123,7 +130,11 @@ function marcarLlegada(id) {
 }
 // Paletas de colores que puede elegir cada usuario (los colores están en public/estilos.css)
 const PALETAS = ["azul", "rosa", "verde", "violeta", "cobre"];
-const ROLES = ["admin", "recepcion", "lectura"];
+const CLINICO = /^(1|true|si|sí)$/i.test(String(process.env.MODULO_CLINICO || "").trim());
+const TURNOS = /^(1|true|si|sí)$/i.test(String(process.env.MODULO_TURNOS || "").trim());
+const ROLES = CLINICO ? ["admin", "recepcion", "lectura", "medico"] : ["admin", "recepcion", "lectura"];
+// Roles que no agendan ni cobran (el médico trabaja en la ficha; agenda y caja son de recepción)
+const SIN_ESCRITURA = ["lectura", "medico"];
 const reFecha = /^\d{4}-\d{2}-\d{2}$/, reHora = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function validarCita(b) {
@@ -147,7 +158,7 @@ function validarCita(b) {
   }
   if (!reFecha.test(c.fecha)) fallo(400, "La fecha no es válida.");
   if (!reHora.test(c.hora)) fallo(400, "La hora no es válida.");
-  if (!EQUIPOS.includes(c.equipo)) fallo(400, "Elige un equipo.");
+  if (!clin.esAgenda(c.equipo, true)) fallo(400, CLINICO ? "Elige una agenda." : "Elige un equipo.");
   if (!ESTADOS.includes(c.estado)) fallo(400, "El estado no es válido.");
   if (c.duracion < 5 || c.duracion > 240) fallo(400, "La duración debe estar entre 5 y 240 minutos.");
   if (c.fecha_nac && (!reFecha.test(c.fecha_nac) || c.fecha_nac > hoyCaja() || c.fecha_nac < "1900-01-01")) fallo(400, "La fecha de nacimiento no es válida.");
@@ -215,9 +226,10 @@ function rangoCaja(url) {
   if ((new Date(hasta) - new Date(desde)) / 864e5 > 366) fallo(400, "El período no puede superar un año.");
   return [desde, hasta];
 }
-const agendasValidas = (v) => [...new Set(String(v || "").split(",").map((x) => x.trim()).filter((e) => EQUIPOS.includes(e)))].join(",");
+const agendasValidas = (v) => [...new Set(String(v || "").split(",").map((x) => x.trim()).filter((e) => clin.esAgenda(e)))].join(",");
 // Agendas (equipos) que ve un usuario: [] = todas
-const agendasDe = (u) => String(u?.agendas || "").split(",").filter((e) => EQUIPOS.includes(e));
+// (un médico sin profesional vinculado no ve ninguna)
+const agendasDe = (u) => { const a = String(u?.agendas || "").split(",").filter((e) => clin.esAgenda(e)); return !a.length && u?.rol === "medico" ? ["-"] : a; };
 const veEquipo = (u, eq) => { const a = agendasDe(u); return !a.length || a.includes(eq); };
 const filtroAgendas = (u, alias = "c") => { const a = agendasDe(u); return a.length ? ` AND ${alias}.equipo IN (${a.map((e) => `'${e}'`).join(",")})` : ""; };
 // El usuario de solo lectura no ve valores ni pagos (sí si está pagada)
@@ -226,7 +238,7 @@ const CONTRASTE_VALOR = Math.max(0, Math.round(Number(process.env.CONTRASTE_VALO
 const CAMPOS_DINERO = ["pago_contraste", "pago_boleta_contraste", "valor", "bonificacion", "copago", "pago_medio", "pago_monto", "pago_folio", "pago_descuento",
   "pago_desc_motivo", "pago_boleta", "pago_medio2", "pago_monto2", "pago_cheque"];
 function paraUsuario(c, u) {
-  if (!c || u?.rol !== "lectura") return c;
+  if (!c || !SIN_ESCRITURA.includes(u?.rol)) return c;
   const x = { ...c };
   for (const k of CAMPOS_DINERO) delete x[k];
   try { if (x.examenes) x.examenes = JSON.stringify(JSON.parse(x.examenes).map((l) => ({ codigo: l.codigo, nombre: l.nombre, cantidad: l.cantidad }))); } catch { x.examenes = ""; }
@@ -243,6 +255,14 @@ const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS ac
   LEFT JOIN usuarios up ON up.id = p.usuario_id`;
 // Integración con el PACS (órdenes, estados y clave del paciente). Inactiva si falta PACS_URL.
 const integ = require("./integracion")(db, { ahoraCaja, hoyCaja, fallo, plain });
+// Módulo clínico: solo con MODULO_CLINICO=1. Apagado, «clin» responde como la agenda de imágenes de siempre.
+const clin = CLINICO
+  ? require("./clinica")(db, { ahoraCaja, hoyCaja, fallo, plain, txt, leerCuerpo, ipDe, integ, CENTRO, LOGO, VERSION })
+  : { activo: false, rutas: [], esAgenda: (e) => EQUIPOS.includes(e), esConsulta: () => false,
+      esGrupoArancel: (e) => EQUIPOS.includes(e), agendasDeMedico: () => [] };
+// Turnos: solo con MODULO_TURNOS=1 (tótem, pantalla de llamado y llamado desde recepción o la ficha)
+const turn = TURNOS ? require("./turnos")(db, { ahoraCaja, hoyCaja, fallo, plain, txt, leerCuerpo, integ, clin, CENTRO, LOGO }) : { rutas: [] };
+if (CLINICO && process.env.DEMO_DATOS === "true") require("./demo")(db, { ahoraCaja, hoyCaja });
 const resp = require("./respaldo")(db, { ahoraCaja, fallo, integ });
 
 const pagoActivo = (citaId) => db.prepare("SELECT * FROM pagos WHERE cita_id = ? AND anulado = 0").get(citaId);
@@ -267,7 +287,9 @@ const rutas = [
     db.prepare("DELETE FROM sesiones WHERE expira < ?").run(Date.now());
     db.prepare("INSERT INTO sesiones (token, usuario_id, expira) VALUES (?,?,?)")
       .run(sha(token), u.id, Date.now() + SESION_HORAS * 3600e3);
-    return [200, { ok: true }, { "Set-Cookie": cookie(token, SESION_HORAS * 3600) }];
+    // Con el módulo clínico, los médicos parten en su ficha (sin el módulo la respuesta no cambia)
+    const destino = CLINICO && u.rol === "medico" ? { ir: "/ficha" } : {};
+    return [200, { ok: true, ...destino }, { "Set-Cookie": cookie(token, SESION_HORAS * 3600) }];
   }],
 
   ["POST", /^\/api\/logout$/, "libre", async (req) => {
@@ -278,7 +300,10 @@ const rutas = [
 
   ["GET", /^\/api\/me$/, "sesion", async (req, u) => {
     const { tokenHash, ...datos } = u;
-    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, pacs_publico: integ.pacsPublico, version: VERSION, contraste_valor: CONTRASTE_VALOR }];
+    const extra = CLINICO || TURNOS ? { turnos: TURNOS || undefined } : {};
+    if (CLINICO) Object.assign(extra, { clinico: true, profesional: u.rol === "medico" ? plain(db.prepare(
+      "SELECT id, nombre, titulo, especialidad FROM profesionales WHERE usuario_id = ? AND activo = 1 ORDER BY id LIMIT 1").get(u.id)) || null : null });
+    return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, pacs_publico: integ.pacsPublico, version: VERSION, contraste_valor: CONTRASTE_VALOR, ...extra }];
   }],
 
   ["GET", /^\/api\/config$/, "libre", async () => [200, { centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, version: VERSION, contraste_valor: CONTRASTE_VALOR }]],
@@ -470,7 +495,8 @@ const rutas = [
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
     marcarLlegada(id);
     // Clave para ver el examen en línea: se crea al pagar (solo la primera vez que viene el paciente)
-    const portal = integ.activa ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;
+    // (las consultas médicas no van al PACS ni crean clave del portal de exámenes)
+    const portal = integ.activa && !clin.esConsulta(c.equipo) ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;
     integ.avisar(id);
     return [201, { ...citaPorId(id), portal }];
   }],
@@ -543,7 +569,7 @@ const rutas = [
     const a = { codigo: m[1], nombre: mayus(txt(b.nombre, 200)), equipo: txt(b.equipo, 5), fonasa_total: entero(b.fonasa_total),
       fonasa_bonif: entero(b.fonasa_bonif), particular: entero(b.particular), activo: b.activo === false || b.activo === 0 ? 0 : 1 };
     if (!a.nombre) fallo(400, "Escribe el nombre de la prestación.");
-    if (!EQUIPOS.includes(a.equipo)) fallo(400, "Elige el equipo.");
+    if (!clin.esGrupoArancel(a.equipo)) fallo(400, CLINICO ? "Elige el equipo o «Consultas»." : "Elige el equipo.");
     if (a.fonasa_bonif > a.fonasa_total) fallo(400, "La bonificación no puede ser mayor que el valor.");
     db.prepare(`INSERT INTO aranceles (codigo, nombre, equipo, fonasa_total, fonasa_bonif, particular, activo)
       VALUES (@codigo,@nombre,@equipo,@fonasa_total,@fonasa_bonif,@particular,@activo)
@@ -618,6 +644,8 @@ const rutas = [
     return [200, { ok: true }];
   }],
   ...integ.rutas,
+  ...clin.rutas,
+  ...turn.rutas,
   ...resp.rutas,
 ];
 
@@ -652,7 +680,7 @@ const servidor = http.createServer(async (req, res) => {
         if (nivel !== "libre") {
           u = usuarioDeSesion(req);
           if (!u) fallo(401, "Tu sesión expiró. Vuelve a ingresar.");
-          if ((nivel === "escribir" || nivel === "caja") && u.rol === "lectura") fallo(403, "Tu usuario es solo de lectura.");
+          if ((nivel === "escribir" || nivel === "caja") && SIN_ESCRITURA.includes(u.rol)) fallo(403, u.rol === "medico" ? "La agenda y la caja las maneja recepción." : "Tu usuario es solo de lectura.");
           if (nivel === "admin" && u.rol !== "admin") fallo(403, "Solo un administrador puede hacer esto.");
         }
         const [status, data, headers] = await manejador(req, u, url, m);
@@ -667,6 +695,25 @@ const servidor = http.createServer(async (req, res) => {
       return enviarArchivo(res, "index.html");
     }
     if (p === "/login") return enviarArchivo(res, "login.html");
+    // Módulo clínico: ficha (médicos), profesionales (administrador) y verificación pública de documentos
+    if (/^\/(ficha|profesionales)(\.html)?$/.test(p) && !CLINICO) { res.writeHead(404); return res.end(); }
+    if (CLINICO && (p === "/ficha" || p === "/profesionales")) {
+      if (!usuarioDeSesion(req)) { res.writeHead(302, { Location: "/login" }); return res.end(); }
+      return enviarArchivo(res, p.slice(1) + ".html");
+    }
+    // Turnos: tótem y pantalla sin usuario (entran con la clave de dispositivo ?k= que valida la API)
+    if (/^\/(totem|pantalla|turnos)(\.html)?$/.test(p) && !TURNOS) { res.writeHead(404); return res.end(); }
+    if (TURNOS && (p === "/totem" || p === "/pantalla")) return enviarArchivo(res, p.slice(1) + ".html");
+    if (TURNOS && p.startsWith("/videos/")) return turn.servirVideo(req, res, url);
+    if (TURNOS && p === "/turnos") {
+      if (!usuarioDeSesion(req)) { res.writeHead(302, { Location: "/login" }); return res.end(); }
+      return enviarArchivo(res, "turnos.html");
+    }
+    if (CLINICO && (p === "/verificar" || p.startsWith("/verificar/"))) {
+      const html = clin.paginaVerificar(req, p.length > 11 ? decodeURIComponent(p.slice(11)) : url.searchParams.get("c"));
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
+      return res.end(html);
+    }
     return enviarArchivo(res, decodeURIComponent(p).replace(/^\/+/, ""));
   } catch (e) {
     if (e instanceof ErrorHttp) return enviarJSON(res, e.status, { error: e.message });
@@ -675,4 +722,6 @@ const servidor = http.createServer(async (req, res) => {
   }
 });
 
+// Con turnos, subir videos a la pantalla puede tardar varios minutos: se da más tiempo al cuerpo de la petición
+if (TURNOS) servidor.requestTimeout = 30 * 60 * 1000;
 servidor.listen(PORT, HOST, () => console.log(`Agenda de Imágenes en http://localhost:${PORT}`));

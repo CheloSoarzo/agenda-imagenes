@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pantalla de llamado</title>
+<style>
+/* Pantalla de llamado para la sala de espera (televisor horizontal) */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#0d1626;color:#fff;font-family:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+.g{display:grid;grid-template-columns:1.6fr 1fr;height:100vh}
+.main{display:flex;flex-direction:column;padding:4vh 4vw}
+.cab{display:flex;align-items:center;gap:2vw}
+.cab img{max-height:9vh;background:#fff;border-radius:1.2vh;padding:.8vh 1.4vh}
+.cab b{font-size:3.4vh}
+.reloj{margin-left:auto;font-size:5vh;font-weight:800;font-variant-numeric:tabular-nums}
+.actual{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.et{font-size:3vh;color:#9fb0cc;text-transform:uppercase;letter-spacing:.2em;font-weight:700}
+.num{font-size:26vh;font-weight:800;line-height:1;font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;letter-spacing:-.02em;margin:1vh 0}
+.nom{font-size:6vh;font-weight:700;color:#e3e9f4;min-height:7vh}
+.pto{margin-top:2vh;font-size:7vh;font-weight:800;background:#7a3fc4;border-radius:2vh;padding:1.2vh 3vh}
+.pto:empty{display:none}
+.flash .num,.flash .pto{animation:fl 1s ease-in-out 3}
+@keyframes fl{50%{opacity:.25}}
+.lat{background:#16233a;padding:4vh 2.6vw;display:flex;flex-direction:column}
+.lat h2{margin:0 0 2vh;font-size:3vh;color:#9fb0cc;text-transform:uppercase;letter-spacing:.15em}
+.fila{display:flex;align-items:center;justify-content:space-between;padding:2vh 0;border-bottom:1px solid #263755;gap:2vw}
+.fila .n{font-size:5vh;font-weight:800;font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+.fila .d{font-size:2.6vh;color:#c9d3e4;text-align:right}
+.esp{margin-top:auto;font-size:2.8vh;color:#9fb0cc}
+.esp b{color:#fff;font-size:3.6vh}
+.vacio{font-size:5vh;color:#5f7092}
+#activar{position:fixed;inset:0;background:rgba(5,10,20,.85);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2vh;cursor:pointer;font-size:4vh;text-align:center}
+#activar small{font-size:2.4vh;color:#9fb0cc}
+.pie{position:fixed;bottom:1vh;left:2vw;font-size:1.6vh;color:#4f5f7e}
+.err{color:#ffb4a8;font-size:3vh}
+/* Con videos: mitad izquierda video, mitad derecha llamados */
+#vid{display:none;background:#000;position:relative;overflow:hidden}
+#vid video{width:100%;height:100%;object-fit:contain;display:block}
+body.cv .g{grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr}
+body.cv #vid{display:block;grid-column:1;grid-row:1 / span 2}
+body.cv .main{grid-column:2;grid-row:1;padding:3vh 2.4vw 2vh}
+body.cv .lat{grid-column:2;grid-row:2;padding:2vh 2.4vw 4vh;background:#0d1626}
+body.cv .cab img{max-height:7vh} body.cv .cab b{font-size:2.6vh} body.cv .reloj{font-size:4vh}
+body.cv .actual{margin-top:2vh} body.cv .num{font-size:15vh} body.cv .nom{font-size:4vh;min-height:5vh} body.cv .pto{font-size:4.6vh;padding:1vh 2.4vh}
+body.cv .fila{padding:1.3vh 0} body.cv .fila .n{font-size:3.8vh} body.cv .fila .d{font-size:2.2vh}
+body.cv #ant .fila:nth-child(n+5){display:none}
+/* Aviso de llamado a pantalla completa (solo con videos, para que el número se vea grande) */
+#aviso{position:fixed;inset:0;background:#0d1626;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:5}
+#aviso.on{display:flex;animation:ent .35s ease-out}
+#aviso .num{font-size:30vh} #aviso .pto{font-size:8vh}
+@keyframes ent{from{opacity:0;transform:scale(.96)}}
+</style>
+</head>
+<body>
+<div class="g">
+  <div id="vid"><video id="video" muted playsinline preload="auto"></video></div>
+  <div class="main" id="main">
+    <div class="cab"><img id="logo" alt="" hidden><b id="centro"></b><div class="reloj" id="reloj">--:--</div></div>
+    <div class="actual" id="actual">
+      <div class="et">Llamando a</div>
+      <div class="num" id="a-num">—</div>
+      <div class="nom" id="a-nom"></div>
+      <div class="pto" id="a-pto"></div>
+    </div>
+  </div>
+  <div class="lat">
+    <h2>Llamados anteriores</h2>
+    <div id="ant"></div>
+    <div class="esp" id="esp"></div>
+  </div>
+</div>
+<div id="aviso"><div class="et">Llamando a</div><div class="num" id="v-num"></div><div class="nom" id="v-nom"></div><div class="pto" id="v-pto"></div></div>
+<div id="activar">Toque la pantalla para activar el sonido<small>Solo es necesario una vez al encender el televisor</small></div>
+<div class="pie" id="pie"></div>
+<script>
+const $=s=>document.querySelector(s);
+const K=new URLSearchParams(location.search).get("k")||"";
+let ultima="", voz=true, audio=null, primera=true;
+const pad=n=>String(n).padStart(2,"0");
+setInterval(()=>{const d=new Date();$("#reloj").textContent=pad(d.getHours())+":"+pad(d.getMinutes())},1000);
+$("#activar").addEventListener("click",()=>{audio=new (window.AudioContext||window.webkitAudioContext)();$("#activar").remove();try{document.documentElement.requestFullscreen()}catch(e){}sonidoVideo();V.play().catch(()=>{})});
+
+/* ---------- videos (lista que se sube en Turnos → Configuración) ---------- */
+const V=$("#video");
+let videos=[], iv=0, conSonido=false, tAviso=null;
+function sonidoVideo(){V.muted=!(conSonido&&audio)}
+function tocar(){
+  if(!videos.length){V.removeAttribute("src");V.load();return}
+  iv=iv%videos.length;
+  V.src="/videos/"+encodeURIComponent(videos[iv])+"?k="+encodeURIComponent(K);
+  V.loop=videos.length===1;
+  V.play().catch(()=>{V.muted=true;V.play().catch(()=>{})});   // sin sonido si el navegador no deja partir con audio
+}
+V.addEventListener("ended",()=>{iv++;tocar()});
+V.addEventListener("error",()=>{if(videos.length>1)setTimeout(()=>{iv++;tocar()},1500)});
+function ponerVideos(lista,sonido){
+  conSonido=!!sonido; sonidoVideo();
+  if(JSON.stringify(lista)===JSON.stringify(videos))return;
+  const actual=videos[iv]; videos=lista.slice();
+  document.body.classList.toggle("cv",videos.length>0);
+  const i=videos.indexOf(actual);
+  if(i>=0){iv=i;V.loop=videos.length===1}else{iv=0;tocar()}
+}
+// Durante un llamado: aviso grande sobre el video y el video baja el volumen
+function avisar(a){
+  if(!videos.length)return;
+  $("#v-num").textContent=a.codigo; $("#v-nom").textContent=a.nombre||""; $("#v-pto").textContent=a.puesto||"";
+  $("#aviso").classList.add("on"); V.volume=.12;
+  clearTimeout(tAviso); tAviso=setTimeout(()=>{$("#aviso").classList.remove("on");V.volume=1},9000);
+}
+function timbre(){
+  if(!audio)return;
+  const t=audio.currentTime;
+  for(const [f,d] of [[880,0],[660,.35]]){const o=audio.createOscillator(),g=audio.createGain();o.frequency.value=f;o.type="sine";
+    g.gain.setValueAtTime(0,t+d);g.gain.linearRampToValueAtTime(.35,t+d+.03);g.gain.exponentialRampToValueAtTime(.001,t+d+.6);o.connect(g).connect(audio.destination);o.start(t+d);o.stop(t+d+.65)}
+}
+function decir(a){
+  if(!voz||!audio||!window.speechSynthesis)return;
+  const [l,n]=a.codigo.split("-");
+  const u=new SpeechSynthesisUtterance(`Número ${l}, ${Number(n)}${a.nombre?", "+a.nombre:""}. ${a.puesto?"Diríjase a "+a.puesto:""}`);
+  u.lang="es-CL"; u.rate=.95; const v=speechSynthesis.getVoices().find(x=>/^es/.test(x.lang)); if(v)u.voice=v;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+async function tick(){
+  try{
+    const r=await fetch("/api/turnos/pantalla?k="+encodeURIComponent(K),{cache:"no-store"});
+    const j=await r.json();
+    if(!r.ok){$("#actual").innerHTML='<div class="err"></div>';$("#actual .err").textContent=j.error||"Error";return}
+    voz=j.voz; $("#centro").textContent=j.centro||"";
+    ponerVideos(j.videos||[], j.video_sonido);
+    if(j.logo&&$("#logo").hidden){$("#logo").onload=()=>$("#logo").hidden=false;$("#logo").src=j.logo}
+    const a=j.actual;
+    // Sin llamado vigente: la pantalla queda en reposo hasta el próximo llamado
+    $(".et").textContent=a?"Llamando a":"Espere su llamado";
+    $("#a-num").textContent=a?a.codigo:""; $("#a-num").hidden=!a;
+    $("#a-nom").textContent=a?a.nombre:"Su número aparecerá aquí"; $("#a-pto").textContent=a?a.puesto:"";
+    const ant=$("#ant"); ant.innerHTML="";
+    for(const x of j.anteriores){const f=document.createElement("div");f.className="fila";
+      const n=document.createElement("span");n.className="n";n.textContent=x.codigo;
+      const d=document.createElement("span");d.className="d";d.textContent=[x.nombre,x.puesto].filter(Boolean).join(" · ");f.append(n,d);ant.appendChild(f)}
+    if(!j.anteriores.length) ant.innerHTML='<div class="vacio">—</div>';
+    $("#esp").innerHTML=""; const e=document.createElement("span"); e.innerHTML="En espera: "; const b=document.createElement("b"); b.textContent=j.en_espera; e.appendChild(b); $("#esp").appendChild(e);
+    if(a&&a.clave_sonido!==ultima){
+      if(!primera){const m=$("#main");m.classList.remove("flash");void m.offsetWidth;m.classList.add("flash");avisar(a);timbre();setTimeout(()=>decir(a),700)}
+      ultima=a.clave_sonido;
+    }
+    primera=false;
+  }catch(e){}
+}
+tick(); setInterval(tick,2000);
+fetch("/api/config").then(r=>r.json()).then(c=>{$("#pie").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 Raxio by MSC26"}).catch(()=>{});
+</script>
+</body>
+</html>

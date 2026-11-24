@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Turnos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+<script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p}catch(e){}</script>
+<style>
+.cab{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.cab h1{margin:0;font-size:20px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.barra{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.barra .spacer{flex:1}
+.barra input,.barra select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font:inherit}
+.llamar{font-size:17px;padding:12px 22px}
+.actual{display:flex;align-items:baseline;gap:14px}
+.actual .n{font-family:var(--f-mono);font-size:34px;font-weight:700}
+.kpi{display:flex;gap:22px;flex-wrap:wrap}
+.kpi div{font-size:13px;color:var(--muted)}.kpi b{display:block;font-size:22px;color:var(--fg)}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+table.t th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+table.t td{padding:8px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+.cod{font-family:var(--f-mono);font-weight:700;font-size:16px}
+.tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;background:var(--sunk);color:var(--muted)}
+.tag.esp{background:var(--eb-llego);color:var(--warn)}.tag.ll{background:var(--med-bg);color:var(--med)}.tag.ok{background:var(--eb-confirmado);color:var(--e-confirmado)}.tag.bad{background:var(--eb-ausente);color:var(--bad)}
+.urls code{display:block;font-family:var(--f-mono);font-size:12.5px;background:var(--sunk);padding:8px 10px;border-radius:8px;margin:4px 0 10px;word-break:break-all}
+.vacio{color:var(--muted);padding:14px 4px}
+tr.cerrado td{opacity:.55}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="cab"><h1 id="titulo">Turnos de hoy</h1><a class="linkbtn" href="/">← Volver a la agenda</a></div>
+  <div class="notice" id="notice" hidden></div>
+
+  <div class="card">
+    <div class="barra">
+      <label class="meta" for="puesto">Mi puesto</label><input id="puesto" placeholder="Mesón 1" style="width:150px">
+      <select id="solo" aria-label="Fila"><option value="">Todas las filas</option><option value="C">Solo con hora (C)</option><option value="A">Solo sin hora (A)</option></select>
+      <button class="btn primary llamar" id="siguiente">Llamar siguiente</button>
+      <span class="spacer"></span>
+      <div class="actual" id="actual"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="barra" style="margin-bottom:10px">
+      <div class="kpi" id="kpi"></div><span class="spacer"></span>
+      <label class="meta"><input type="checkbox" id="ver-cerrados"> Ver atendidos</label>
+      <button class="btn" id="manual">Dar número a mano</button>
+    </div>
+    <div id="lista"></div>
+  </div>
+
+  <div class="card" id="cfg" hidden>
+    <h2 style="margin:0 0 10px;font-size:17px">Configuración del tótem y la pantalla</h2>
+    <div class="barra" style="margin-bottom:12px">
+      <label><input type="checkbox" id="c-nombre"> Mostrar nombre abreviado en la pantalla («Pedro M.»)</label>
+      <label><input type="checkbox" id="c-voz"> Anunciar con voz</label>
+      <label><input type="checkbox" id="c-imprimir"> Imprimir ticket en el tótem</label>
+    </div>
+    <div class="urls" id="urls"></div>
+    <h3 style="margin:16px 0 8px;font-size:15px">Videos de la pantalla de llamado</h3>
+    <div class="barra" style="margin-bottom:8px">
+      <label><input type="checkbox" id="c-videos"> Mostrar videos (mitad de la pantalla)</label>
+      <label><input type="checkbox" id="c-vsonido"> Videos con sonido</label>
+    </div>
+    <p class="meta" style="margin:0 0 8px">Formato .mp4 (H.264) o .webm. Se reproducen en orden y en bucle; cuando llaman un número, el aviso aparece en grande y el video baja el volumen.</p>
+    <div id="vlista" style="margin-bottom:8px"></div>
+    <div class="barra" style="margin-bottom:16px"><label class="btn" style="cursor:pointer">Subir videos<input type="file" id="c-subir" accept="video/mp4,video/webm,.mp4,.webm,.m4v" multiple hidden></label><span class="meta" id="c-prog"></span></div>
+    <div class="barra"><button class="btn" id="c-clave">Generar nueva clave de dispositivos</button><span class="meta">Al cambiarla, el tótem y la pantalla que usan la clave anterior dejan de funcionar.</span></div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<footer class="pie-sistema" id="pie-sistema"></footer>
+<script>
+const $=s=>document.querySelector(s);
+function toast(t){const e=$("#toast");e.textContent=t;e.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>e.hidden=true,2400)}
+async function api(url,opts={}){
+  const r=await fetch(url,{...opts,headers:{"Content-Type":"application/json"},body:opts.body?JSON.stringify(opts.body):undefined});
+  if(r.status===401){location.href="/login";throw new Error("sesion")}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||"Ocurrió un error en el servidor.");
+  return j;
+}
+const el=(tag,props={},...h)=>{const e=document.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==="class")e.className=v;else if(k==="text")e.textContent=v;else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v)}for(const x of h)if(x!=null)e.append(x);return e};
+const EST={espera:["En espera","esp"],llamado:["Llamado","ll"],atendido:["Atendido","ok"],ausente:["No se presentó","bad"]};
+let yo=null, D=null;
+try{$("#puesto").value=localStorage.getItem("turno-puesto")||""}catch(e){}
+$("#puesto").addEventListener("change",()=>{try{localStorage.setItem("turno-puesto",$("#puesto").value.trim())}catch(e){}});
+const puesto=()=>{const p=$("#puesto").value.trim();if(!p){$("#puesto").focus();throw new Error("Escribe tu puesto (por ejemplo «Mesón 1»).")}return p};
+
+async function cargar(){
+  try{
+    D=await api("/api/turnos");
+    const t=D.turnos, esp=t.filter(x=>x.estado==="espera");
+    const kpi=$("#kpi"); kpi.innerHTML="";
+    for(const [n,v] of [["En espera",esp.length],["Con hora",t.filter(x=>x.letra==="C").length],["Sin hora",t.filter(x=>x.letra==="A").length],["Espera promedio",D.espera_promedio+" min"]])
+      kpi.append(el("div",{},el("b",{text:String(v)}),n));
+    const ver=$("#ver-cerrados").checked;
+    const filas=t.filter(x=>ver||["espera","llamado"].includes(x.estado));
+    if(D.config) pintarCfg(D.config);   // la configuración se muestra aunque aún no haya turnos
+    const box=$("#lista"); box.innerHTML="";
+    if(!filas.length){box.append(el("div",{class:"vacio",text:t.length?"No hay pacientes esperando.":"Aún no se han entregado números hoy."}));return}
+    const tb=el("tbody");
+    for(const x of filas){
+      const acc=el("td",{style:"white-space:nowrap;text-align:right"});
+      const b=(txt,fn,cls="linkbtn")=>acc.append(el("button",{type:"button",class:cls,text:txt,onclick:async()=>{try{await fn();cargar()}catch(e){toast(e.message)}}}));
+      const enSala=x.etapa==="box"&&x.estado==="espera";
+      if(x.estado==="espera"&&!enSala) b("Llamar",async()=>{const r=await api("/api/turnos/llamar",{method:"POST",body:{id:x.id,puesto:puesto()}});mostrar(r)});
+      if(x.estado==="llamado"){b("Volver a llamar",async()=>{const r=await api("/api/turnos/llamar",{method:"POST",body:{id:x.id,puesto:puesto()}});mostrar(r)});
+        b(x.agenda&&/^m\d+$/.test(x.agenda)&&x.etapa==="meson"?"Listo → a sala del médico":"Atendido",async()=>{const r=await api(`/api/turnos/${x.id}/atendido`,{method:"POST"});if(r.a_sala)toast(`${r.codigo} pasa a la sala: lo llamará ${r.agenda_txt}`)});b("No se presentó",()=>api(`/api/turnos/${x.id}/ausente`,{method:"POST"}),"linkbtn eliminar")}
+      if(["atendido","ausente"].includes(x.estado)) b("Reabrir",()=>api(`/api/turnos/${x.id}/espera`,{method:"POST"}));
+      const quien=x.paciente||x.nombre_corto||(x.letra==="A"?"Atención general":"");
+      const det=[x.cita_hora&&("Hora "+x.cita_hora),x.agenda_txt].filter(Boolean).join(" · ");
+      const [et,cl]=enSala?["En sala · espera médico","ll"]:(EST[x.estado]||[x.estado,""]);
+      tb.append(el("tr",{class:["atendido","ausente"].includes(x.estado)?"cerrado":""},
+        el("td",{},el("span",{class:"cod",text:x.codigo})),
+        el("td",{},el("b",{text:quien}),x.sin_cita?el("span",{class:"tag bad",style:"margin-left:6px",text:"Sin hora hoy"}):null,det?el("div",{class:"meta",text:det}):null),
+        el("td",{text:x.creado.slice(11,16)}),
+        el("td",{text:x.estado==="espera"?x.espera_min+" min":x.llamado_en?"Esperó "+x.espera_min+" min":""}),
+        el("td",{},el("span",{class:"tag "+cl,text:et}),x.puesto?el("div",{class:"meta",text:x.puesto}):null),acc));
+    }
+    const tab=el("table",{class:"t"}); tab.innerHTML="<thead><tr><th>Número</th><th>Paciente</th><th>Llegó</th><th>Espera</th><th>Estado</th><th></th></tr></thead>"; tab.append(tb); box.append(tab);
+  }catch(e){if(e.message!=="sesion")$("#notice").textContent=e.message,$("#notice").hidden=false}
+}
+function mostrar(r){const a=$("#actual");a.innerHTML="";a.append(el("span",{class:"meta",text:"Llamando"}),el("span",{class:"n",text:r.codigo}),el("span",{text:r.nombre_corto||r.puesto}))}
+$("#siguiente").addEventListener("click",async()=>{try{const r=await api("/api/turnos/llamar",{method:"POST",body:{puesto:puesto(),solo:$("#solo").value}});mostrar(r);cargar()}catch(e){toast(e.message)}});
+$("#ver-cerrados").addEventListener("change",cargar);
+$("#manual").addEventListener("click",async()=>{const n=prompt("Nombre del paciente (opcional):");if(n===null)return;
+  try{const t=await api("/api/turnos/manual",{method:"POST",body:{nombre:n}});toast("Número entregado: "+t.codigo);cargar()}catch(e){toast(e.message)}});
+
+/* configuración (administrador) */
+let cfgPintada=false;
+function pintarCfg(c){
+  $("#cfg").hidden=false;
+  if(!cfgPintada){$("#c-nombre").checked=c.mostrar_nombre;$("#c-voz").checked=c.voz;$("#c-imprimir").checked=c.imprimir;
+    $("#c-videos").checked=c.videos;$("#c-vsonido").checked=c.video_sonido;cfgPintada=true;cargarVideos()}
+  const u=$("#urls"); u.innerHTML="";
+  if(!c.clave){u.append(el("p",{class:"meta",text:"Aún no hay clave de dispositivos. Genérala para obtener las direcciones del tótem y de la pantalla."}));return}
+  for(const [t,p] of [["Tótem de llegada (tablet o pantalla táctil):","/totem"],["Pantalla de llamado (televisor de la sala de espera):","/pantalla"]]){
+    const url=location.origin+p+"?k="+encodeURIComponent(c.clave);
+    u.append(el("div",{class:"meta",text:t}),el("code",{text:url}),el("a",{class:"linkbtn",href:url,target:"_blank",rel:"noopener",text:"Abrir"}),el("br"));
+  }
+}
+/* videos de la pantalla */
+function pintarVideos(lista){
+  const d=$("#vlista"); d.innerHTML="";
+  if(!lista.length){d.append(el("p",{class:"meta",text:"Aún no hay videos. Sin videos, la pantalla muestra solo los números."}));return}
+  for(const v of lista) d.append(el("div",{class:"barra",style:"padding:4px 0;border-bottom:1px solid var(--line,#e3e7ee)"},
+    el("span",{text:v.nombre}),el("span",{class:"meta",text:v.mb+" MB"}),el("span",{class:"spacer"}),
+    el("button",{class:"btn",text:"Quitar",onclick:async()=>{if(!confirm("¿Quitar el video «"+v.nombre+"»?"))return;
+      try{pintarVideos((await api("/api/turnos/videos/"+encodeURIComponent(v.nombre),{method:"DELETE"})).videos);toast("Video quitado")}catch(e){toast(e.message)}}})));
+}
+async function cargarVideos(){try{pintarVideos((await api("/api/turnos/videos")).videos)}catch(e){}}
+function subirUno(f){
+  return new Promise((ok,mal)=>{
+    const x=new XMLHttpRequest();
+    x.open("POST","/api/turnos/videos?nombre="+encodeURIComponent(f.name));
+    x.setRequestHeader("Content-Type",f.type||"application/octet-stream");
+    x.upload.onprogress=e=>{if(e.lengthComputable)$("#c-prog").textContent="Subiendo «"+f.name+"»: "+Math.round(e.loaded*100/e.total)+" %"};
+    x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}
+      if(x.status===401){location.href="/login";return}
+      x.status<300?ok(j):mal(new Error(j.error||(x.status===413?"El video es demasiado grande.":"No se pudo subir el video.")))};
+    x.onerror=()=>mal(new Error("Se cortó la conexión al subir el video."));
+    x.send(f);
+  });
+}
+$("#c-subir").addEventListener("change",async e=>{
+  const fs=[...e.target.files]; e.target.value="";
+  for(const f of fs){try{const j=await subirUno(f);pintarVideos(j.videos);toast("Video subido: "+f.name)}catch(err){toast(err.message);break}}
+  $("#c-prog").textContent="";
+});
+
+for(const [id,k] of [["#c-nombre","mostrar_nombre"],["#c-voz","voz"],["#c-imprimir","imprimir"],["#c-videos","videos"],["#c-vsonido","video_sonido"]])
+  $(id).addEventListener("change",async e=>{try{await api("/api/turnos/config",{method:"PUT",body:{[k]:e.target.checked}});toast("Guardado")}catch(err){toast(err.message)}});
+$("#c-clave").addEventListener("click",async()=>{if(!confirm("¿Generar una clave nueva? El tótem y la pantalla actuales tendrán que abrirse con la dirección nueva."))return;
+  try{pintarCfg(await api("/api/turnos/config",{method:"PUT",body:{nueva_clave:true}}));toast("Clave nueva generada")}catch(e){toast(e.message)}});
+
+(async()=>{
+  try{yo=await api("/api/me");if(yo.centro)$("#titulo").textContent="Turnos de hoy · "+yo.centro}catch(e){return}
+  cargar(); setInterval(()=>{if(document.visibilityState==="visible")cargar()},4000);
+})();
+fetch("/api/config").then(r=>r.json()).then(c=>{$("#pie-sistema").textContent=location.host+" · Versión "+(c.version||"")+" · © 2026 Raxio by MSC26"}).catch(()=>{});
+</script>
+</body>
+</html>
