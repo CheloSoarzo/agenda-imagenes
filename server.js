@@ -328,6 +328,82 @@ const resp = require("./respaldo")(db, { ahoraCaja, fallo, integ });
 
 const pagoActivo = (citaId) => db.prepare("SELECT * FROM pagos WHERE cita_id = ? AND anulado = 0").get(citaId);
 const citaPorId = (id) => plain(db.prepare(`${SELECT_CITA} WHERE c.id = ?`).get(id));
+
+// ================== AUDITORÍA DE LA AGENDA ==================
+// Quién creó, modificó, cambió de estado, eliminó o cobró cada cita, los ingresos al sistema y los cambios de
+// configuración. Solo se agrega (nunca se edita ni se borra desde la agenda). Lo ven los administradores.
+db.exec(`CREATE TABLE IF NOT EXISTS bitacora (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  fecha TEXT NOT NULL,
+  usuario_id INTEGER,
+  usuario TEXT NOT NULL DEFAULT '',
+  accion TEXT NOT NULL,
+  cita_id INTEGER,
+  paciente TEXT NOT NULL DEFAULT '',
+  rut TEXT NOT NULL DEFAULT '',
+  detalle TEXT NOT NULL DEFAULT '',
+  ip TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_bitacora_fecha ON bitacora(fecha);
+CREATE INDEX IF NOT EXISTS idx_bitacora_cita ON bitacora(cita_id);`);
+const ACCIONES = {
+  ingreso: "Ingresó al sistema", ingreso_fallido: "Intento de ingreso fallido", salida: "Salió del sistema",
+  crear_cita: "Creó la cita", modificar_cita: "Modificó la cita", estado_cita: "Cambió el estado", eliminar_cita: "Eliminó la cita",
+  cobro: "Registró el pago", anular_pago: "Anuló el pago", cerrar_caja: "Cerró la caja", reabrir_caja: "Reabrió la caja",
+  adjunto: "Adjuntó un archivo", borrar_adjunto: "Borró un adjunto",
+  crear_usuario: "Creó un usuario", modificar_usuario: "Modificó un usuario", eliminar_usuario: "Eliminó un usuario",
+  respaldo: "Descargó un respaldo", cargar_respaldo: "Cargó un respaldo", modulo: "Cambió un módulo",
+  clave_portal: "Clave del portal", aranceles: "Aranceles", descargar_auditoria: "Descargó la auditoría", otro: "Otro cambio",
+};
+const ESTADO_TXT = { agendado: "Agendado", confirmado: "Confirmado", llego: "En espera", atendido: "Atendido", ausente: "No asistió", cancelado: "Cancelado" };
+const estadoTxt = (e) => ESTADO_TXT[e] || e;
+const nombreUsuario = (u) => (u ? (u.nombre && u.nombre !== u.usuario ? `${u.nombre} (${u.usuario})` : u.usuario) : "");
+function auditar(req, u, accion, { cita = null, detalle = "", usuario = null } = {}) {
+  try {
+    if (req) req._auditado = true;
+    const c = typeof cita === "number" ? db.prepare("SELECT id, paciente, rut FROM citas WHERE id = ?").get(cita) : cita;
+    db.prepare("INSERT INTO bitacora (fecha, usuario_id, usuario, accion, cita_id, paciente, rut, detalle, ip) VALUES (?,?,?,?,?,?,?,?,?)")
+      .run(ahoraCaja(), u ? u.id : null, usuario ?? nombreUsuario(u), accion, c ? c.id : (typeof cita === "number" ? cita : null),
+        c ? c.paciente || "" : "", c ? c.rut || "" : "", String(detalle).slice(0, 4000), req ? ipDe(req) : "");
+  } catch (e) { console.error("No se pudo registrar la auditoría:", e.message); }
+}
+// Qué cambió entre la cita anterior y la nueva («hora 10:00 → 11:30; estado agendado → llegó»)
+const CAMPOS_CITA = [["fecha", "fecha"], ["hora", "hora"], ["duracion", "duración"], ["equipo", "agenda"], ["paciente", "paciente"],
+  ["rut", "RUT"], ["telefono", "teléfono"], ["telefono2", "teléfono 2"], ["email", "correo"], ["email2", "correo 2"],
+  ["fecha_nac", "fecha de nacimiento"], ["examen", "examen"], ["prevision", "previsión"], ["medico", "médico solicitante"],
+  ["estado", "estado"], ["notas", "comentario"], ["valor", "valor"], ["copago", "copago"]];
+const verCampo = (k, v) => (v === null || v === undefined || v === "" ? "(vacío)" : k === "fecha" || k === "fecha_nac" ? fechaCL(v) : k === "estado" ? estadoTxt(v) : String(v));
+function cambiosCita(antes, despues) {
+  const out = [];
+  for (const [k, n] of CAMPOS_CITA) {
+    if (!(k in despues)) continue;
+    const a = antes[k] ?? "", d = despues[k] ?? "";
+    if (String(a) !== String(d)) out.push(`${n}: ${verCampo(k, a)} → ${verCampo(k, d)}`);
+  }
+  return out.join("; ");
+}
+// Acciones que no se registran una por una en su ruta: se reconocen por la dirección
+const OTRAS = [
+  ["POST", /^\/api\/respaldo\/restaurar$/, "cargar_respaldo", () => "se reemplazaron los datos de la agenda por los del respaldo"],
+  ["POST", /^\/api\/respaldo\/revisar$/, null],                              // solo revisa el archivo: no cambia nada
+  ["GET", /^\/api\/citas\/(\d+)\/clave$/, "clave_portal", () => "vio la clave del paciente para el portal", 1],
+  ["POST", /^\/api\/citas\/(\d+)\/clave$/, "clave_portal", () => "generó la clave del paciente para el portal", 1],
+  ["POST", /^\/api\/citas\/(\d+)\/extranjero$/, "modificar_cita", () => "marcó al paciente como extranjero", 1],
+  ["PUT", /^\/api\/aranceles\/([\w.-]+)$/, "aranceles", (m) => "modificó el arancel " + m[1]],
+  ["POST", /^\/api\/aranceles/, "aranceles", () => "cambió los aranceles"],
+  ["DELETE", /^\/api\/aranceles\/([\w.-]+)$/, "aranceles", (m) => "eliminó el arancel " + m[1]],
+  ["PUT", /^\/api\/caja\/tarjetas$/, "otro", () => "cambió las comisiones de tarjetas"],
+];
+function registrarOtro(req, u, p) {
+  for (const [met, re, accion, det, conCita] of OTRAS) {
+    const m = req.method === met && p.match(re);
+    if (!m) continue;
+    if (accion) auditar(req, u, accion, { cita: conCita ? Number(m[1]) : null, detalle: det(m) });
+    return;
+  }
+  if (req.method !== "GET") auditar(req, u, "otro", { detalle: `${req.method} ${p}` });
+}
+const resumenCita = (c) => `${fechaCL(c.fecha)} ${c.hora} · ${String(c.equipo || "").toUpperCase()}${c.examen ? " · " + c.examen : ""}${c.estado ? " · " + estadoTxt(c.estado) : ""}`;
 // La cita debe ser de una agenda que el usuario puede ver
 function exigirAgenda(u, citaId) {
   const c = db.prepare("SELECT equipo FROM citas WHERE id = ?").get(citaId);
@@ -344,8 +420,12 @@ const rutas = [
     const u = db.prepare("SELECT * FROM usuarios WHERE usuario = ? AND activo = 1").get(txt(usuario, 40));
     // El usuario «raxio» entra con la clave de proveedor del servidor (no con una clave guardada en la agenda)
     const ok = u && (u.usuario === PROVEEDOR ? claveProveedorOk(clave) : db.verificarClave(clave, u.clave_hash));
-    if (!ok) fallo(401, "Usuario o clave incorrectos.");
+    if (!ok) {
+      auditar(req, u && u.usuario !== PROVEEDOR ? u : null, "ingreso_fallido", { usuario: txt(usuario, 40), detalle: u ? "clave incorrecta" : "usuario inexistente o desactivado" });
+      fallo(401, "Usuario o clave incorrectos.");
+    }
     intentos.delete(ip);
+    auditar(req, u, "ingreso");
     const token = crypto.randomBytes(32).toString("base64url");
     db.prepare("DELETE FROM sesiones WHERE expira < ?").run(Date.now());
     db.prepare("INSERT INTO sesiones (token, usuario_id, expira) VALUES (?,?,?)")
@@ -357,7 +437,7 @@ const rutas = [
 
   ["POST", /^\/api\/logout$/, "libre", async (req) => {
     const u = usuarioDeSesion(req);
-    if (u) db.prepare("DELETE FROM sesiones WHERE token = ?").run(u.tokenHash);
+    if (u) { db.prepare("DELETE FROM sesiones WHERE token = ?").run(u.tokenHash); auditar(req, u, "salida"); }
     return [200, { ok: true }, { "Set-Cookie": cookie("", 0) }];
   }],
 
@@ -404,6 +484,7 @@ const rutas = [
     const nombre = txt(decodeURIComponent(url.searchParams.get("nombre") || ""), 120) || "orden";
     const r = db.prepare("INSERT INTO adjuntos (cita_id, nombre, tipo, tamano, datos, usuario_id, creado) VALUES (?,?,?,?,?,?,?)")
       .run(id, nombre, tipo, datos.length, datos, u.id, ahoraCaja());
+    auditar(req, u, "adjunto", { cita: id, detalle: `${nombre} (${Math.round(datos.length / 1024)} KB)` });
     return [201, { id: Number(r.lastInsertRowid), url: "/api/adjuntos/" + r.lastInsertRowid }];
   }],
 
@@ -417,7 +498,9 @@ const rutas = [
   }],
 
   ["DELETE", /^\/api\/adjuntos\/(\d+)$/, "escribir", async (req, u, url, m) => {
+    const adj = db.prepare("SELECT cita_id, nombre FROM adjuntos WHERE id = ?").get(Number(m[1]));
     db.prepare("DELETE FROM adjuntos WHERE id = ?").run(Number(m[1]));
+    if (adj) auditar(req, u, "borrar_adjunto", { cita: adj.cita_id, detalle: adj.nombre });
     return [200, { ok: true }];
   }],
 
@@ -457,6 +540,7 @@ const rutas = [
       .run({ ...c, uid: u.id });
     const nuevoId = Number(r.lastInsertRowid);
     if (sobrecupo) db.prepare("UPDATE citas SET sobrecupo = 1 WHERE id = ?").run(nuevoId);
+    auditar(req, u, "crear_cita", { cita: nuevoId, detalle: resumenCita(c) + (sobrecupo ? " · SOBRECUPO" : "") });
     db.prepare("UPDATE citas SET accesion = ? WHERE id = ?").run(db.accesionDe(nuevoId), nuevoId);
     marcarLlegada(nuevoId);
     integ.avisar(nuevoId);
@@ -469,6 +553,7 @@ const rutas = [
     const cuerpo = await leerCuerpo(req);
     const c = validarCita(cuerpo);
     if (!veEquipo(u, c.equipo)) fallo(403, "Tu usuario no puede agendar en esa agenda.");
+    const antes = db.prepare("SELECT * FROM citas WHERE id = ?").get(id);
     const sobrecupo = CLINICO ? clin.revisarHorario(c, cuerpo, db.prepare("SELECT fecha, hora, duracion, equipo, sobrecupo FROM citas WHERE id = ?").get(id)) : 0;
     // Si ya está pagada, los datos de cobro quedan fijos (para cambiarlos hay que anular el pago)
     const pago = pagoActivo(id);
@@ -487,6 +572,7 @@ const rutas = [
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");
     if (CLINICO) db.prepare("UPDATE citas SET sobrecupo = ? WHERE id = ?").run(sobrecupo, id);
+    if (antes) { const dif = cambiosCita(antes, c); if (dif || (sobrecupo && !antes.sobrecupo)) auditar(req, u, "modificar_cita", { cita: id, detalle: (dif || "") + (sobrecupo && !antes.sobrecupo ? (dif ? "; " : "") + "SOBRECUPO" : "") }); }
     marcarLlegada(id);
     if (pago && pago.fecha !== c.fecha) db.prepare("UPDATE pagos SET fecha = ? WHERE cita_id = ? AND anulado = 0").run(c.fecha, id);
     integ.avisar(id);
@@ -499,7 +585,9 @@ const rutas = [
     exigirAgenda(u, id);
     const estado = txt((await leerCuerpo(req)).estado, 20);
     if (!ESTADOS.includes(estado)) fallo(400, "El estado no es válido.");
+    const previo = db.prepare("SELECT estado FROM citas WHERE id = ?").get(id);
     const r = db.prepare("UPDATE citas SET estado = ?, actualizado_por = ?, actualizado = datetime('now') WHERE id = ?").run(estado, u.id, id);
+    if (r.changes && previo && previo.estado !== estado) auditar(req, u, "estado_cita", { cita: id, detalle: `${estadoTxt(previo.estado)} → ${estadoTxt(estado)}` });
     if (!r.changes) fallo(404, "La cita ya no existe.");
     marcarLlegada(id);
     integ.avisar(id);
@@ -509,8 +597,11 @@ const rutas = [
   ["DELETE", /^\/api\/citas\/(\d+)$/, "escribir", async (req, u, url, m) => {
     exigirAgenda(u, Number(m[1]));
     if (pagoActivo(Number(m[1]))) fallo(409, "Esta cita tiene un pago registrado. Anula el pago antes de eliminarla.");
+    const borrada = db.prepare("SELECT * FROM citas WHERE id = ?").get(Number(m[1]));
     integ.avisarEliminada(Number(m[1]));
     db.prepare("DELETE FROM citas WHERE id = ?").run(Number(m[1]));
+    if (borrada) auditar(req, u, "eliminar_cita", { cita: { id: borrada.id, paciente: borrada.paciente, rut: borrada.rut },
+      detalle: resumenCita(borrada) + (borrada.telefono ? " · tel. " + borrada.telefono : "") + (borrada.notas ? " · comentario: " + borrada.notas : "") });
     return [200, { ok: true }];
   }],
 
@@ -568,6 +659,7 @@ const rutas = [
     // (las consultas médicas no van al PACS ni crean clave del portal de exámenes)
     const portal = integ.activa && !clin.esConsulta(c.equipo) ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;
     integ.avisar(id);
+    auditar(req, u, "cobro", { cita: id, detalle: `$${Number(aPagar).toLocaleString("es-CL")} · ${medio}${medio2 ? ` + ${medio2} $${Number(monto2).toLocaleString("es-CL")}` : ""}${descuento ? ` · descuento $${Number(descuento).toLocaleString("es-CL")} (${motivoDesc})` : ""}${boleta ? " · boleta " + boleta : ""}` });
     return [201, { ...citaPorId(id), portal }];
   }],
 
@@ -580,6 +672,8 @@ const rutas = [
     const motivo = txt(b.motivo, 200);
     if (!motivo) fallo(400, "Escribe el motivo de la anulación.");
     db.prepare("UPDATE pagos SET anulado = 1, anulado_por = ?, motivo_anulacion = ? WHERE id = ?").run(u.id, motivo, p.id);
+    auditar(req, u, "anular_pago", { cita: p.cita_id ? { id: p.cita_id, paciente: p.paciente, rut: p.rut } : null,
+      detalle: `$${Number(p.copago).toLocaleString("es-CL")} · ${p.medio} · del ${fechaCL(p.fecha)} · motivo: ${motivo}` });
     if (p.cita_id) integ.avisar(p.cita_id);
     return [200, { ok: true }];
   }],
@@ -598,6 +692,7 @@ const rutas = [
     const contado = entero(b.efectivo_contado);
     db.prepare("INSERT INTO cierres (fecha, usuario_id, resumen, efectivo_contado, diferencia, observaciones, creado) VALUES (?,?,?,?,?,?,?)")
       .run(fecha, u.id, JSON.stringify(r.totales), contado, contado - r.totales.efectivo_esperado, txt(b.observaciones, 1000), ahoraCaja());
+    auditar(req, u, "cerrar_caja", { detalle: `caja del ${fechaCL(fecha)} · efectivo contado $${contado.toLocaleString("es-CL")} · diferencia $${(contado - r.totales.efectivo_esperado).toLocaleString("es-CL")}` });
     return [200, resumenCaja(fecha)];
   }],
 
@@ -605,9 +700,10 @@ const rutas = [
   ["PUT", /^\/api\/caja\/tarjetas$/, "admin", async (req) => {
     try { return [200, guardarTarjetas(await leerCuerpo(req))]; } catch (e) { fallo(400, "Revisa los valores de comisión."); }
   }],
-  ["POST", /^\/api\/caja\/reabrir$/, "admin", async (req) => {
+  ["POST", /^\/api\/caja\/reabrir$/, "admin", async (req, u) => {
     const b = await leerCuerpo(req);
-    db.prepare("DELETE FROM cierres WHERE fecha = ?").run(txt(b.fecha, 10));
+    const rc = db.prepare("DELETE FROM cierres WHERE fecha = ?").run(txt(b.fecha, 10));
+    if (rc.changes) auditar(req, u, "reabrir_caja", { detalle: `caja del ${fechaCL(txt(b.fecha, 10))}` });
     return [200, resumenCaja(txt(b.fecha, 10))];
   }],
 
@@ -649,7 +745,36 @@ const rutas = [
   }],
 
   // ----- respaldo: copia completa y consistente de la base de datos -----
-  ["GET", /^\/api\/respaldo$/, "admin", async () => {
+  // ----- auditoría de la agenda (solo administradores) -----
+  ["GET", /^\/api\/bitacora$/, "admin", async (req, u, url) => {
+    const q = (k) => txt(url.searchParams.get(k), 80);
+    const desde = reFecha.test(q("desde")) ? q("desde") : hoyCaja(), hasta = reFecha.test(q("hasta")) ? q("hasta") : desde;
+    const where = ["fecha >= ? AND fecha < ?"], args = [desde, hasta + " 99"];
+    if (q("usuario")) { where.push("usuario_id = ?"); args.push(Number(q("usuario"))); }
+    if (q("accion") && ACCIONES[q("accion")]) { where.push("accion = ?"); args.push(q("accion")); }
+    if (q("q")) {
+      const t = q("q"), limpio = t.replace(/[^0-9kK]/g, "").toUpperCase();
+      where.push("(paciente LIKE ? OR detalle LIKE ?" + (limpio.length >= 6 ? " OR UPPER(REPLACE(REPLACE(REPLACE(rut,'.',''),'-',''),' ','')) LIKE ?" : "") + ")");
+      args.push("%" + t + "%", "%" + t + "%"); if (limpio.length >= 6) args.push("%" + limpio + "%");
+    }
+    const filas = plainAll(db.prepare(`SELECT * FROM bitacora WHERE ${where.join(" AND ")} ORDER BY id DESC LIMIT 5000`).all(...args))
+      .map((f) => ({ ...f, accion_txt: ACCIONES[f.accion] || f.accion }));
+    if (url.searchParams.get("csv") === "1") {
+      auditar(req, u, "descargar_auditoria", { detalle: `del ${fechaCL(desde)} al ${fechaCL(hasta)}` });
+      const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const lineas = [["Fecha", "Hora", "Usuario", "Acción", "Paciente", "RUT", "Detalle", "IP"].map(esc).join(";")]
+        .concat(filas.map((f) => [fechaCL(f.fecha.slice(0, 10)), f.fecha.slice(11, 16), f.usuario, f.accion_txt, f.paciente, f.rut, f.detalle, f.ip].map(esc).join(";")));
+      return ["RAW", Buffer.from("\ufeff" + lineas.join("\r\n"), "utf8"), { "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="auditoria-agenda-${desde}-al-${hasta}.csv"` }];
+    }
+    const usuarios = plainAll(db.prepare("SELECT id, usuario, nombre FROM usuarios WHERE usuario <> ? ORDER BY nombre").all(PROVEEDOR));
+    return [200, { filas, acciones: ACCIONES, usuarios, limite: filas.length >= 5000 }];
+  }],
+  ["GET", /^\/api\/citas\/(\d+)\/historial$/, "admin", async (req, u, url, m) =>
+    [200, plainAll(db.prepare("SELECT * FROM bitacora WHERE cita_id = ? ORDER BY id").all(Number(m[1]))).map((f) => ({ ...f, accion_txt: ACCIONES[f.accion] || f.accion }))]],
+
+  ["GET", /^\/api\/respaldo$/, "admin", async (req, u) => {
+    auditar(req, u, "respaldo", { detalle: "copia completa de la base de datos" });
     const tmp = path.join(os.tmpdir(), `respaldo-${process.pid}-${Date.now()}.db`);
     try {
       db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
@@ -663,7 +788,7 @@ const rutas = [
   ["GET", /^\/api\/usuarios$/, "admin", async () =>
     [200, plainAll(db.prepare("SELECT id, usuario, nombre, rol, activo, agendas, creado FROM usuarios WHERE eliminado = 0 AND usuario <> ? ORDER BY nombre").all(PROVEEDOR))]],
 
-  ["POST", /^\/api\/usuarios$/, "admin", async (req) => {
+  ["POST", /^\/api\/usuarios$/, "admin", async (req, admin) => {
     const b = await leerCuerpo(req);
     const usuario = txt(b.usuario, 40).toLowerCase(), nombre = txt(b.nombre, 80), clave = String(b.clave || ""), rol = txt(b.rol, 20);
     if (!/^[a-z0-9._-]{3,40}$/.test(usuario)) fallo(400, "El usuario debe tener 3 o más letras o números, sin espacios.");
@@ -673,6 +798,7 @@ const rutas = [
     if (db.prepare("SELECT 1 FROM usuarios WHERE usuario = ?").get(usuario)) fallo(409, "Ese usuario ya existe.");
     db.prepare("INSERT INTO usuarios (usuario, nombre, clave_hash, rol, agendas) VALUES (?,?,?,?,?)")
       .run(usuario, nombre || usuario, db.hashClave(clave), rol, agendasValidas(b.agendas));
+    auditar(req, admin, "crear_usuario", { detalle: `${nombre || usuario} (${usuario}) · rol ${rol}${b.agendas ? " · agendas " + agendasValidas(b.agendas) : ""}` });
     return [201, { ok: true }];
   }],
 
@@ -697,6 +823,13 @@ const rutas = [
       db.prepare("UPDATE usuarios SET paleta = ? WHERE id = ?").run(b.paleta === "azul" ? "" : b.paleta, id);
     }
     if (esAdmin && b.agendas !== undefined) db.prepare("UPDATE usuarios SET agendas = ? WHERE id = ?").run(agendasValidas(b.agendas), id);
+    {
+      const x = db.prepare("SELECT usuario, nombre FROM usuarios WHERE id = ?").get(id);
+      const cambios = [b.clave !== undefined && "clave", esAdmin && b.rol !== undefined && "rol " + b.rol,
+        esAdmin && b.agendas !== undefined && "agendas " + (agendasValidas(b.agendas) || "todas"),
+        esAdmin && b.activo !== undefined && (b.activo ? "activado" : "desactivado")].filter(Boolean);
+      if (x && cambios.length) auditar(req, u, "modificar_usuario", { detalle: `${x.nombre} (${x.usuario}) · ${cambios.join(", ")}` });
+    }
     if (esAdmin && b.activo !== undefined) {
       if (id === u.id) fallo(400, "No puedes desactivar tu propio usuario.");
       db.prepare("UPDATE usuarios SET activo = ? WHERE id = ?").run(b.activo ? 1 : 0, id);
@@ -714,6 +847,7 @@ const rutas = [
     const x = db.prepare("SELECT * FROM usuarios WHERE id = ? AND eliminado = 0").get(id);
     if (!x) fallo(404, "Ese usuario ya no existe.");
     db.prepare("UPDATE usuarios SET eliminado = 1, activo = 0, usuario = ? WHERE id = ?").run(`${x.usuario}~eliminado${id}`, id);
+    auditar(req, u, "eliminar_usuario", { detalle: `${x.nombre} (${x.usuario})` });
     db.prepare("DELETE FROM sesiones WHERE usuario_id = ?").run(id);
     return [200, { ok: true }];
   }],
@@ -740,6 +874,7 @@ const rutas = [
     try { historial = JSON.parse(metaLeer("modulos_historial") || "[]"); } catch {}
     historial.unshift({ fecha: ahoraCaja(), usuario: u.nombre || u.usuario, modulo: MODULOS[k], activo: activar });
     metaPoner("modulos_historial", JSON.stringify(historial.slice(0, 50)));
+    auditar(req, u, "modulo", { detalle: `${activar ? "encendió" : "apagó"} «${MODULOS[k]}»` });
     console.log(`Módulo «${MODULOS[k]}» ${activar ? "encendido" : "apagado"} por ${u.usuario}. La agenda se reinicia para aplicarlo.`);
     // La agenda se reinicia sola (Docker la vuelve a levantar en segundos) y arranca con el módulo nuevo
     setTimeout(() => process.exit(0), 700);
@@ -785,6 +920,8 @@ const servidor = http.createServer(async (req, res) => {
           if (nivel === "admin" && u.rol !== "admin") fallo(403, "Solo un administrador puede hacer esto.");
         }
         const [status, data, headers] = await manejador(req, u, url, m);
+        // Cualquier otro cambio que no quedó registrado arriba queda como «Otro cambio» (método y ruta)
+        if (u && !req._auditado && status < 400) registrarOtro(req, u, p);
         if (status === "RAW") { res.writeHead(200, { "Cache-Control": "no-store", ...headers }); return res.end(data); }
         return enviarJSON(res, status, data, headers);
       }

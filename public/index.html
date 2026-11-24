@@ -47,6 +47,7 @@
       <button class="linkbtn" id="btnCaja">Caja</button>
       <button class="linkbtn" id="btnAranceles">Aranceles</button>
       <button class="linkbtn" id="btnUsuarios" hidden>Usuarios</button>
+      <button class="linkbtn" id="btnAuditoria" hidden title="Quién creó, modificó, eliminó o cobró cada cita, y los ingresos al sistema">Auditoría</button>
       <a class="linkbtn" id="btnRespaldo" href="/api/respaldo" hidden title="Descarga una copia completa de la base de datos">Respaldo</a>
       <button class="linkbtn" id="btnCargarResp" hidden title="Reemplaza los datos de esta agenda por los de un respaldo">Cargar respaldo</button>
       <button class="linkbtn" id="btnModulos" hidden title="Encender o apagar la ficha clínica y los turnos en este centro">Módulos</button>
@@ -160,6 +161,7 @@
       <p class="meta" id="adj-msg"></p>
     </div>
     <div class="meta" id="fmeta"></div>
+    <details class="historial" id="f-historial" hidden><summary>Historial de esta cita</summary><ol id="f-hist-lista"></ol></details>
     <div class="msg" id="fmsg"></div>
     <div class="actions">
       <button type="button" class="btn danger" id="borrar" hidden>Eliminar</button>
@@ -304,6 +306,25 @@
         <button type="button" data-t="oscuro">☾ Oscuro</button>
       </div></div>
     <div class="actions"><span class="spacer"></span><button type="button" class="btn primary" id="pcerrar">Listo</button></div>
+  </div>
+</div>
+
+<!-- Auditoría de la agenda (administrador) -->
+<div class="scrim" id="audscrim" hidden>
+  <div class="panel wide">
+    <h2>Auditoría de la agenda</h2>
+    <p class="meta" style="margin:0">Quién creó, modificó, eliminó o cobró cada cita, los ingresos al sistema y los cambios de configuración. Este registro no se puede editar ni borrar.</p>
+    <form class="aud-filtros" id="aud-form">
+      <div class="field"><label for="aud-desde">Desde</label><input id="aud-desde" type="date"></div>
+      <div class="field"><label for="aud-hasta">Hasta</label><input id="aud-hasta" type="date"></div>
+      <div class="field"><label for="aud-usuario">Usuario</label><select id="aud-usuario"><option value="">Todos</option></select></div>
+      <div class="field"><label for="aud-accion">Acción</label><select id="aud-accion"><option value="">Todas</option></select></div>
+      <div class="field aud-q"><label for="aud-q">Paciente, RUT o texto</label><input id="aud-q" type="search" autocomplete="off"></div>
+      <div class="aud-botones"><button class="btn primary">Buscar</button><button type="button" class="btn" id="aud-csv">Descargar CSV</button></div>
+    </form>
+    <div class="meta" id="aud-res"></div>
+    <div class="aud-tabla" id="aud-tabla"></div>
+    <div class="actions"><span class="spacer"></span><button type="button" class="btn primary" id="aud-cerrar">Listo</button></div>
   </div>
 </div>
 
@@ -1060,6 +1081,7 @@ $("#f-prevision").addEventListener("change",()=>recalcular(true));
 async function cargarAranceles(){try{ARANCEL=await api("/api/aranceles")}catch(e){}}
 function openForm(c,preset={}){
   editId=c?c.id:null;
+  cargarHistorialCita(c?c.id:null);
   $("#ftitle").textContent=c?"Editar cita":"Nueva cita";
   $("#f-paciente").value=c?.paciente||preset.paciente||""; {const r0=c?.rut||preset.rut||"", ext=/^PAS\s/i.test(r0); $("#f-ext").checked=ext; $("#f-rut").value=ext?r0.slice(4).trim():r0; modoDoc(); revisarRut(false)} $("#f-tel").value=c?.telefono||preset.telefono||""; $("#f-tel2").value=c?.telefono2||""; $("#f-email2").value=c?.email2||"";
   $("#f-nac").value=c?.fecha_nac||""; $("#f-email").value=c?.email||""; mostrarEdad();
@@ -1571,6 +1593,48 @@ $("#btnColores").addEventListener("click",()=>{
   $("#colscrim").hidden=false; setTimeout(()=>box.querySelector("input:checked")?.focus(),30);
 });
 $("#pcerrar").addEventListener("click",()=>$("#colscrim").hidden=true);
+
+/* ---------- auditoría de la agenda (administrador) ---------- */
+let AUD_INI=false;
+const audParams=()=>new URLSearchParams({desde:$("#aud-desde").value,hasta:$("#aud-hasta").value,usuario:$("#aud-usuario").value,accion:$("#aud-accion").value,q:$("#aud-q").value.trim()});
+async function cargarAuditoria(){
+  const box=$("#aud-tabla"); box.textContent="Cargando…";
+  try{
+    const d=await api("/api/bitacora?"+audParams());
+    if(!AUD_INI){AUD_INI=true;
+      for(const u of d.usuarios){const o=document.createElement("option");o.value=u.id;o.textContent=`${u.nombre} (${u.usuario})`;$("#aud-usuario").append(o)}
+      for(const [k,v] of Object.entries(d.acciones)){const o=document.createElement("option");o.value=k;o.textContent=v;$("#aud-accion").append(o)}}
+    $("#aud-res").textContent=d.filas.length?`${d.filas.length}${d.limite?" (máximo; acota las fechas)":""} ${d.filas.length===1?"registro":"registros"}`:"Sin registros para esos filtros.";
+    box.innerHTML="";
+    if(!d.filas.length) return;
+    const t=document.createElement("table"); t.className="aud";
+    t.innerHTML="<thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Paciente</th><th>Detalle</th><th>IP</th></tr></thead>";
+    const tb=document.createElement("tbody");
+    for(const f of d.filas){
+      const tr=document.createElement("tr"); tr.className="ac-"+f.accion;
+      for(const v of [fechaHoraCL(f.fecha),f.usuario,f.accion_txt,[f.paciente,f.rut].filter(Boolean).join(" · "),f.detalle,f.ip]){const td=document.createElement("td");td.textContent=v||"";tr.append(td)}
+      if(f.cita_id&&f.accion!=="eliminar_cita"){tr.title="Ver la cita";tr.style.cursor="pointer";tr.addEventListener("click",async()=>{try{const c=(await api(`/api/buscar?q=${encodeURIComponent(f.rut||f.paciente)}`)).find(x=>x.id===f.cita_id);if(c){$("#audscrim").hidden=true;setDia(c.fecha);openForm(c)}else toast("La cita ya no existe.")}catch(e){toast(e.message)}})}
+      tb.append(tr);
+    }
+    t.append(tb); box.append(t);
+  }catch(e){box.textContent=e.message}
+}
+$("#btnAuditoria").addEventListener("click",()=>{
+  if(!$("#aud-desde").value){const h=isoDate(new Date());$("#aud-desde").value=sumarDias(h,-7);$("#aud-hasta").value=h}
+  $("#audscrim").hidden=false; cargarAuditoria();
+});
+$("#aud-form").addEventListener("submit",e=>{e.preventDefault();cargarAuditoria()});
+$("#aud-csv").addEventListener("click",()=>{const p=audParams();p.set("csv","1");location.href="/api/bitacora?"+p});
+$("#aud-cerrar").addEventListener("click",()=>$("#audscrim").hidden=true);
+async function cargarHistorialCita(id){
+  const box=$("#f-historial"); box.hidden=!(id&&yo?.rol==="admin"); if(box.hidden) return;
+  const ol=$("#f-hist-lista"); ol.innerHTML=""; box.open=false;
+  try{
+    const filas=await api(`/api/citas/${id}/historial`);
+    if(!filas.length){const li=document.createElement("li");li.className="meta";li.textContent="Sin cambios registrados (la auditoría registra desde su instalación).";ol.append(li);return}
+    for(const f of filas){const li=document.createElement("li");const b=document.createElement("b");b.textContent=`${fechaHoraCL(f.fecha)} · ${f.usuario}`;li.append(b,` — ${f.accion_txt}${f.detalle?": "+f.detalle:""}`);ol.append(li)}
+  }catch(e){}
+}
 
 /* ---------- módulos del centro (administrador) ---------- */
 const MOD_DESC={clinico:"Agendas por médico, ficha clínica, recetas y documentos, horarios de atención y la página Profesionales.",
@@ -2100,7 +2164,7 @@ buildGrid(); render();
     PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||""; PACS_PUBLICO=yo.pacs_publico||""; if(yo.contraste_valor)CONTRASTE_VALOR=yo.contraste_valor;
     if(PACS_ON) cargarMedicos();
     $("#nueva").hidden=!canWrite;
-    $("#btnUsuarios").hidden=yo.rol!=="admin"; $("#btnModulos").hidden=yo.rol!=="admin"; if(yo.proveedor) $("#btnClave").hidden=true;
+    $("#btnUsuarios").hidden=yo.rol!=="admin"; $("#btnModulos").hidden=yo.rol!=="admin"; $("#btnAuditoria").hidden=yo.rol!=="admin"; if(yo.proveedor) $("#btnClave").hidden=true;
     $("#btnRespaldo").hidden=yo.rol!=="admin"; $("#btnCargarResp").hidden=yo.rol!=="admin";
     await cargarAranceles();
     cargar();

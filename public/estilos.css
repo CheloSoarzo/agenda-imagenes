@@ -596,3 +596,20 @@ input.invalido{border-color:var(--bad)!important;box-shadow:0 0 0 3px color-mix(
 .mod-estado{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;margin-left:6px}
 .mod-estado.on{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .mod-estado.off{background:var(--sunk);color:var(--muted)}
+
+/* Auditoría de la agenda */
+.aud-filtros{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:end;margin:12px 0 6px}
+.aud-filtros .aud-q{grid-column:span 2}
+.aud-botones{grid-column:span 2;display:flex;gap:8px;justify-content:flex-end}
+@media (max-width:700px){.aud-filtros{grid-template-columns:1fr 1fr}.aud-filtros .aud-q,.aud-botones{grid-column:span 2}}
+.aud-tabla{overflow-x:auto;margin-top:8px}
+table.aud{width:100%;border-collapse:collapse;font-size:13px}
+table.aud th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+table.aud td{padding:6px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+table.aud td:first-child{white-space:nowrap;font-family:"JetBrains Mono",monospace;font-size:12px}
+table.aud tr.ac-eliminar_cita td:nth-child(3),table.aud tr.ac-anular_pago td:nth-child(3),table.aud tr.ac-ingreso_fallido td:nth-child(3){color:var(--bad);font-weight:700}
+table.aud tr[title]:hover td{background:var(--sunk)}
+details.historial{margin:10px 0;border:1px solid var(--line-soft);border-radius:8px;padding:6px 10px;font-size:13px}
+details.historial summary{cursor:pointer;font-weight:700;font-size:13px}
+details.historial ol{margin:6px 0 0;padding-left:18px}
+details.historial li{margin:3px 0}

@@ -13,7 +13,8 @@ const { DatabaseSync } = require("node:sqlite");
 
 const MAX = 500 * 1024 * 1024;   // 500 MB
 // Tablas que no se copian: sesiones (todos vuelven a entrar), meta (ajustes propios de este servidor), cola del PACS
-const NO_COPIAR = new Set(["sesiones", "meta", "pacs_cola", "sqlite_sequence"]);
+// La auditoría (bitacora) tampoco se reemplaza: cargar un respaldo no borra el registro de quién hizo qué
+const NO_COPIAR = new Set(["sesiones", "meta", "pacs_cola", "sqlite_sequence", "bitacora"]);
 
 module.exports = function respaldo(db, { ahoraCaja, fallo, integ }) {
   const dirTmp = path.join(db.dataDir, "respaldos", "tmp");
