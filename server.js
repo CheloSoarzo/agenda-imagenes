@@ -2,11 +2,14 @@
 // Inicio: npm start
 // Variables opcionales: PORT, HOST, DATA_DIR, ADMIN_CLAVE, SESION_HORAS, COOKIE_SECURE=1, TRUST_PROXY=1, CENTRO_NOMBRE
 // Conexión con el PACS (ver integracion.js): PACS_URL, INTEGRACION_TOKEN, PORTAL_URL, ACCESION_PREFIJO
-// Módulo clínico (ver clinica.js): MODULO_CLINICO=1 lo enciende (agendas de médicos, ficha clínica, recetas y
-// documentos). Apagado por defecto: la agenda funciona exactamente igual y su base de datos no cambia.
+// Módulo clínico (ver clinica.js): agendas de médicos, ficha clínica, recetas, documentos y horarios de atención.
+// Módulos apagados por defecto: la agenda funciona exactamente igual y su base de datos no cambia.
+// Se encienden desde la agenda (Administrador → Módulos); MODULO_CLINICO / MODULO_TURNOS (1 o 0) en el servidor los fijan.
 // Con el módulo encendido: AGENDAS_EQUIPOS, CENTRO_DIRECCION, CENTRO_TELEFONO, PUBLIC_URL
-// Turnos (ver turnos.js): MODULO_TURNOS=1 enciende el tótem de números, la pantalla de llamado (con videos) y el
-// panel de turnos. Apagado por defecto, independiente del módulo clínico. Opcional: VIDEOS_MAX_MB
+// Usuario «raxio» (proveedor): solo él enciende o apaga módulos. El servidor entrega la huella de su clave,
+// CLAVE_PROVEEDOR_HASH (sha256 de "raxio:" + clave; la genera el dueño con: pacs clave-proveedor). Sin ella, bloqueados.
+// Turnos (ver turnos.js): tótem de números, pantalla de llamado (con videos) y panel de turnos.
+// Independiente del módulo clínico. Opcional: VIDEOS_MAX_MB
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -130,8 +133,14 @@ function marcarLlegada(id) {
 }
 // Paletas de colores que puede elegir cada usuario (los colores están en public/estilos.css)
 const PALETAS = ["azul", "rosa", "verde", "violeta", "cobre"];
-const CLINICO = /^(1|true|si|sí)$/i.test(String(process.env.MODULO_CLINICO || "").trim());
-const TURNOS = /^(1|true|si|sí)$/i.test(String(process.env.MODULO_TURNOS || "").trim());
+// Módulos (clínico y turnos): se encienden desde la agenda (Administrador → Módulos) y quedan guardados en la base.
+// Si el servidor define MODULO_CLINICO / MODULO_TURNOS (1 o 0), ese valor manda y el interruptor queda bloqueado.
+const metaLeer = (k) => { try { return db.prepare("SELECT valor FROM meta WHERE clave = ?").get(k)?.valor; } catch { return undefined; } };
+const metaPoner = (k, v) => db.prepare("INSERT INTO meta (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").run(k, String(v));
+const envModulo = (v) => { const t = String(v ?? "").trim(); return t === "" ? null : /^(1|true|si|sí)$/i.test(t); };
+const MOD_FIJO = { clinico: envModulo(process.env.MODULO_CLINICO), turnos: envModulo(process.env.MODULO_TURNOS) };
+let CLINICO = MOD_FIJO.clinico ?? metaLeer("modulo_clinico") === "1";
+let TURNOS = MOD_FIJO.turnos ?? metaLeer("modulo_turnos") === "1";
 const ROLES = CLINICO ? ["admin", "recepcion", "lectura", "medico"] : ["admin", "recepcion", "lectura"];
 // Roles que no agendan ni cobran (el médico trabaja en la ficha; agenda y caja son de recepción)
 const SIN_ESCRITURA = ["lectura", "medico"];
@@ -256,12 +265,64 @@ const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS ac
 // Integración con el PACS (órdenes, estados y clave del paciente). Inactiva si falta PACS_URL.
 const integ = require("./integracion")(db, { ahoraCaja, hoyCaja, fallo, plain });
 // Módulo clínico: solo con MODULO_CLINICO=1. Apagado, «clin» responde como la agenda de imágenes de siempre.
-const clin = CLINICO
-  ? require("./clinica")(db, { ahoraCaja, hoyCaja, fallo, plain, txt, leerCuerpo, ipDe, integ, CENTRO, LOGO, VERSION })
-  : { activo: false, rutas: [], esAgenda: (e) => EQUIPOS.includes(e), esConsulta: () => false,
-      esGrupoArancel: (e) => EQUIPOS.includes(e), agendasDeMedico: () => [] };
-// Turnos: solo con MODULO_TURNOS=1 (tótem, pantalla de llamado y llamado desde recepción o la ficha)
-const turn = TURNOS ? require("./turnos")(db, { ahoraCaja, hoyCaja, fallo, plain, txt, leerCuerpo, integ, clin, CENTRO, LOGO }) : { rutas: [] };
+// Si un módulo no logra iniciar, la agenda sigue funcionando sin él (y queda el aviso en Administrador → Módulos).
+function sinModulo(clave, e) {
+  console.error(`No se pudo iniciar el módulo ${clave}; la agenda sigue sin él:`, e);
+  try { metaPoner("modulo_" + clave, "0"); metaPoner("modulo_error", `${ahoraCaja()} · ${clave}: ${e && e.message || e}`); } catch {}
+}
+let clin = { activo: false, rutas: [], esAgenda: (e) => EQUIPOS.includes(e), esConsulta: () => false,
+  esGrupoArancel: (e) => EQUIPOS.includes(e), agendasDeMedico: () => [] };
+if (CLINICO) {
+  try { clin = require("./clinica")(db, { ahoraCaja, hoyCaja, fallo, plain, txt, leerCuerpo, ipDe, integ, CENTRO, LOGO, VERSION }); }
+  catch (e) { CLINICO = false; sinModulo("clinico", e); }
+}
+// Turnos: tótem, pantalla de llamado y llamado desde recepción o la ficha
+let turn = { rutas: [] };
+if (TURNOS) {
+  try { turn = require("./turnos")(db, { ahoraCaja, hoyCaja, fallo, plain, txt, leerCuerpo, integ, clin, CENTRO, LOGO }); }
+  catch (e) { TURNOS = false; sinModulo("turnos", e); }
+}
+// ---------- interruptores de módulos (Administrador → Módulos) ----------
+const MODULOS = { clinico: "Ficha clínica y médicos", turnos: "Tótem y turnos" };
+const PROVEEDOR_HASH = /^[0-9a-f]{64}$/i.test(String(process.env.CLAVE_PROVEEDOR_HASH || "").trim()) ? process.env.CLAVE_PROVEEDOR_HASH.trim().toLowerCase() : "";
+const claveProveedorOk = (clave) => {
+  if (!PROVEEDOR_HASH || !clave) return false;
+  const h = crypto.createHash("sha256").update("raxio:" + String(clave)).digest();
+  return crypto.timingSafeEqual(h, Buffer.from(PROVEEDOR_HASH, "hex"));
+};
+// Usuario «raxio» (proveedor): entra con la clave que genera el servidor (pacs clave-proveedor), es administrador,
+// es el único que enciende o apaga módulos y no aparece en la lista de usuarios del centro.
+const PROVEEDOR = "raxio";
+const esProveedor = (u) => !!(PROVEEDOR_HASH && u && u.usuario === PROVEEDOR);
+{
+  const x = db.prepare("SELECT id FROM usuarios WHERE usuario = ?").get(PROVEEDOR);
+  if (PROVEEDOR_HASH && !x) {
+    db.prepare("INSERT INTO usuarios (usuario, nombre, clave_hash, rol) VALUES (?,?,?,?)")
+      .run(PROVEEDOR, "Raxio (proveedor)", db.hashClave(crypto.randomBytes(24).toString("base64url")), "admin");
+  } else if (PROVEEDOR_HASH && x) {
+    db.prepare("UPDATE usuarios SET nombre = 'Raxio (proveedor)', rol = 'admin', activo = 1, eliminado = 0, agendas = '' WHERE id = ?").run(x.id);
+  } else if (x) {
+    // Sin clave de proveedor en el servidor, la cuenta queda desactivada
+    db.prepare("UPDATE usuarios SET activo = 0 WHERE id = ?").run(x.id);
+    db.prepare("DELETE FROM sesiones WHERE usuario_id = ?").run(x.id);
+  }
+}
+const idProveedor = () => db.prepare("SELECT id FROM usuarios WHERE usuario = ?").get(PROVEEDOR)?.id || 0;
+// El servidor lee este archivo para saber qué agendas tienen turnos (y permitirles subir videos grandes)
+try { fs.writeFileSync(path.join(db.dataDir, "modulos.json"), JSON.stringify({ clinico: CLINICO, turnos: TURNOS }) + "\n"); } catch {}
+const tablaExiste = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
+const normTxt = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+function estadoModulos() {
+  let historial = [];
+  try { historial = JSON.parse(metaLeer("modulos_historial") || "[]"); } catch {}
+  const activo = { clinico: CLINICO, turnos: TURNOS };
+  const m = {};
+  for (const k of Object.keys(MODULOS)) {
+    m[k] = { nombre: MODULOS[k], activo: activo[k], fijo: MOD_FIJO[k] !== null,
+      guardado: metaLeer("modulo_" + k) === "1", iniciado: k === "clinico" ? tablaExiste("profesionales") : tablaExiste("turnos") };
+  }
+  return { centro: CENTRO, modulos: m, proveedor: !!PROVEEDOR_HASH, puede: false, historial: historial.slice(0, 20), error: metaLeer("modulo_error") || "" };
+}
 if (CLINICO && process.env.DEMO_DATOS === "true") require("./demo")(db, { ahoraCaja, hoyCaja });
 const resp = require("./respaldo")(db, { ahoraCaja, fallo, integ });
 
@@ -281,7 +342,9 @@ const rutas = [
     if (frenoLogin(ip)) fallo(429, "Demasiados intentos. Espera 15 minutos.");
     const { usuario, clave } = await leerCuerpo(req);
     const u = db.prepare("SELECT * FROM usuarios WHERE usuario = ? AND activo = 1").get(txt(usuario, 40));
-    if (!u || !db.verificarClave(clave, u.clave_hash)) fallo(401, "Usuario o clave incorrectos.");
+    // El usuario «raxio» entra con la clave de proveedor del servidor (no con una clave guardada en la agenda)
+    const ok = u && (u.usuario === PROVEEDOR ? claveProveedorOk(clave) : db.verificarClave(clave, u.clave_hash));
+    if (!ok) fallo(401, "Usuario o clave incorrectos.");
     intentos.delete(ip);
     const token = crypto.randomBytes(32).toString("base64url");
     db.prepare("DELETE FROM sesiones WHERE expira < ?").run(Date.now());
@@ -303,6 +366,7 @@ const rutas = [
     const extra = CLINICO || TURNOS ? { turnos: TURNOS || undefined } : {};
     if (CLINICO) Object.assign(extra, { clinico: true, profesional: u.rol === "medico" ? plain(db.prepare(
       "SELECT id, nombre, titulo, especialidad FROM profesionales WHERE usuario_id = ? AND activo = 1 ORDER BY id LIMIT 1").get(u.id)) || null : null });
+    if (esProveedor(u)) extra.proveedor = true;
     return [200, { ...datos, centro: CENTRO, logo: LOGO, pacs: integ.activa, portal_url: integ.portalUrl, pacs_publico: integ.pacsPublico, version: VERSION, contraste_valor: CONTRASTE_VALOR, ...extra }];
   }],
 
@@ -384,12 +448,15 @@ const rutas = [
   }],
 
   ["POST", /^\/api\/citas$/, "escribir", async (req, u) => {
-    const c = validarCita(await leerCuerpo(req));
+    const cuerpo = await leerCuerpo(req);
+    const c = validarCita(cuerpo);
     if (!veEquipo(u, c.equipo)) fallo(403, "Tu usuario no puede agendar en esa agenda.");
+    const sobrecupo = CLINICO ? clin.revisarHorario(c, cuerpo, null) : 0;   // médicos: horario de atención y bloqueos
     const r = db.prepare(`INSERT INTO citas (fecha,hora,duracion,equipo,paciente,rut,telefono,telefono2,fecha_nac,email,email2,examen,prevision,medico,medico_id,estado,notas,codigo,valor,bonificacion,copago,examenes,contraste,creado_por,actualizado_por)
       VALUES (@fecha,@hora,@duracion,@equipo,@paciente,@rut,@telefono,@telefono2,@fecha_nac,@email,@email2,@examen,@prevision,@medico,@medico_id,@estado,@notas,@codigo,@valor,@bonificacion,@copago,@examenes,@contraste,@uid,@uid)`)
       .run({ ...c, uid: u.id });
     const nuevoId = Number(r.lastInsertRowid);
+    if (sobrecupo) db.prepare("UPDATE citas SET sobrecupo = 1 WHERE id = ?").run(nuevoId);
     db.prepare("UPDATE citas SET accesion = ? WHERE id = ?").run(db.accesionDe(nuevoId), nuevoId);
     marcarLlegada(nuevoId);
     integ.avisar(nuevoId);
@@ -399,8 +466,10 @@ const rutas = [
   ["PUT", /^\/api\/citas\/(\d+)$/, "escribir", async (req, u, url, m) => {
     const id = Number(m[1]);
     exigirAgenda(u, id);
-    const c = validarCita(await leerCuerpo(req));
+    const cuerpo = await leerCuerpo(req);
+    const c = validarCita(cuerpo);
     if (!veEquipo(u, c.equipo)) fallo(403, "Tu usuario no puede agendar en esa agenda.");
+    const sobrecupo = CLINICO ? clin.revisarHorario(c, cuerpo, db.prepare("SELECT fecha, hora, duracion, equipo, sobrecupo FROM citas WHERE id = ?").get(id)) : 0;
     // Si ya está pagada, los datos de cobro quedan fijos (para cambiarlos hay que anular el pago)
     const pago = pagoActivo(id);
     if (pago) {
@@ -417,6 +486,7 @@ const rutas = [
       codigo=@codigo,valor=@valor,bonificacion=@bonificacion,copago=@copago,examenes=@examenes,contraste=@contraste,
       actualizado_por=@uid,actualizado=datetime('now') WHERE id=@id`).run({ ...c, uid: u.id, id });
     if (!r.changes) fallo(404, "La cita ya no existe.");
+    if (CLINICO) db.prepare("UPDATE citas SET sobrecupo = ? WHERE id = ?").run(sobrecupo, id);
     marcarLlegada(id);
     if (pago && pago.fecha !== c.fecha) db.prepare("UPDATE pagos SET fecha = ? WHERE cita_id = ? AND anulado = 0").run(c.fecha, id);
     integ.avisar(id);
@@ -591,7 +661,7 @@ const rutas = [
   }],
 
   ["GET", /^\/api\/usuarios$/, "admin", async () =>
-    [200, plainAll(db.prepare("SELECT id, usuario, nombre, rol, activo, agendas, creado FROM usuarios WHERE eliminado = 0 ORDER BY nombre").all())]],
+    [200, plainAll(db.prepare("SELECT id, usuario, nombre, rol, activo, agendas, creado FROM usuarios WHERE eliminado = 0 AND usuario <> ? ORDER BY nombre").all(PROVEEDOR))]],
 
   ["POST", /^\/api\/usuarios$/, "admin", async (req) => {
     const b = await leerCuerpo(req);
@@ -599,6 +669,7 @@ const rutas = [
     if (!/^[a-z0-9._-]{3,40}$/.test(usuario)) fallo(400, "El usuario debe tener 3 o más letras o números, sin espacios.");
     if (clave.length < 8) fallo(400, "La clave debe tener al menos 8 caracteres.");
     if (!ROLES.includes(rol)) fallo(400, "Elige un rol.");
+    if (usuario === PROVEEDOR) fallo(409, "Ese nombre de usuario está reservado.");
     if (db.prepare("SELECT 1 FROM usuarios WHERE usuario = ?").get(usuario)) fallo(409, "Ese usuario ya existe.");
     db.prepare("INSERT INTO usuarios (usuario, nombre, clave_hash, rol, agendas) VALUES (?,?,?,?,?)")
       .run(usuario, nombre || usuario, db.hashClave(clave), rol, agendasValidas(b.agendas));
@@ -608,7 +679,9 @@ const rutas = [
   ["PUT", /^\/api\/usuarios\/(\d+)$/, "sesion", async (req, u, url, m) => {
     const id = Number(m[1]), esAdmin = u.rol === "admin";
     if (!esAdmin && id !== u.id) fallo(403, "Solo puedes cambiar tu propia clave.");
+    if (id === idProveedor() && id !== u.id) fallo(404, "Ese usuario no existe.");
     const b = await leerCuerpo(req);
+    if (b.clave !== undefined && id === idProveedor()) fallo(400, "La clave de Raxio se cambia en el servidor (pacs clave-proveedor).");
     if (b.clave !== undefined) {
       if (String(b.clave).length < 8) fallo(400, "La clave debe tener al menos 8 caracteres.");
       db.prepare("UPDATE usuarios SET clave_hash = ? WHERE id = ?").run(db.hashClave(b.clave), id);
@@ -637,6 +710,7 @@ const rutas = [
   ["DELETE", /^\/api\/usuarios\/(\d+)$/, "admin", async (req, u, url, m) => {
     const id = Number(m[1]);
     if (id === u.id) fallo(400, "No puedes eliminar tu propio usuario.");
+    if (id === idProveedor()) fallo(404, "Ese usuario ya no existe.");
     const x = db.prepare("SELECT * FROM usuarios WHERE id = ? AND eliminado = 0").get(id);
     if (!x) fallo(404, "Ese usuario ya no existe.");
     db.prepare("UPDATE usuarios SET eliminado = 1, activo = 0, usuario = ? WHERE id = ?").run(`${x.usuario}~eliminado${id}`, id);
@@ -644,6 +718,33 @@ const rutas = [
     return [200, { ok: true }];
   }],
   ...integ.rutas,
+  ["GET", /^\/api\/modulos$/, "admin", async (req, u) => [200, { ...estadoModulos(), puede: esProveedor(u) }]],
+  ["PUT", /^\/api\/modulos$/, "admin", async (req, u) => {
+    const b = await leerCuerpo(req);
+    const k = String(b.modulo || "");
+    if (!MODULOS[k]) fallo(400, "Módulo no válido.");
+    // Solo el proveedor (usuario «raxio») enciende o apaga módulos: los administradores del centro solo ven qué está incluido
+    if (!esProveedor(u)) fallo(403, "Solo Raxio puede encender o apagar módulos. Contacte a Raxio.");
+    if (MOD_FIJO[k] !== null) fallo(409, `Este módulo lo fija la configuración del servidor (MODULO_${k.toUpperCase()}). Para cambiarlo desde aquí, hay que quitar esa variable.`);
+    const activar = b.activo === true;
+    const est = estadoModulos().modulos[k];
+    if (est.guardado === activar && est.activo === activar) return [200, { ...estadoModulos(), puede: true, reinicio: false }];
+    // La primera vez que se enciende la ficha clínica se pide escribir el nombre del centro (cambia la base de datos)
+    if (activar && k === "clinico" && !est.iniciado) {
+      const esperado = normTxt(CENTRO || "ACTIVAR");
+      if (normTxt(b.confirmacion) !== esperado) fallo(400, `Para encender la ficha clínica escribe «${CENTRO || "ACTIVAR"}».`);
+    }
+    metaPoner("modulo_" + k, activar ? "1" : "0");
+    db.prepare("DELETE FROM meta WHERE clave = 'modulo_error'").run();
+    let historial = [];
+    try { historial = JSON.parse(metaLeer("modulos_historial") || "[]"); } catch {}
+    historial.unshift({ fecha: ahoraCaja(), usuario: u.nombre || u.usuario, modulo: MODULOS[k], activo: activar });
+    metaPoner("modulos_historial", JSON.stringify(historial.slice(0, 50)));
+    console.log(`Módulo «${MODULOS[k]}» ${activar ? "encendido" : "apagado"} por ${u.usuario}. La agenda se reinicia para aplicarlo.`);
+    // La agenda se reinicia sola (Docker la vuelve a levantar en segundos) y arranca con el módulo nuevo
+    setTimeout(() => process.exit(0), 700);
+    return [200, { ...estadoModulos(), puede: true, reinicio: true }];
+  }],
   ...clin.rutas,
   ...turn.rutas,
   ...resp.rutas,

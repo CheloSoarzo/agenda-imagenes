@@ -104,6 +104,11 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-
 .appt.eco{background:var(--eco-bg);border-left:4px solid var(--eco)}
 /* Módulo clínico (solo se usa si el centro lo tiene encendido) */
 .colhead.med{box-shadow:inset 0 3px 0 var(--med)} .appt.med{background:var(--med-bg);border-left:4px solid var(--med)}
+/* Horario de los médicos: lo que no atiende se ve rayado; citas en sobrecupo o que quedaron fuera de horario */
+.slot.noatiende{background:repeating-linear-gradient(135deg,var(--sunk) 0 6px,transparent 6px 12px);cursor:not-allowed}
+.slot.noatiende:hover{background:repeating-linear-gradient(135deg,var(--line) 0 6px,transparent 6px 12px)}
+.appt.sobrecupo{outline:2px dashed var(--warn);outline-offset:-2px}
+.appt.fuera-hor{outline:2px solid var(--bad);outline-offset:-2px}
 .appt:hover{border-color:var(--line)}
 .appt .l1{display:flex;gap:6px;align-items:baseline;min-width:0}
 .appt .h{font-family:var(--f-mono);font-size:11px;font-weight:600;flex:none}
@@ -584,3 +589,10 @@ a.raxio-marca:hover{opacity:.85}
 .field .chk-ext input{width:auto;margin:0}
 .rut-err{margin-top:4px;font-size:12.5px;font-weight:700;color:var(--bad)}
 input.invalido{border-color:var(--bad)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 18%,transparent)}
+
+/* Panel de módulos */
+.mod-fila{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line-soft)}
+.mod-fila .meta{margin:4px 0 0}
+.mod-estado{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;margin-left:6px}
+.mod-estado.on{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.mod-estado.off{background:var(--sunk);color:var(--muted)}

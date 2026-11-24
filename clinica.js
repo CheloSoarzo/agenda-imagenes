@@ -211,7 +211,112 @@ ${publico ? "" : `<div class="acc"><button onclick="window.close()">Cerrar</butt
   }
 
   // ---------- rutas ----------
+  // ================== HORARIOS DE ATENCIÓN Y BLOQUEOS ==================
+  // Cada médico puede tener bloques semanales (día 1 = lunes … 7 = domingo) y bloqueos por fecha
+  // (vacaciones, congresos, una tarde libre). Un médico SIN bloques semanales no tiene restricción de horario.
+  const DIAS = ["", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados", "domingos"];
+  const DIA1 = ["", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+  const reHH = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const reF = /^\d{4}-\d{2}-\d{2}$/;
+  const min = (h) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
+  const fCL = (f) => f.split("-").reverse().join("/");
+  const diaSemana = (f) => { const d = new Date(f + "T12:00:00Z").getUTCDay(); return d === 0 ? 7 : d; };
+  const bloquesDe = (pid) => db.prepare("SELECT dia, desde, hasta FROM horarios WHERE profesional_id = ? ORDER BY dia, desde").all(pid).map(plain);
+  const bloqueosDe = (pid, desde, hasta) => db.prepare(
+    "SELECT * FROM bloqueos WHERE profesional_id = ? AND hasta_fecha >= ? AND desde_fecha <= ? ORDER BY desde_fecha, hora_desde").all(pid, desde, hasta).map(plain);
+  const nombreProf = (pid) => { const p = db.prepare("SELECT nombre, titulo FROM profesionales WHERE id = ?").get(pid); return p ? `${p.titulo} ${p.nombre}`.trim() : "El profesional"; };
+
+  // ¿La cita cae dentro del horario del médico? Devuelve "" si está bien, o el motivo si no.
+  function fueraDeHorario(c) {
+    if (!esConsulta(c.equipo)) return "";
+    const pid = Number(c.equipo.slice(1));
+    const ini = min(c.hora), fin = ini + (Number(c.duracion) || 15);
+    for (const b of bloqueosDe(pid, c.fecha, c.fecha)) {
+      if (!b.hora_desde || (ini < min(b.hora_hasta) && fin > min(b.hora_desde)))
+        return `${nombreProf(pid)} no atiende ${b.hora_desde ? `de ${b.hora_desde} a ${b.hora_hasta} ` : ""}el ${fCL(c.fecha)}${b.motivo ? ` (${b.motivo})` : ""}.`;
+    }
+    const bloques = bloquesDe(pid);
+    if (!bloques.length) return "";
+    const dia = diaSemana(c.fecha), hoyB = bloques.filter((b) => b.dia === dia);
+    if (!hoyB.length) return `${nombreProf(pid)} no atiende los ${DIAS[dia]}.`;
+    if (hoyB.some((b) => ini >= min(b.desde) && fin <= min(b.hasta))) return "";
+    return `${nombreProf(pid)} atiende los ${DIAS[dia]} ${hoyB.map((b) => `${b.desde}–${b.hasta}`).join(" y ")}: las ${c.hora} (${fin - ini} min) quedan fuera de su horario.`;
+  }
+  // Al guardar una cita: se revisa si es nueva o si cambió día, hora, duración o agenda.
+  // Fuera de horario se rechaza (código 428) salvo que recepción o el administrador confirmen el sobrecupo.
+  function revisarHorario(c, cuerpo, previo) {
+    // Devuelve 1 si la cita queda como sobrecupo, 0 si no
+    if (!esConsulta(c.equipo)) return 0;
+    if (previo && previo.fecha === c.fecha && previo.hora === c.hora && Number(previo.duracion) === Number(c.duracion) && previo.equipo === c.equipo)
+      return Number(previo.sobrecupo) ? 1 : 0;
+    const motivo = fueraDeHorario(c);
+    if (motivo && !cuerpo.sobrecupo) fallo(428, motivo);
+    return motivo ? 1 : 0;
+  }
+  function validarHorario(b) {
+    const bloques = (Array.isArray(b.bloques) ? b.bloques : []).slice(0, 50).map((x) => ({ dia: Math.round(Number(x.dia)), desde: txt(x.desde, 5), hasta: txt(x.hasta, 5) }));
+    for (const x of bloques) {
+      if (!(x.dia >= 1 && x.dia <= 7) || !reHH.test(x.desde) || !reHH.test(x.hasta)) fallo(400, "Revisa los horarios: cada bloque necesita día, hora de inicio y hora de término.");
+      if (min(x.hasta) <= min(x.desde)) fallo(400, `El bloque del ${DIA1[x.dia]} ${x.desde}–${x.hasta} termina antes de empezar.`);
+    }
+    for (let d = 1; d <= 7; d++) {
+      const del = bloques.filter((x) => x.dia === d).sort((a, z) => min(a.desde) - min(z.desde));
+      for (let i = 1; i < del.length; i++) if (min(del[i].desde) < min(del[i - 1].hasta)) fallo(400, `Los bloques del ${DIA1[d]} se topan (${del[i - 1].desde}–${del[i - 1].hasta} y ${del[i].desde}–${del[i].hasta}).`);
+    }
+    return bloques;
+  }
+  // Citas ya agendadas (desde hoy) que quedan fuera del horario o en un bloqueo de este médico
+  const citasFuera = (pid) => db.prepare(`SELECT id, fecha, hora, duracion, equipo, paciente, sobrecupo FROM citas
+    WHERE equipo = ? AND fecha >= ? AND estado NOT IN ('cancelado','atendido','ausente') ORDER BY fecha, hora LIMIT 500`).all("m" + pid, hoyCaja())
+    .map(plain).filter((c) => !c.sobrecupo && fueraDeHorario(c)).map((c) => ({ id: c.id, fecha: c.fecha, hora: c.hora, paciente: c.paciente, motivo: fueraDeHorario(c) }));
+  const existeProf = (pid) => { if (!db.prepare("SELECT 1 FROM profesionales WHERE id = ?").get(pid)) fallo(404, "El profesional no existe."); };
+
   const rutas = [
+    // ----- horarios de atención (los ve todo el que tenga sesión; los cambia solo el administrador) -----
+    ["GET", /^\/api\/clinica\/horarios$/, "sesion", async (req, u, url) => {
+      const desde = url.searchParams.get("desde") || hoyCaja(), hasta = url.searchParams.get("hasta") || desde;
+      if (!reF.test(desde) || !reF.test(hasta)) fallo(400, "Fechas no válidas.");
+      const r = {};
+      for (const p of db.prepare("SELECT id FROM profesionales WHERE activo = 1").all())
+        r["m" + p.id] = { bloques: bloquesDe(p.id), bloqueos: bloqueosDe(p.id, desde, hasta) };
+      return [200, r];
+    }],
+    ["GET", /^\/api\/profesionales\/(\d+)\/horario$/, "admin", async (req, u, url, m) => {
+      const pid = Number(m[1]); existeProf(pid);
+      return [200, { bloques: bloquesDe(pid), bloqueos: bloqueosDe(pid, hoyCaja(), "9999-12-31"), fuera: citasFuera(pid) }];
+    }],
+    ["PUT", /^\/api\/profesionales\/(\d+)\/horario$/, "admin", async (req, u, url, m) => {
+      const pid = Number(m[1]); existeProf(pid);
+      const bloques = validarHorario(await leerCuerpo(req));
+      db.exec("BEGIN");
+      try {
+        db.prepare("DELETE FROM horarios WHERE profesional_id = ?").run(pid);
+        const ins = db.prepare("INSERT INTO horarios (profesional_id, dia, desde, hasta) VALUES (?,?,?,?)");
+        for (const x of bloques) ins.run(pid, x.dia, x.desde, x.hasta);
+        db.exec("COMMIT");
+      } catch (e) { db.exec("ROLLBACK"); throw e; }
+      return [200, { bloques: bloquesDe(pid), bloqueos: bloqueosDe(pid, hoyCaja(), "9999-12-31"), fuera: citasFuera(pid) }];
+    }],
+    ["POST", /^\/api\/profesionales\/(\d+)\/bloqueos$/, "admin", async (req, u, url, m) => {
+      const pid = Number(m[1]); existeProf(pid);
+      const b = await leerCuerpo(req);
+      const x = { desde: txt(b.desde_fecha, 10), hasta: txt(b.hasta_fecha, 10) || txt(b.desde_fecha, 10), hd: txt(b.hora_desde, 5), hh: txt(b.hora_hasta, 5), motivo: txt(b.motivo, 120) };
+      if (!reF.test(x.desde) || !reF.test(x.hasta)) fallo(400, "Indica desde y hasta qué fecha no atiende.");
+      if (x.hasta < x.desde) fallo(400, "La fecha de término es anterior a la de inicio.");
+      if ((x.hd || x.hh) && (!reHH.test(x.hd) || !reHH.test(x.hh) || min(x.hh) <= min(x.hd))) fallo(400, "Revisa el rango de horas del bloqueo (o déjalo vacío para el día completo).");
+      db.prepare("INSERT INTO bloqueos (profesional_id, desde_fecha, hasta_fecha, hora_desde, hora_hasta, motivo, creado_por, creado) VALUES (?,?,?,?,?,?,?,?)")
+        .run(pid, x.desde, x.hasta, x.hd, x.hh, x.motivo, u.id, ahoraCaja());
+      return [201, { bloques: bloquesDe(pid), bloqueos: bloqueosDe(pid, hoyCaja(), "9999-12-31"), fuera: citasFuera(pid) }];
+    }],
+    ["DELETE", /^\/api\/bloqueos\/(\d+)$/, "admin", async (req, u, url, m) => {
+      const b = db.prepare("SELECT profesional_id FROM bloqueos WHERE id = ?").get(Number(m[1]));
+      if (!b) fallo(404, "El bloqueo ya no existe.");
+      db.prepare("DELETE FROM bloqueos WHERE id = ?").run(Number(m[1]));
+      const pid = b.profesional_id;
+      return [200, { bloques: bloquesDe(pid), bloqueos: bloqueosDe(pid, hoyCaja(), "9999-12-31"), fuera: citasFuera(pid) }];
+    }],
+
+
     ["GET", /^\/api\/agendas$/, "sesion", async () => [200, agendas()]],
 
     // ----- profesionales (administración) -----
@@ -622,8 +727,34 @@ ${publico ? "" : `<div class="acc"><button onclick="window.close()">Cerrar</butt
     );
     CREATE INDEX IF NOT EXISTS idx_auditoria_rut ON auditoria(rut);
     CREATE INDEX IF NOT EXISTS idx_auditoria_fecha ON auditoria(fecha);
+
+    -- Horario semanal de cada médico (día 1 = lunes … 7 = domingo). Sin filas = sin restricción.
+    CREATE TABLE IF NOT EXISTS horarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profesional_id INTEGER NOT NULL REFERENCES profesionales(id) ON DELETE CASCADE,
+      dia INTEGER NOT NULL,
+      desde TEXT NOT NULL,                        -- HH:MM
+      hasta TEXT NOT NULL                         -- HH:MM
+    );
+    CREATE INDEX IF NOT EXISTS idx_horarios_prof ON horarios(profesional_id);
+    -- Días u horas en que el médico no atiende (vacaciones, congresos…). Sin horas = día completo.
+    CREATE TABLE IF NOT EXISTS bloqueos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profesional_id INTEGER NOT NULL REFERENCES profesionales(id) ON DELETE CASCADE,
+      desde_fecha TEXT NOT NULL,
+      hasta_fecha TEXT NOT NULL,
+      hora_desde TEXT NOT NULL DEFAULT '',
+      hora_hasta TEXT NOT NULL DEFAULT '',
+      motivo TEXT NOT NULL DEFAULT '',
+      creado_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+      creado TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_bloqueos_prof ON bloqueos(profesional_id, desde_fecha);
     `);
+    // Citas dadas fuera del horario del médico con confirmación (sobrecupo)
+    if (!db.prepare("PRAGMA table_info(citas)").all().some((c) => c.name === "sobrecupo"))
+      db.exec("ALTER TABLE citas ADD COLUMN sobrecupo INTEGER NOT NULL DEFAULT 0");
   }
 
-  return { activo: true, rutas, agendas, esAgenda, esConsulta, esGrupoArancel, agendasDeMedico, paginaVerificar, equiposBase };
+  return { activo: true, rutas, agendas, esAgenda, esConsulta, esGrupoArancel, agendasDeMedico, paginaVerificar, revisarHorario, fueraDeHorario, equiposBase };
 };

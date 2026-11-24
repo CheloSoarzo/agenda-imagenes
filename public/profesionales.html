@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/estilos.css">
 <script>try{var p=localStorage.getItem("agenda-paleta");if(p)document.documentElement.dataset.paleta=p;var t=localStorage.getItem("agenda-tema");if(t==="claro")document.documentElement.dataset.theme="light";else if(t==="oscuro")document.documentElement.dataset.theme="dark"}catch(e){}</script>
+<script src="/fecha-cl.js"></script>
 <link rel="icon" href="/raxio/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/raxio/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/raxio/apple-touch-icon.png">
@@ -30,6 +31,20 @@ tr.off td{opacity:.55}
 .tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--med)}
 .barra{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.barra .spacer{flex:1}
 .nuevo-u{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+
+/* Horario de atención */
+.hor-dia{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-soft)}
+.hor-dia b{font-size:14px}
+.hor-bloques{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hor-bloque{display:flex;align-items:center;gap:4px;background:var(--sunk);border-radius:8px;padding:3px 6px}
+.hor-bloque select{width:88px;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:4px 6px;font:inherit;color:inherit}
+.hor-bloque button{all:unset;cursor:pointer;color:var(--muted);padding:0 4px;font-weight:700}
+.hor-no{color:var(--muted);font-size:13px}
+.blq-nuevo{display:grid;grid-template-columns:repeat(6,minmax(0,1fr)) auto;gap:8px;align-items:end;margin-top:10px}
+@media (max-width:900px){.blq-nuevo{grid-template-columns:1fr 1fr}.hor-dia{grid-template-columns:90px 1fr}}
+.blq{display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:14px}
+.aviso-fuera{margin-top:14px;border:1px solid var(--bad);border-radius:10px;padding:10px 12px;font-size:13px}
+.aviso-fuera b{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -73,6 +88,31 @@ tr.off td{opacity:.55}
       <div class="msg" id="msg" style="margin-top:10px"></div>
       <div class="barra" style="margin-top:10px"><span class="spacer"></span><button type="button" class="btn" id="cancelar" hidden>Cancelar</button><button class="btn primary" id="guardar">Agregar</button></div>
     </form>
+    <!-- Horario de atención y bloqueos del profesional que se está editando -->
+    <div class="card" id="hor-card" hidden>
+      <h2 style="margin:0 0 4px;font-size:17px">Horario de atención · <span id="hor-nombre"></span></h2>
+      <p class="meta" style="margin-top:0">Fuera de estos bloques la agenda se ve rayada y no se pueden dar horas, salvo que recepción o el administrador confirmen un <b>sobrecupo</b>. Sin bloques, el profesional no tiene restricción de horario.</p>
+      <div id="hor-dias"></div>
+      <div class="barra" style="margin-top:10px">
+        <button type="button" class="linkbtn" id="hor-copiar">Copiar el lunes a martes–viernes</button>
+        <span class="spacer"></span><button type="button" class="btn primary" id="hor-guardar">Guardar horario</button>
+      </div>
+      <div class="msg" id="hor-msg" style="margin-top:8px"></div>
+
+      <h3 style="margin:22px 0 4px;font-size:15px">Días u horas sin atención (vacaciones, congresos…)</h3>
+      <div id="blq-lista"></div>
+      <div class="blq-nuevo">
+        <div class="field"><label for="blq-desde">Desde</label><input id="blq-desde" type="date"></div>
+        <div class="field"><label for="blq-hasta">Hasta</label><input id="blq-hasta" type="date"></div>
+        <div class="field"><label for="blq-hd">Hora inicio <span class="meta">(opcional)</span></label><span id="blq-hd-box"></span></div>
+        <div class="field"><label for="blq-hh">Hora término</label><span id="blq-hh-box"></span></div>
+        <div class="field" style="grid-column:span 2"><label for="blq-motivo">Motivo</label><input id="blq-motivo" placeholder="Vacaciones" maxlength="120"></div>
+        <button type="button" class="btn" id="blq-agregar">Agregar</button>
+      </div>
+      <p class="meta" style="margin:6px 0 0">Sin horas, se bloquea el día completo.</p>
+      <div class="aviso-fuera" id="hor-fuera" hidden></div>
+    </div>
+
   </section>
 
   <section data-p="aud" hidden>
@@ -130,12 +170,14 @@ function limpiar(){
   editId=null; $("#f-titulo").textContent="Agregar profesional"; $("#guardar").textContent="Agregar"; $("#cancelar").hidden=true;
   for(const id of ["p-nombre","p-rut","p-esp","p-reg","n-usr","n-clave"]) $("#"+id).value="";
   $("#p-titulo").value="Dr."; $("#p-dur").value="20"; $("#p-act").value="1"; $("#msg").textContent=""; llenarUsuarios("");
+  $("#hor-card").hidden=true; horProf=null;
 }
 function editar(p){
   editId=p.id; $("#f-titulo").textContent="Editar "+p.nombre; $("#guardar").textContent="Guardar cambios"; $("#cancelar").hidden=false;
   $("#p-titulo").value=p.titulo; $("#p-nombre").value=p.nombre; $("#p-rut").value=p.rut?rutTxt(p.rut):""; $("#p-esp").value=p.especialidad; $("#p-reg").value=p.registro;
   $("#p-dur").value=String(p.duracion); $("#p-act").value=p.activo?"1":"0"; llenarUsuarios(p.usuario_id||""); $("#msg").textContent="";
   $("#form").scrollIntoView({behavior:"smooth"});
+  abrirHorario(p);
 }
 $("#cancelar").addEventListener("click",limpiar);
 $("#n-crear").addEventListener("click",async()=>{
@@ -150,9 +192,97 @@ $("#form").addEventListener("submit",async e=>{
   const body={titulo:$("#p-titulo").value,nombre:$("#p-nombre").value,rut:$("#p-rut").value,especialidad:$("#p-esp").value,registro:$("#p-reg").value,
     duracion:Number($("#p-dur").value),activo:$("#p-act").value==="1",usuario_id:Number($("#p-usr").value)||null};
   try{
-    if(editId) await api("/api/profesionales/"+editId,{method:"PUT",body}); else await api("/api/profesionales",{method:"POST",body});
-    toast(editId?"Profesional actualizado":"Profesional agregado: ya tiene su agenda"); limpiar(); await cargar();
+    const nuevo=!editId;
+    const r=editId?await api("/api/profesionales/"+editId,{method:"PUT",body}):await api("/api/profesionales",{method:"POST",body});
+    toast(nuevo?"Profesional agregado: ahora define su horario de atención":"Profesional actualizado"); limpiar(); await cargar();
+    if(nuevo){const p=PROFS.find(x=>x.id===r.id);if(p){editar(p);$("#hor-card").scrollIntoView({behavior:"smooth"})}}
   }catch(err){$("#msg").className="msg err";$("#msg").textContent=err.message}
+});
+
+
+/* ---------- horario de atención y bloqueos ---------- */
+const DIAS=["","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+let HOR={bloques:[]}, horProf=null;
+const fCL=f=>f?f.split("-").reverse().join("/"):"";
+// Horas en formato de 24 horas (cada 15 minutos), iguales en cualquier navegador
+function selHora(valor,vacio){
+  const x=document.createElement("select");
+  if(vacio) x.append(new Option(vacio,""));
+  for(let m=6*60;m<=23*60;m+=15){const h=String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");x.append(new Option(h,h))}
+  if(valor&&![...x.options].some(o=>o.value===valor)) x.append(new Option(valor,valor));
+  x.value=valor||""; return x;
+}
+function bloqueInput(d,desde="",hasta=""){
+  const w=document.createElement("span"); w.className="hor-bloque";
+  const a=selHora(desde||"09:00"); a.className="hd"; a.setAttribute("aria-label",DIAS[d]+" desde");
+  const b=selHora(hasta||"13:00"); b.className="hh"; b.setAttribute("aria-label",DIAS[d]+" hasta");
+  const x=document.createElement("button"); x.type="button"; x.textContent="✕"; x.title="Quitar este bloque";
+  x.addEventListener("click",()=>{const cont=w.parentElement;w.remove();pintarNo(cont)});
+  w.append(a," a ",b,x); return w;
+}
+function pintarNo(cont){cont.querySelector(".hor-no").hidden=!!cont.querySelector(".hor-bloque")}
+function pintarHorario(){
+  const box=$("#hor-dias"); box.innerHTML="";
+  for(let d=1;d<=7;d++){
+    const fila=document.createElement("div"); fila.className="hor-dia"; fila.dataset.dia=d;
+    const t=document.createElement("b"); t.textContent=DIAS[d];
+    const cont=document.createElement("div"); cont.className="hor-bloques";
+    const no=document.createElement("span"); no.className="hor-no"; no.textContent="No atiende"; cont.append(no);
+    for(const b of HOR.bloques.filter(x=>x.dia===d)) cont.append(bloqueInput(d,b.desde,b.hasta));
+    const mas=document.createElement("button"); mas.type="button"; mas.className="linkbtn"; mas.textContent="+ bloque";
+    mas.addEventListener("click",()=>{const ult=[...cont.querySelectorAll(".hor-bloque .hh")].pop();
+      cont.append(bloqueInput(d,ult&&ult.value?ult.value:"09:00",ult&&ult.value?"":"13:00"));pintarNo(cont)});
+    fila.append(t,cont,mas); box.append(fila); pintarNo(cont);
+  }
+}
+function leerHorario(){
+  const bloques=[];
+  for(const f of $$("#hor-dias .hor-dia")) for(const w of f.querySelectorAll(".hor-bloque"))
+    bloques.push({dia:Number(f.dataset.dia),desde:w.querySelector(".hd").value,hasta:w.querySelector(".hh").value});
+  return bloques;
+}
+function pintarBloqueos(lista){
+  const box=$("#blq-lista"); box.innerHTML="";
+  if(!lista.length){box.innerHTML='<p class="meta" style="margin:4px 0">Sin bloqueos programados.</p>';return}
+  for(const b of lista){
+    const f=document.createElement("div"); f.className="blq";
+    const t=document.createElement("span"); t.style.flex="1";
+    t.textContent=(b.desde_fecha===b.hasta_fecha?fCL(b.desde_fecha):`${fCL(b.desde_fecha)} al ${fCL(b.hasta_fecha)}`)
+      +(b.hora_desde?` · ${b.hora_desde} a ${b.hora_hasta}`:" · día completo")+(b.motivo?` · ${b.motivo}`:"");
+    const x=document.createElement("button"); x.type="button"; x.className="linkbtn"; x.textContent="Quitar";
+    x.addEventListener("click",async()=>{try{mostrarHorario(await api("/api/bloqueos/"+b.id,{method:"DELETE"}));toast("Bloqueo quitado")}catch(e){toast(e.message)}});
+    f.append(t,x); box.append(f);
+  }
+}
+function pintarFuera(fuera){
+  const box=$("#hor-fuera"); box.hidden=!fuera.length; box.innerHTML="";
+  if(!fuera.length) return;
+  const h=document.createElement("div"); h.innerHTML=`<b>${fuera.length} ${fuera.length===1?"cita queda":"citas quedan"} fuera del horario.</b> No se borran: en la agenda aparecen marcadas en rojo para reagendarlas.`;
+  const ul=document.createElement("ul"); ul.style.margin="6px 0 0"; ul.style.paddingLeft="18px";
+  for(const c of fuera.slice(0,20)){const li=document.createElement("li");li.textContent=`${fCL(c.fecha)} ${c.hora} · ${c.paciente}`;ul.append(li)}
+  box.append(h,ul);
+}
+function mostrarHorario(d){HOR=d; pintarHorario(); pintarBloqueos(d.bloqueos||[]); pintarFuera(d.fuera||[])}
+async function abrirHorario(p){
+  horProf=p; $("#hor-card").hidden=false; $("#hor-nombre").textContent=`${p.titulo} ${p.nombre}`.trim(); $("#hor-msg").textContent="";
+  try{mostrarHorario(await api(`/api/profesionales/${p.id}/horario`))}catch(e){$("#hor-msg").className="msg err";$("#hor-msg").textContent=e.message}
+}
+for(const [id,t] of [["blq-hd","Día completo"],["blq-hh","—"]]){const x=selHora("",t);x.id=id;$("#"+id+"-box").replaceWith(x)}
+$("#hor-copiar").addEventListener("click",()=>{
+  const lunes=leerHorario().filter(b=>b.dia===1); if(!lunes.length){toast("Primero escribe el horario del lunes");return}
+  HOR.bloques=[...leerHorario().filter(b=>b.dia>5),...[1,2,3,4,5].flatMap(d=>lunes.map(b=>({...b,dia:d})))]; pintarHorario(); toast("Copiado a martes–viernes. Falta guardar.");
+});
+$("#hor-guardar").addEventListener("click",async()=>{
+  const msg=$("#hor-msg");
+  try{const d=await api(`/api/profesionales/${horProf.id}/horario`,{method:"PUT",body:{bloques:leerHorario()}});mostrarHorario(d);
+    msg.className="msg";msg.textContent=d.bloques.length?"Horario guardado.":"Horario guardado: sin bloques, este profesional no tiene restricción de horario.";toast("Horario guardado")}
+  catch(e){msg.className="msg err";msg.textContent=e.message}
+});
+$("#blq-agregar").addEventListener("click",async()=>{
+  const body={desde_fecha:$("#blq-desde").value,hasta_fecha:$("#blq-hasta").value||$("#blq-desde").value,hora_desde:$("#blq-hd").value,hora_hasta:$("#blq-hh").value,motivo:$("#blq-motivo").value};
+  try{mostrarHorario(await api(`/api/profesionales/${horProf.id}/bloqueos`,{method:"POST",body}));
+    for(const id of ["blq-desde","blq-hasta","blq-hd","blq-hh","blq-motivo"]) $("#"+id).value=""; toast("Bloqueo agregado")}
+  catch(e){toast(e.message)}
 });
 
 /* auditoría */

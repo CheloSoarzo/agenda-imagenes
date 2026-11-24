@@ -49,6 +49,7 @@
       <button class="linkbtn" id="btnUsuarios" hidden>Usuarios</button>
       <a class="linkbtn" id="btnRespaldo" href="/api/respaldo" hidden title="Descarga una copia completa de la base de datos">Respaldo</a>
       <button class="linkbtn" id="btnCargarResp" hidden title="Reemplaza los datos de esta agenda por los de un respaldo">Cargar respaldo</button>
+      <button class="linkbtn" id="btnModulos" hidden title="Encender o apagar la ficha clínica y los turnos en este centro">Módulos</button>
       <button class="linkbtn" id="btnColores">Colores</button>
       <button class="linkbtn" id="btnClave">Cambiar clave</button>
       <button class="linkbtn" id="salir">Salir</button>
@@ -306,6 +307,19 @@
   </div>
 </div>
 
+<!-- Panel de módulos (administrador) -->
+<div class="scrim" id="modscrim" hidden>
+  <div class="panel">
+    <h2>Módulos de este centro</h2>
+    <p class="meta" style="margin:0">Estos son los módulos incluidos en la agenda de este centro. Para agregar uno, contacte a Raxio.</p>
+    <div id="mod-lista"></div>
+    <p class="meta" id="mod-nota" style="margin:6px 0 0">Al encender o apagar un módulo la agenda se reinicia sola (unos segundos). Apagar no borra datos.</p>
+    <div class="msg" id="mod-msg"></div>
+    <details id="mod-hist-box" hidden><summary class="meta" style="cursor:pointer">Historial de cambios</summary><ul id="mod-hist" class="meta" style="margin:6px 0 0;padding-left:18px"></ul></details>
+    <div class="actions"><span class="spacer"></span><button type="button" class="btn primary" id="mod-cerrar">Listo</button></div>
+  </div>
+</div>
+
 <!-- Panel de clave -->
 <div class="scrim" id="cscrim" hidden>
   <form class="panel" id="cform" novalidate>
@@ -426,6 +440,36 @@ const ROLES={admin:"Administrador",recepcion:"Recepción",lectura:"Solo lectura"
 const esMed=id=>/^m\d+$/.test(String(id||""));
 const grupoArancel=id=>esMed(id)?"med":id;            // las consultas usan los aranceles «Consultas»
 let GRUPOS_ARANCEL=EQUIPOS;                            // con el módulo clínico: equipos + «Consultas»
+// Horarios de atención de los médicos (módulo clínico): {m1:{bloques:[{dia,desde,hasta}],bloqueos:[...]}}
+let HOR=null;
+const DIAS_TXT=["","lunes","martes","miércoles","jueves","viernes","sábados","domingos"];
+async function cargarHorarios(){
+  if(!yo?.clinico) return;
+  const [desde,hasta]=rango();
+  try{HOR=await api(`/api/clinica/horarios?desde=${desde}&hasta=${hasta}`)}catch(e){HOR=null}
+}
+// "" si el médico atiende en ese rango; si no, el motivo
+function noAtiende(eq,fecha,ini,dur){
+  const h=HOR&&HOR[eq]; if(!h) return "";
+  const fin=ini+dur;
+  for(const b of h.bloqueos) if(b.desde_fecha<=fecha&&b.hasta_fecha>=fecha&&(!b.hora_desde||(ini<toMin(b.hora_hasta)&&fin>toMin(b.hora_desde))))
+    return "No atiende"+(b.motivo?": "+b.motivo:"");
+  if(!h.bloques.length) return "";
+  const d=parseISO(fecha).getDay()||7, del=h.bloques.filter(b=>b.dia===d);
+  if(!del.length) return `No atiende los ${DIAS_TXT[d]}`;
+  return del.some(b=>ini>=toMin(b.desde)&&fin<=toMin(b.hasta))?"":"Fuera de su horario";
+}
+function marcarHorarios(){
+  if(!HOR) return;
+  COLS.forEach((col,i)=>{
+    if(col.equipos.length!==1||!esMed(col.equipos[0])) return;
+    const eq=col.equipos[0];
+    for(const b of document.querySelectorAll(`#col-${i} .slot`)){
+      const m=Number(b.dataset.m), motivo=noAtiende(eq,col.fecha,m,STEP);
+      b.classList.toggle("noatiende",!!motivo); b.dataset.motivo=motivo; b.title=motivo;
+    }
+  });
+}
 async function prepararClinico(){
   ROLES.medico="Médico";
   {const o=document.createElement("option");o.value="medico";o.textContent="Médico";$("#u-rol").appendChild(o)}
@@ -482,7 +526,7 @@ async function api(url,opts={}){
   const r=await fetch(url,init);
   if(r.status===401){location.href="/login";throw new Error("sesion")}
   const j=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(j.error||"Ocurrió un error en el servidor.");
+  if(!r.ok){const e=new Error(j.error||"Ocurrió un error en el servidor.");e.status=r.status;throw e}
   return j;
 }
 
@@ -537,7 +581,10 @@ function buildGrid(){
       const m=START+r*STEP; const b=document.createElement("button");
       b.type="button"; b.className="slot"+(((m+STEP)%60===0)?" hour":"")+(m>=ATENCION_FIN?" fuera":"");
       b.setAttribute("aria-label",`Agendar ${col.titulo} ${col.sub} a las ${toHora(m)}`);
-      b.addEventListener("click",()=>{if(canWrite)openForm(null,{equipo:eqDefecto,hora:toHora(m),fecha:col.fecha})});
+      b.dataset.m=m;
+      b.addEventListener("click",()=>{if(!canWrite)return;
+        if(b.dataset.motivo&&!confirm(`${EQN[eqDefecto]||""}: ${b.dataset.motivo}.\n\n¿Quieres dar igual una hora a las ${toHora(m)} como sobrecupo?`))return;
+        openForm(null,{equipo:eqDefecto,hora:toHora(m),fecha:col.fecha})});
       c.appendChild(b);
     }
     g.appendChild(c);
@@ -557,6 +604,7 @@ function render(){
   if(fin!==END){END=fin;buildGrid()}
   else if(COLS.length&&COLS[0].fecha!==columnas()[0].fecha) buildGrid();
   document.querySelectorAll(".appt,.nowline").forEach(e=>e.remove());
+  if(HOR) marcarHorarios();
   const activos=citas.filter(c=>c.estado!=="cancelado");
   COLS.forEach((colInfo,i)=>{
     const col=$("#col-"+i);
@@ -599,6 +647,10 @@ function render(){
       if(sala!=null&&el.classList.contains("corta")){const sm=document.createElement("span");sm.className="sala-min";sm.textContent=durSala(sala);sm.title="Tiempo en sala";el.querySelector(".l1").appendChild(sm)}
       el.querySelector(".st").textContent=est.n+(sala!=null?" · "+durSala(sala):"")+(SIN_DINERO?"":(c.pago_id?" · pagado":(c.estado==="llego"||c.estado==="atendido")&&c.valor?" · por cobrar":""))+(PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:"")+(c.adjuntos?" · con orden":"")+(clash?" · se superpone":"");
       if(c.pacs_estado) el.classList.add("pacs-"+c.pacs_estado);
+      if(HOR&&esMed(c.equipo)&&!["cancelado","atendido","ausente"].includes(c.estado)){
+        if(Number(c.sobrecupo)){el.classList.add("sobrecupo");el.querySelector(".st").textContent+=" · sobrecupo"}
+        else{const mot=noAtiende(c.equipo,c.fecha,ini,dur);if(mot){el.classList.add("fuera-hor");el.querySelector(".st").textContent+=" · fuera de horario: reagendar"}}
+      }
       if(c.pago_id&&!SIN_DINERO) el.classList.add("paid");
       el.title=`${c.hora} · ${c.paciente} · ${c.examen||""}${c.notas?" · Comentario: "+c.notas:""}${c.adjuntos?" · orden adjunta":""}${c.accesion?" · N° acceso "+c.accesion:""}${PACS_TXT[c.pacs_estado]?" · "+PACS_TXT[c.pacs_estado]:""}`;
       if(HOVER){el.setAttribute("aria-label",el.title);el.removeAttribute("title");
@@ -699,7 +751,7 @@ let cargando=0;
 async function cargar(){
   const pedido=++cargando, [desde,hasta]=rango(), clave=desde+hasta;
   try{
-    const r=await api(`/api/citas?desde=${desde}&hasta=${hasta}`);
+    const [r]=await Promise.all([api(`/api/citas?desde=${desde}&hasta=${hasta}`),cargarHorarios()]);
     if(pedido!==cargando||clave!==rango().join("")) return;
     citas=r; notice(""); render(); cargarMes();
   }catch(e){if(e.message!=="sesion")notice("No se pudo actualizar la agenda: "+e.message)}
@@ -1147,7 +1199,15 @@ function validarForm(data){
   return "";
 }
 async function guardarCita(data){
-  const c=await api(editId?"/api/citas/"+editId:"/api/citas",{method:editId?"PUT":"POST",body:data});
+  const enviar=()=>api(editId?"/api/citas/"+editId:"/api/citas",{method:editId?"PUT":"POST",body:data});
+  let c;
+  try{c=await enviar()}
+  catch(e){
+    // Médico fuera de su horario: recepción o el administrador pueden darla igual como sobrecupo
+    if(e.status!==428) throw e;
+    if(!confirm(e.message+"\n\n¿Agendar igual como sobrecupo?")) throw new Error("No se guardó: la hora queda fuera del horario del médico.");
+    data.sobrecupo=true; c=await enviar();
+  }
   editId=c.id;
   if(adjPendientes.length){const p=adjPendientes;adjPendientes=[];for(const f of p) await subirAdjunto(c.id,f)}
   return c;
@@ -1511,6 +1571,59 @@ $("#btnColores").addEventListener("click",()=>{
   $("#colscrim").hidden=false; setTimeout(()=>box.querySelector("input:checked")?.focus(),30);
 });
 $("#pcerrar").addEventListener("click",()=>$("#colscrim").hidden=true);
+
+/* ---------- módulos del centro (administrador) ---------- */
+const MOD_DESC={clinico:"Agendas por médico, ficha clínica, recetas y documentos, horarios de atención y la página Profesionales.",
+  turnos:"Tótem de números para la llegada, pantalla de llamado (con videos) y panel de turnos para recepción."};
+function pintarModulos(d){
+  const box=$("#mod-lista"); box.innerHTML=""; $("#mod-msg").className="msg"; $("#mod-msg").textContent=d.error?"Aviso: "+d.error:"";
+  for(const [k,m] of Object.entries(d.modulos)){
+    const f=document.createElement("div"); f.className="mod-fila";
+    const t=document.createElement("div"); t.className="mod-txt";
+    const h=document.createElement("b"); h.textContent=m.nombre;
+    const e=document.createElement("span"); e.className="mod-estado "+(m.activo?"on":"off"); e.textContent=m.activo?"Incluido":"No incluido";
+    const p=document.createElement("p"); p.className="meta"; p.textContent=MOD_DESC[k]+(m.fijo?" (Lo fija la configuración del servidor.)":"");
+    t.append(h," ",e,p);
+    f.append(t);
+    // Solo Raxio (usuario proveedor) ve los botones; el administrador del centro ve qué está incluido
+    if(d.puede){const b=document.createElement("button"); b.type="button"; b.className="btn"+(m.activo?"":" primary"); b.textContent=m.activo?"Apagar":"Encender"; b.disabled=m.fijo;
+      b.addEventListener("click",()=>cambiarModulo(k,m,!m.activo)); f.append(b)}
+    box.append(f);
+  }
+  $("#mod-nota").hidden=!d.puede;
+  const hist=$("#mod-hist"); hist.innerHTML=""; $("#mod-hist-box").hidden=!d.historial.length;
+  for(const x of d.historial){const li=document.createElement("li");li.textContent=`${fechaHoraCL(x.fecha)} · ${x.usuario} ${x.activo?"encendió":"apagó"} «${x.modulo}»`;hist.append(li)}
+}
+async function cambiarModulo(k,m,activar){
+  let confirmacion="";
+  if(activar&&k==="clinico"&&!m.iniciado){
+    const nombre=centroNombre||"ACTIVAR";
+    confirmacion=prompt(`Encender la ficha clínica agrega tablas nuevas a la base de datos de este centro (antes se guarda una copia automática).\n\nPara confirmar, escribe: ${nombre}`)||"";
+    if(!confirmacion) return;
+  }else if(!confirm(`${activar?"¿Encender":"¿Apagar"} «${m.nombre}»?\n\nLa agenda se reiniciará y estará sin responder unos segundos.${activar?"":" Los datos no se borran."}`)) return;
+  try{
+    const d=await api("/api/modulos",{method:"PUT",body:{modulo:k,activo:activar,confirmacion}});
+    if(!d.reinicio){pintarModulos(d);return}
+    $("#mod-msg").className="msg"; $("#mod-msg").textContent="Reiniciando la agenda…";
+    for(const b of document.querySelectorAll("#mod-lista button")) b.disabled=true;
+    esperarReinicio();
+  }catch(e){$("#mod-msg").className="msg err";$("#mod-msg").textContent=e.message}
+}
+// Espera a que la agenda vuelva (con la versión nueva de los módulos) y recarga la página
+function esperarReinicio(){
+  let n=0; const t0=Date.now();
+  const prueba=async()=>{
+    n++;
+    try{const r=await fetch("/api/config",{cache:"no-store"}); if(r.ok&&Date.now()-t0>2500){location.reload();return}}catch(e){}
+    if(n>60){$("#mod-msg").className="msg err";$("#mod-msg").textContent="La agenda está tardando en volver. Espera un momento y recarga la página.";return}
+    setTimeout(prueba,1500);
+  };
+  setTimeout(prueba,2000);
+}
+$("#btnModulos").addEventListener("click",async()=>{
+  try{pintarModulos(await api("/api/modulos"));$("#modscrim").hidden=false}catch(e){toast(e.message)}
+});
+$("#mod-cerrar").addEventListener("click",()=>$("#modscrim").hidden=true);
 
 /* ---------- mi clave ---------- */
 $("#btnClave").addEventListener("click",()=>{$("#c-clave").value="";$("#c-clave2").value="";$("#cmsg").textContent="";$("#cscrim").hidden=false;setTimeout(()=>$("#c-clave").focus(),30)});
@@ -1987,7 +2100,7 @@ buildGrid(); render();
     PACS_ON=!!yo.pacs; PORTAL_URL=yo.portal_url||""; PACS_PUBLICO=yo.pacs_publico||""; if(yo.contraste_valor)CONTRASTE_VALOR=yo.contraste_valor;
     if(PACS_ON) cargarMedicos();
     $("#nueva").hidden=!canWrite;
-    $("#btnUsuarios").hidden=yo.rol!=="admin";
+    $("#btnUsuarios").hidden=yo.rol!=="admin"; $("#btnModulos").hidden=yo.rol!=="admin"; if(yo.proveedor) $("#btnClave").hidden=true;
     $("#btnRespaldo").hidden=yo.rol!=="admin"; $("#btnCargarResp").hidden=yo.rol!=="admin";
     await cargarAranceles();
     cargar();
