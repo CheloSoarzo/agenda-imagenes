@@ -15,6 +15,15 @@ module.exports = function cargarDemo(db, { ahoraCaja, hoyCaja }) {
     const prof = db.prepare("INSERT INTO profesionales (nombre, rut, especialidad, registro, titulo, duracion, usuario_id) VALUES (?,?,?,?,?,?,?)");
     const pSoto = Number(prof.run("Ana Soto Rojas", "123456785", "Medicina general", "654321", "Dra.", 20, uSoto).lastInsertRowid);
     const pMora = Number(prof.run("Luis Mora Díaz", "987654325", "Medicina interna", "112233", "Dr.", 30, uMora).lastInsertRowid);
+    // Horarios de atención: Dra. Soto lunes a sábado en la mañana; Dr. Mora lunes a viernes mañana y tarde,
+    // con vacaciones el mes que viene (para mostrar los bloqueos)
+    try {
+      const hor = db.prepare("INSERT INTO horarios (profesional_id, dia, desde, hasta) VALUES (?,?,?,?)");
+      for (let d = 1; d <= 6; d++) hor.run(pSoto, d, "08:00", "14:00");
+      for (let d = 1; d <= 5; d++) { hor.run(pMora, d, "09:00", "13:00"); hor.run(pMora, d, "15:00", "19:00"); }
+      db.prepare("INSERT INTO bloqueos (profesional_id, desde_fecha, hasta_fecha, motivo, creado) VALUES (?,?,?,?,?)")
+        .run(pMora, dia(30), dia(44), "Vacaciones", ahoraCaja());
+    } catch {}
 
     // Aranceles de consulta (valores de ejemplo, ajustar en Aranceles)
     const ar = db.prepare("INSERT OR IGNORE INTO aranceles (codigo, nombre, equipo, fonasa_total, fonasa_bonif, particular) VALUES (?,?,?,?,?,?)");
