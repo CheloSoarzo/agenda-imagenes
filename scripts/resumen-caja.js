@@ -35,7 +35,7 @@ if (CJ.length) {
     t.diferencias = res.reduce((s, { r: x }) => s + (x.totales.diferencias || 0), 0);
   }
 }
-const solo = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, { cantidad: v.cantidad, monto: v.copago }]));
+const solo = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, { cantidad: v.cantidad, monto: v.copago, bonificacion: v.bonificacion || 0 }]));
 console.log(JSON.stringify({
   fecha,
   atenciones: t.atenciones, valor: t.valor, bonificacion: t.bonificacion, recaudado: t.recaudado,
