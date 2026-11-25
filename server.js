@@ -284,7 +284,7 @@ const filtroAgendas = (u, alias = "c") => { const a = agendasDe(u); return a.len
 // Valor del medio de contraste (se cobra aparte del examen). Se puede cambiar con la variable CONTRASTE_VALOR.
 const CONTRASTE_VALOR = Math.max(0, Math.round(Number(process.env.CONTRASTE_VALOR) || 25000));
 const CAMPOS_DINERO = ["pago_contraste", "pago_boleta_contraste", "valor", "bonificacion", "copago", "pago_medio", "pago_monto", "pago_folio", "pago_descuento",
-  "pago_desc_motivo", "pago_boleta", "pago_medio2", "pago_monto2", "pago_cheque"];
+  "pago_desc_motivo", "pago_boleta", "pago_medio2", "pago_monto2", "pago_cheque", "pago_bono_externo"];
 function paraUsuario(c, u) {
   if (!c || !SIN_ESCRITURA.includes(u?.rol)) return c;
   const x = { ...c };
@@ -294,7 +294,7 @@ function paraUsuario(c, u) {
 }
 const SELECT_CITA = `SELECT c.*, uc.nombre AS creado_por_nombre, ua.nombre AS actualizado_por_nombre,
   (SELECT COUNT(*) FROM adjuntos a WHERE a.cita_id = c.id) AS adjuntos,
-  p.id AS pago_id, p.medio AS pago_medio, p.copago AS pago_monto, p.medio2 AS pago_medio2, p.monto2 AS pago_monto2, p.folio_bono AS pago_folio, p.fecha AS pago_fecha,
+  p.id AS pago_id, p.medio AS pago_medio, p.copago AS pago_monto, p.medio2 AS pago_medio2, p.monto2 AS pago_monto2, p.folio_bono AS pago_folio, p.bono_externo AS pago_bono_externo, p.fecha AS pago_fecha,
   p.descuento AS pago_descuento, p.descuento_motivo AS pago_desc_motivo, p.boleta AS pago_boleta, p.cheque AS pago_cheque,
   p.contraste AS pago_contraste, p.boleta_contraste AS pago_boleta_contraste,
   p.creado AS pago_creado, up.nombre AS pago_usuario
@@ -672,10 +672,16 @@ const rutas = [
     if (descuento < 0 || descuento > c.copago) fallo(400, "El descuento no puede ser mayor que el copago.");
     if (descuento > 0 && !motivoDesc) fallo(400, "Escribe el motivo del descuento.");
     if (!descuento) detalle = "";
+    // Bono externo (solo Fonasa): el paciente compró el bono directo en Fonasa y pagó ahí su copago.
+    // Aquí no se cobra el examen: todo su valor pasa a bonificación (se le cobra a Fonasa). El contraste sí se cobra.
+    const externo = b.bono_externo === true;
+    if (externo && c.prevision !== "Fonasa") fallo(400, "«Bono externo» es solo para pacientes Fonasa.");
+    if (externo && descuento) fallo(400, "Con bono externo no hay copago en caja: no corresponde descuento.");
+    const bonificacion = externo ? c.valor : c.bonificacion;
     const contraste = c.contraste || 0;                  // medio de contraste: aparte del examen, sin descuento ni bonificación
-    const aPagar = c.copago - descuento + contraste;
-    const medio = aPagar === 0 ? "Sin copago" : txt(b.medio, 20);
-    if (!MEDIOS.includes(medio)) fallo(400, "Elige el medio de pago.");
+    const aPagar = externo ? contraste : c.copago - descuento + contraste;
+    const medio = aPagar === 0 ? (externo ? "Bono externo" : "Sin copago") : txt(b.medio, 20);
+    if (!MEDIOS.includes(medio) && medio !== "Bono externo") fallo(400, "Elige el medio de pago.");
     // Segundo medio de pago (opcional): monto2 con medio2, el resto con el primero
     let medio2 = txt(b.medio2, 20), monto2 = entero(b.monto2);
     if (!medio2 || !monto2 || aPagar === 0) { medio2 = ""; monto2 = 0; }
@@ -687,19 +693,19 @@ const rutas = [
     const folio = txt(b.folio_bono, 40), boleta = txt(b.boleta, 40), boletaContraste = contraste ? txt(b.boleta_contraste, 40) : "";
     const cheque = medio === "Cheque" || medio2 === "Cheque" ? txt(b.cheque, 80) : "";
     if ((medio === "Cheque" || medio2 === "Cheque") && !cheque) fallo(400, "Escribe el número del cheque y el banco.");
-    if (c.prevision === "Fonasa" && c.bonificacion > 0 && !folio) fallo(400, "Ingresa el folio del bono Fonasa.");
+    if (c.prevision === "Fonasa" && (c.bonificacion > 0 || externo) && !folio) fallo(400, externo ? "Ingresa el folio del bono externo (el que trae el paciente)." : "Ingresa el folio del bono Fonasa.");
     db.prepare(`INSERT INTO pagos (cita_id, fecha, paciente, rut, equipo, codigo, examen, prevision, valor, bonificacion, copago, medio, folio_bono, usuario_id, creado,
-      descuento, descuento_motivo, descuento_detalle, examenes, boleta, medio2, monto2, cheque, contraste, boleta_contraste)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
-      c.valor, c.bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta,
-      medio2, monto2, cheque, contraste, boletaContraste);
+      descuento, descuento_motivo, descuento_detalle, examenes, boleta, medio2, monto2, cheque, contraste, boleta_contraste, bono_externo)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, fecha, c.paciente, c.rut, c.equipo, c.codigo, c.examen, c.prevision,
+      c.valor, bonificacion, aPagar, medio, folio, u.id, ahoraCaja(), descuento, descuento ? motivoDesc : "", detalle, c.examenes || "", boleta,
+      medio2, monto2, cheque, contraste, boletaContraste, externo ? 1 : 0);
     if (["agendado", "confirmado"].includes(c.estado)) db.prepare("UPDATE citas SET estado = 'llego' WHERE id = ?").run(id);
     marcarLlegada(id);
     // Clave para ver el examen en línea: se crea al pagar (solo la primera vez que viene el paciente)
     // (las consultas médicas no van al PACS ni crean clave del portal de exámenes)
     const portal = integ.activa && !clin.esConsulta(c.equipo) ? { ...integ.asegurarClave(c.rut, u.id), url: integ.portalUrl } : null;
     integ.avisar(id);
-    auditar(req, u, "cobro", { cita: id, detalle: `$${Number(aPagar).toLocaleString("es-CL")} · ${medio}${medio2 ? ` + ${medio2} $${Number(monto2).toLocaleString("es-CL")}` : ""}${descuento ? ` · descuento $${Number(descuento).toLocaleString("es-CL")} (${motivoDesc})` : ""}${boleta ? " · boleta " + boleta : ""}` });
+    auditar(req, u, "cobro", { cita: id, detalle: (externo ? `BONO EXTERNO (folio ${folio}, bonificación $${Number(bonificacion).toLocaleString("es-CL")}) · ` : "") + `$${Number(aPagar).toLocaleString("es-CL")} · ${medio}${medio2 ? ` + ${medio2} $${Number(monto2).toLocaleString("es-CL")}` : ""}${descuento ? ` · descuento $${Number(descuento).toLocaleString("es-CL")} (${motivoDesc})` : ""}${boleta ? " · boleta " + boleta : ""}` });
     return [201, { ...citaPorId(id), portal }];
   }],
 

@@ -238,6 +238,8 @@ db.dataDir = DATA_DIR;
   if (!cols.includes("clave_cifrada")) db.exec("ALTER TABLE portal_claves ADD COLUMN clave_cifrada TEXT NOT NULL DEFAULT ''");
   const colsP = db.prepare("PRAGMA table_info(pagos)").all().map((c) => c.name);
   if (!colsP.includes("cheque")) db.exec("ALTER TABLE pagos ADD COLUMN cheque TEXT NOT NULL DEFAULT ''");   // N° y banco del cheque
+  // Bono externo: el paciente compró el bono directo en Fonasa; todo el valor se cobra a Fonasa (bonificación)
+  if (!colsP.includes("bono_externo")) db.exec("ALTER TABLE pagos ADD COLUMN bono_externo INTEGER NOT NULL DEFAULT 0");
   db.exec(`CREATE TABLE IF NOT EXISTS portal_claves_vistas (
     id INTEGER PRIMARY KEY AUTOINCREMENT, rut TEXT NOT NULL, cita_id INTEGER, usuario_id INTEGER, visto TEXT NOT NULL)`);
 }

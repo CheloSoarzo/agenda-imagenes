@@ -222,6 +222,8 @@
         <div class="row2" id="p-cheque-f" hidden>
           <div class="field"><label for="p-cheque">N° de cheque y banco</label><input id="p-cheque" autocomplete="off" maxlength="80" placeholder="Ej. 0012345 Banco Estado"></div>
         </div>
+        <label class="p-externo" id="p-externo-f" hidden><input type="checkbox" id="p-externo">
+          <span><b>Bono externo</b> · el paciente compró el bono directo en Fonasa. No se cobra copago aquí: todo el valor queda como bonificación (se cobra a Fonasa).</span></label>
         <div class="row2">
           <div class="field" id="p-folio-f"><label for="p-folio" id="p-folio-l">Folio bono Fonasa</label><input id="p-folio" autocomplete="off" inputmode="numeric"></div>
         </div>
@@ -1031,13 +1033,14 @@ function openCobro(c){
     {_cls:"tot",nombre:"Total",codigo:"",valor:c.valor+ctr,bonificacion:c.bonificacion,copago:c.copago+ctr}],[
     {t:"Examen",f:l=>(l.codigo?l.codigo+" · ":"")+(l.nombre||"")+(l.cantidad>1?" × "+l.cantidad:"")},{t:"Valor",n:1,f:l=>$$(l.valor)},{t:"Bonif.",n:1,f:l=>$$(l.bonificacion)},{t:"Copago",n:1,f:l=>$$(l.copago)}]);
   if(!ls.length) $("#c-examenes").innerHTML='<tr><td class="meta">La cita no tiene exámenes. Usa "Editar cita" para agregarlos.</td></tr>';
+  $("#p-externo").checked=false; $("#p-externo-f").hidden=c.prevision!=="Fonasa"||!c.valor;
   $("#p-medio").value=""; $("#p-folio").value=""; $("#p-boleta").value=""; $("#p-boleta-c").value=""; $("#p-boleta-c-f").hidden=!ctr; $("#p-cheque").value=""; $("#p-cheque-f").hidden=true;
   $("#p2").hidden=true; $("#p-medio2").value=""; $("#p-monto2").value="";
   $("#p-dtipo").value=""; $("#p-dvalor").value=""; $("#p-dmotivo").value=""; $("#p-dvalor-f").hidden=true; $("#p-dmotivo-f").hidden=true;
   $("#anular-box").hidden=true; $("#anular-motivo").value="";
   $("#pago-hecho").hidden=!pagada; $("#pago-form").hidden=pagada||!canWrite;
   if(pagada){
-    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_monto2>0?`${c.pago_medio} ${$$(c.pago_monto-c.pago_monto2)} + ${c.pago_medio2} ${$$(c.pago_monto2)}`:c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?" · bono "+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""}${c.pago_contraste?` · contraste ${$$(c.pago_contraste)}${c.pago_boleta_contraste?" (boleta "+c.pago_boleta_contraste+")":""}`:""}${c.pago_cheque?" · cheque "+c.pago_cheque:""} · cobrado ${(c.pago_creado||"").slice(0,10).split("-").reverse().join("/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
+    $("#pago-info").textContent=`Pagado ${$$(c.pago_monto)} · ${c.pago_monto2>0?`${c.pago_medio} ${$$(c.pago_monto-c.pago_monto2)} + ${c.pago_medio2} ${$$(c.pago_monto2)}`:c.pago_medio}${c.pago_descuento?` · descuento ${$$(c.pago_descuento)} (${c.pago_desc_motivo})`:""}${c.pago_folio?(c.pago_bono_externo?" · BONO EXTERNO ":" · bono ")+c.pago_folio:""}${c.pago_boleta?" · boleta "+c.pago_boleta:""}${c.pago_contraste?` · contraste ${$$(c.pago_contraste)}${c.pago_boleta_contraste?" (boleta "+c.pago_boleta_contraste+")":""}`:""}${c.pago_cheque?" · cheque "+c.pago_cheque:""} · cobrado ${(c.pago_creado||"").slice(0,10).split("-").reverse().join("/")} ${(c.pago_creado||"").slice(11,16)} por ${c.pago_usuario||"—"}. Para cambiar exámenes o valores, anula el pago.`;
     $("#anular").hidden=!canWrite; $("#anular").classList.remove("armed"); $("#anular").textContent="Anular pago";
   }
   $("#pmsg").textContent=""; $("#pmsg").className="msg";
@@ -1049,16 +1052,19 @@ function openCobro(c){
 }
 function recalcCobro(){
   const c=cobroCita; if(!c) return;
-  const val=c.valor||0, bon=c.bonificacion||0;
+  const ext=$("#p-externo").checked&&c.prevision==="Fonasa";
+  const val=c.valor||0, bon=ext?val:(c.bonificacion||0);
   const ctr=c.contraste||0;
+  // Bono externo: sin copago ni descuento en caja (todo el valor es bonificación)
+  $(".desc").hidden=ext; if(ext){$("#p-dtipo").value="";$("#p-dvalor-f").hidden=true;$("#p-dmotivo-f").hidden=true}
   const cop=Math.max(0,val-bon), ds=descuentoActual(cop), total=cop-ds.monto+ctr;
   $("#p-ctr-monto").textContent=$$(ctr);
   $("#p-folio-f").hidden=!(bon>0);
-  $("#p-folio-l").textContent=c.prevision==="Fonasa"?"Folio bono Fonasa":"N° de bono "+(c.prevision||"");
+  $("#p-folio-l").textContent=ext?"Folio del bono externo":c.prevision==="Fonasa"?"Folio bono Fonasa":"N° de bono "+(c.prevision||"");
   $("#p-total").textContent=$$(total);
-  $("#p-desc-txt").textContent=ds.error||[ds.monto?`Copago ${$$(cop)} − descuento ${$$(ds.monto)}`:"",ctr?`incluye contraste ${$$(ctr)}`:""].filter(Boolean).join(" · ");
+  $("#p-desc-txt").textContent=ds.error||[ext?`Bono externo: bonificación ${$$(bon)}, sin copago`:"",ds.monto?`Copago ${$$(cop)} − descuento ${$$(ds.monto)}`:"",ctr?`incluye contraste ${$$(ctr)}`:""].filter(Boolean).join(" · ");
   $("#p-desc-txt").className=ds.error?"bad":"";
-  $("#cobrar").textContent=val?`Cobrar ${$$(total)}`:"Cobrar";
+  $("#cobrar").textContent=ext&&total===0?"Registrar bono externo":val?`Cobrar ${$$(total)}`:"Cobrar";
   $("#p-medio").disabled=val>0&&total===0;
   if(val>0&&total===0)$("#p-medio").value="";
   // pago dividido en dos medios
@@ -1071,6 +1077,7 @@ function recalcCobro(){
 // Cheque: se pide el número y el banco
 const verCheque=()=>{$("#p-cheque-f").hidden=!($("#p-medio").value==="Cheque"||(!$("#p2").hidden&&$("#p-medio2").value==="Cheque"))};
 ["#p-medio","#p-medio2"].forEach(s=>$(s).addEventListener("change",verCheque));
+$("#p-externo").addEventListener("change",recalcCobro);
 $("#p2-add").addEventListener("click",()=>{$("#p2").hidden=false;recalcCobro();$("#p-medio2").focus()});
 $("#p2-quitar").addEventListener("click",()=>{$("#p2").hidden=true;$("#p-medio2").value="";$("#p-monto2").value="";recalcCobro();verCheque()});
 $("#p-monto2").addEventListener("input",recalcCobro);
@@ -1292,7 +1299,8 @@ $("#ir-cobro").addEventListener("click",async()=>{
 
 $("#cobrar").addEventListener("click",async()=>{
   const c=cobroCita, msg=$("#pmsg"); msg.className="msg err";
-  const copago=c.valor-c.bonificacion, ds=descuentoActual(Math.max(0,copago)), total=copago-ds.monto+(c.contraste||0);
+  const ext=$("#p-externo").checked&&c.prevision==="Fonasa";
+  const copago=ext?0:c.valor-c.bonificacion, ds=descuentoActual(Math.max(0,copago)), total=copago-ds.monto+(c.contraste||0);
   let err="";
   if(!c.valor) err="La cita no tiene exámenes con valor. Usa \"Editar cita\" para agregarlos.";
   else if(!c.prevision) err="La cita no tiene previsión. Usa \"Editar cita\" para indicarla.";
@@ -1302,14 +1310,14 @@ $("#cobrar").addEventListener("click",async()=>{
   else if(!$("#p2").hidden&&total>0&&(!$("#p-medio2").value||!pesos($("#p-monto2").value))) err="Completa el segundo medio de pago y su monto (o quítalo).";
   else if(!$("#p2").hidden&&total>0&&$("#p-medio2").value===$("#p-medio").value) err="El segundo medio de pago debe ser distinto del primero.";
   else if(!$("#p2").hidden&&total>0&&pesos($("#p-monto2").value)>=total) err="El monto del segundo medio debe ser menor que el total.";
-  else if(c.prevision==="Fonasa"&&c.bonificacion>0&&!$("#p-folio").value.trim()) err="Ingresa el folio del bono Fonasa.";
+  else if(c.prevision==="Fonasa"&&(c.bonificacion>0||ext)&&!$("#p-folio").value.trim()) err=ext?"Ingresa el folio del bono externo (el que trae el paciente).":"Ingresa el folio del bono Fonasa.";
   else if(!$("#p-cheque-f").hidden&&!$("#p-cheque").value.trim()) err="Escribe el número del cheque y el banco.";
   if(err){msg.textContent=err;return}
   const btn=$("#cobrar"); btn.disabled=true;
   try{
     const desc=ds.monto>0?{descuento_tipo:$("#p-dtipo").value,descuento_valor:$("#p-dtipo").value==="pct"?String(ds.pct):ds.monto,descuento_motivo:$("#p-dmotivo").value.trim()}:{};
-    const r=await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{cheque:$("#p-cheque").value.trim(),medio:$("#p-medio").value,...(!$("#p2").hidden?{medio2:$("#p-medio2").value,monto2:pesos($("#p-monto2").value)}:{}),folio_bono:$("#p-folio").value.trim(),boleta:$("#p-boleta").value.trim(),boleta_contraste:$("#p-boleta-c").value.trim(),...desc}});
-    toast(total>0?`Pago registrado: ${$$(total)}${ds.monto?" (con descuento)":""}`:"Atención registrada sin copago");
+    const r=await api(`/api/citas/${c.id}/pago`,{method:"POST",body:{cheque:$("#p-cheque").value.trim(),medio:$("#p-medio").value,...(!$("#p2").hidden?{medio2:$("#p-medio2").value,monto2:pesos($("#p-monto2").value)}:{}),folio_bono:$("#p-folio").value.trim(),bono_externo:ext,boleta:$("#p-boleta").value.trim(),boleta_contraste:$("#p-boleta-c").value.trim(),...desc}});
+    toast(ext?(total>0?`Bono externo registrado · contraste cobrado ${$$(total)}`:"Bono externo registrado (sin copago en caja)"):total>0?`Pago registrado: ${$$(total)}${ds.monto?" (con descuento)":""}`:"Atención registrada sin copago");
     await cargar();
     if(r.portal){openCobro(citas.find(x=>x.id===c.id)||r); pintarPortal(r.portal)}
     else{$("#pscrim").hidden=true; cobroCita=null}

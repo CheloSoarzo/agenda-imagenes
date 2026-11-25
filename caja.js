@@ -179,6 +179,8 @@ function resumenCaja(desde, hasta = desde, opc = {}) {
     efectivo_esperado: validos.reduce((t, p) => t + efectivoDe(p), 0),
     tarjetas: calcularTarjetas(validos, partes),
     contraste: { cantidad: validos.filter((p) => p.contraste > 0).length, monto: suma(validos, "contraste") },
+    // Bonos comprados por el paciente directo en Fonasa: no hay copago en caja, todo el valor es bonificación
+    bonos_externos: { cantidad: validos.filter((p) => p.bono_externo).length, monto: suma(validos.filter((p) => p.bono_externo), "bonificacion") },
   };
   // Cierres: los de la caja elegida (General = tabla «cierres»). Todo junto con varias cajas o selección libre: sin cierre propio
   const cierres = f.caja === null || f.libre ? [] : f.caja

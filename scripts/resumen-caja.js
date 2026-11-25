@@ -42,6 +42,7 @@ console.log(JSON.stringify({
   descuentos: t.descuentos, con_descuento: t.con_descuento, anulados: t.anulados,
   efectivo_esperado: t.efectivo_esperado,
   contraste: t.contraste,
+  bonos_externos: t.bonos_externos,
   tarjetas: t.tarjetas && t.tarjetas.bruto > 0 ? { proveedor: t.tarjetas.config.proveedor, bruto: t.tarjetas.bruto,
     comision: t.tarjetas.comision, iva: t.tarjetas.iva, neto: t.tarjetas.neto, depositos: t.tarjetas.depositos,
     debito: { ...t.tarjetas.debito, tasa: t.tarjetas.config.debito }, credito: { ...t.tarjetas.credito, tasa: t.tarjetas.config.credito },
